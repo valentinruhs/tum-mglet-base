@@ -17,10 +17,47 @@
 !====================================================================
 
 MODULE multiphasecore_mod
+
+    USE core_mod
     
     IMPLICIT NONE
+    PRIVATE
 
 CONTAINS
 
+    SUBROUTINE init_multiphasecore()
+
+        ! Subroutine arguments
+        ! none
+
+        ! Local variables
+        TYPE(config_t) :: multiphaseconf
+
+        ! Read configuration values for multiphase flow
+        has_multiphase = .FALSE.
+        IF (.NOT. fort7%exists("/multiphase")) THEN
+            IF (myid == 0) THEN
+                WRITE(*, '("NO MULTIPHASE FLOW")')
+                WRITE(*, '()')
+            END IF
+            RETURN
+        END IF
+        has_multiphase = .TRUE.
+
+        ! Initialize multiphaseconf
+        CALL fort7%get(multiphaseconf, "/multiphase")
+
+        ! CALL flowconf%get_value("/", gmol)
+
+
+
+
+        
+
+    END SUBROUTINE init_multiphasecore
+
+    SUBROUTINE finish_multiphasecore
+        continue
+    END SUBROUTINE  finish_multiphasecore
 
 END MODULE multiphasecore_mod
