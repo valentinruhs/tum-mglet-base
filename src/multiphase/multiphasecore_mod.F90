@@ -20,15 +20,22 @@ MODULE multiphasecore_mod
 
     USE core_mod
     
-    IMPLICIT NONE
+    IMPLICIT NONE(type, external)
     PRIVATE
+
+    ! Control parameters
+    LOGICAL, PROTECTED :: has_multiphase
+
+    ! Physical parameters
+
+    PUBLIC :: init_multiphasecore, finish_multiphasecore, has_multiphase
 
 CONTAINS
 
     SUBROUTINE init_multiphasecore()
 
         ! Subroutine arguments
-        ! none
+        ! None
 
         ! Local variables
         TYPE(config_t) :: multiphaseconf
@@ -46,13 +53,7 @@ CONTAINS
 
         ! Initialize multiphaseconf
         CALL fort7%get(multiphaseconf, "/multiphase")
-
-        ! CALL flowconf%get_value("/", gmol)
-
-
-
-
-        
+        ! CALL multiphaseconf%get_value("/test", test)
 
     END SUBROUTINE init_multiphasecore
 

@@ -19,10 +19,36 @@
 !====================================================================
 
 MODULE multiphase_mod
+
+    USE multiphasecore_mod, ONLY: init_multiphasecore, finish_multiphasecore, has_multiphase
     
-    IMPLICIT NONE
+    IMPLICIT NONE(type, external)
+    PRIVATE
+
+    PUBLIC :: init_multiphase, finish_multiphase
 
 CONTAINS
 
+    SUBROUTINE init_multiphase()
+        
+        ! Subroutine arguments
+        ! None
+
+        ! Local variables
+        
+
+        CALL init_multiphasecore()
+        IF(.NOT. has_multiphase) RETURN
+
+
+    END SUBROUTINE init_multiphase
+
+    SUBROUTINE finish_multiphase()
+
+        IF(.NOT. has_multiphase) RETURN
+
+        CALL finish_multiphasecore()
+
+    END SUBROUTINE finish_multiphase
 
 END MODULE multiphase_mod
