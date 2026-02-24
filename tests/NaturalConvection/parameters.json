@@ -2,7 +2,7 @@
     "time": {
         "dt": 0.05,
         "mtstep": 4000,
-        "tstat": 150.0
+        "tstat": 400.0
     },
     "io": {
         "grids": "grids.h5",
@@ -31,6 +31,10 @@
             "scalar": "TEMP"
         }
     },
+    
+    "multiphase": {
+    	"solve": false
+    },   
     "scalar": {
         "solve": true,
         "scalars": [

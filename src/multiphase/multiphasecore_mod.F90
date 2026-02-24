@@ -24,11 +24,11 @@ MODULE multiphasecore_mod
     PRIVATE
 
     ! Control parameters
-    LOGICAL, PROTECTED :: has_multiphase
+    LOGICAL, PROTECTED :: has_multiphase, solve_multiphase
 
     ! Physical parameters
 
-    PUBLIC :: init_multiphasecore, finish_multiphasecore, has_multiphase
+    PUBLIC :: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase
 
 CONTAINS
 
@@ -53,9 +53,13 @@ CONTAINS
 
         ! Initialize multiphaseconf
         CALL fort7%get(multiphaseconf, "/multiphase")
-        ! CALL multiphaseconf%get_value("/test", test)
+        CALL multiphaseconf%get_value("/solve", solve_multiphase, .TRUE.)
+
+        WRITE(*,'("multiphasecore works " L5)', solve_multiphase)
 
     END SUBROUTINE init_multiphasecore
+
+    !================================================================
 
     SUBROUTINE finish_multiphasecore
         continue

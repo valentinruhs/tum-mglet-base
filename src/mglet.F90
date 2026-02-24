@@ -4,6 +4,7 @@ PROGRAM main
         fields_begin_write, fields_write, fields_end_rw, init_plugins, &
         finish_plugins
     USE flow_mod, ONLY: init_flow, finish_flow
+    USE multiphase_mod, ONLY: init_multiphase, finish_multiphase
     USE ib_mod, ONLY: init_ib, finish_ib, ib
     USE timeloop_mod, ONLY: init_timeloop, finish_timeloop, timeloop
     USE scalar_mod, ONLY: init_scalar, finish_scalar
@@ -33,6 +34,7 @@ PROGRAM main
         ! Initialize builtin physical models
         CALL init_flow()
         CALL init_scalar()
+        CALL init_multiphase()
 
         ! This initialize the time loop. Reads the RUNINFO table in case of
         ! DCONT.
@@ -53,6 +55,7 @@ PROGRAM main
         CALL finish_plugins()
 
         ! Finish physical models
+        CALL finish_multiphase()
         CALL finish_scalar()
         CALL finish_flow()
 

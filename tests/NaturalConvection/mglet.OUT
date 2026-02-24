@@ -1,0 +1,90 @@
+
+M G L E T - Multi Grid Large Eddy Turbulence
+
+MPI INFORMATION:
+    Processes:     1
+    Serial IO:     F
+    MPI version:   Open MPI v4.1.6, package: Debian OpenMPI, ident: 4.1.6, repo rev: v4.1.6, Sep 30, 2023 
+
+IEEE aritmetic flags:
+    Underflow:     gradual
+    FPE traps:     none
+
+BUILD INFORMATION:
+    Date:          Feb 23 2026
+    Time:          11:36:50
+    Compiler:      GCC version 13.3.0
+    Options:       -cpp -I /usr/lib/x86_64-linux-gnu/fortran/gfortran-mod-15/openmpi -I /usr/lib/x86_64-linux-gnu/openmpi/lib -I /usr/local/hdf5/include -I /usr/include -imultiarch x86_64-linux-gnu -D _MGLET_IFK64_=1 -mtune=generic -march=x86-64 -fPIC -ffree-line-length-none -J ../../modules -fpre-include=/usr/include/finclude/x86_64-linux-gnu/math-vector-fortran.h
+    OpenMP:        disabled
+
+COMPILED PRECISION:
+    REAL:          4 bytes
+    INTEGER:       4 bytes
+    INTEGER(ifk):  8 bytes
+
+JOB INFORMATION:
+    Date:          2026-02-24
+    Time:          17:07:13
+
+HDF5 collective IO: T
+
+GRIDS PER LEVEL AND PROCESS:
+============================
+ Level:           1    Sum
+----------------------------
+ Rank     0:      1      1
+----------------------------
+ Sum:             1      1
+============================
+
+ARRAY DIMENSIONS:
+    idim3d:        6480
+    idim2d:        1296
+    idim1d:        36
+
+Read gridspacing arrays in  0.002 seconds
+
+CONNECT STATISTICS:
+    Faces:               0    with geometry:       0
+    Lines:               0    with geometry:       0
+    Corners:             0    with geometry:       0
+
+Using 'noib' immersed boundary method
+
+BUOYANCY TERM:
+  Gravity:              0.00000000 0.00000000 -9.81000042
+  Expansioncoefficient: 0.341122295E-2
+  Scalar name:          TEMP
+
+SCALAR TRANSPORT:
+  solve:                T
+  nsca:                 2
+  Scalar:               TEMP             prmol: 0.709999979   unit: [  0  0  0  0  0  0  0 ]
+  Scalar:               SCA2             prmol: 1.00000000   unit: [  0  0  0  0  0  0  0 ]
+
+multiphasecore works     F
+ Could not find field: C
+
+ERRR: 0 MGLET FATAL ERROR
+ERRR: 0 CODE:    254
+ERRR: 0 MESSAGE: MGLET Error
+ERRR: 0 FILE:    /home/vruhs/master_thesis/tum-mglet-base/src/core/fields_mod.F90
+ERRR: 0 LINE:    241
+
+#0  0x757a66c23e59 in ???
+#1  0x5f3681bb4a1d in __err_mod_MOD_err_print
+#2  0x5f3681bb45be in __err_mod_MOD_err_abort
+#3  0x5f3681bb4559 in __err_mod_MOD_errr
+#4  0x5f3681f3635a in __fields_mod_MOD_get_field_a
+#5  0x5f3681a742a4 in __multiphase_mod_MOD_init_c
+#6  0x5f3681a742e3 in __multiphase_mod_MOD_init_multiphase
+#7  0x5f3681a6f84e in MAIN__
+#8  0x5f3681a6f8cb in main
+--------------------------------------------------------------------------
+MPI_ABORT was invoked on rank 0 in communicator MPI_COMM_WORLD
+with errorcode 254.
+
+NOTE: invoking MPI_ABORT causes Open MPI to kill all MPI processes.
+You may or may not see output from other processes, depending on
+exactly when Open MPI kills them.
+--------------------------------------------------------------------------

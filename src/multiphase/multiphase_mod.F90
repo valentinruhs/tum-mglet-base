@@ -20,7 +20,8 @@
 
 MODULE multiphase_mod
 
-    USE multiphasecore_mod, ONLY: init_multiphasecore, finish_multiphasecore, has_multiphase
+    USE multiphasecore_mod, ONLY: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase
+    USE fields_mod, ONLY: get_field
     
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -40,8 +41,15 @@ CONTAINS
         CALL init_multiphasecore()
         IF(.NOT. has_multiphase) RETURN
 
+        CALL init_c()
+        
+
+        IF(.NOT. solve_multiphase) RETURN
+
 
     END SUBROUTINE init_multiphase
+
+    !================================================================
 
     SUBROUTINE finish_multiphase()
 
@@ -50,5 +58,13 @@ CONTAINS
         CALL finish_multiphasecore()
 
     END SUBROUTINE finish_multiphase
+
+    !================================================================
+
+    SUBROUTINE init_c()
+        
+        CALL get_field(c, "C")
+
+    END SUBROUTINE init_c
 
 END MODULE multiphase_mod
