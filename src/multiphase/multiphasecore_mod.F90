@@ -18,7 +18,11 @@
 
 MODULE multiphasecore_mod
 
-    USE core_mod
+    USE fort7_mod, ONLY: fort7, dread, dwrite
+    USE config_mod, ONLY: config_t
+    USE fields_mod, ONLY: set_field
+    USE precision_mod, ONLY: intk
+    USE comms_mod, ONLY: myid
     
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -39,6 +43,8 @@ CONTAINS
 
         ! Local variables
         TYPE(config_t) :: multiphaseconf
+        INTEGER(intk), PARAMETER :: units_c(7) = [0, 0, 0, 0, 0, 0, 0]
+        CHARACTER(len=*), PARAMETER :: description_c = "Color-function field c is 0 for fluid 1 and 1 for fluid 2"
 
         ! Read configuration values for multiphase flow
         has_multiphase = .FALSE.
@@ -55,7 +61,8 @@ CONTAINS
         CALL fort7%get(multiphaseconf, "/multiphase")
         CALL multiphaseconf%get_value("/solve", solve_multiphase, .TRUE.)
 
-        WRITE(*,'("multiphasecore works " L5)') solve_multiphase
+        CALL set_field("C", description=description_c , units=units_c, &
+            dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
 
     END SUBROUTINE init_multiphasecore
 

@@ -1,0 +1,34 @@
+{
+    "time": {
+        "dt": 0.05,
+        "mtstep": 1000,
+        "tstat": 100.0,
+	"read": true
+    },
+    "io": {
+        "grids": "grids.h5",
+        "infile": "fields.h5",
+        "outfile": "fields.h5"
+    },
+    "ib": {
+        "type": "noib"
+    },
+    "flow": {
+        "gmol": 0.001,
+        "rho": 1.0,
+        "uinf": [0.0, 0.0, 0.0],
+        "pressuresolver": {
+            "type": "sip",
+            "epcorr": 0.00002,
+            "nouter": 9,
+            "ninner": 5
+        },
+        "lesmodel": {
+            "model": "none"
+        }
+    },
+    
+    "multiphase": {
+    	"solve": true
+    }   
+}
