@@ -55,7 +55,7 @@ CONTAINS
         CALL fort7%get(multiphaseconf, "/multiphase")
         CALL multiphaseconf%get_value("/solve", solve_multiphase, .TRUE.)
 
-        WRITE(*,'("multiphasecore works " L5)', solve_multiphase)
+        WRITE(*,'("multiphasecore works " L5)') solve_multiphase
 
     END SUBROUTINE init_multiphasecore
 

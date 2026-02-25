@@ -22,6 +22,7 @@ MODULE multiphase_mod
 
     USE multiphasecore_mod, ONLY: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase
     USE fields_mod, ONLY: get_field
+    USE core_mod, ONLY: field_t
     
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -62,6 +63,8 @@ CONTAINS
     !================================================================
 
     SUBROUTINE init_c()
+
+        TYPE(field_t), POINTER :: c
         
         CALL get_field(c, "C")
 
