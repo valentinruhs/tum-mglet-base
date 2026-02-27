@@ -1,5 +1,5 @@
 !====================================================================
-!  Module: multiphase_clsvof_mod
+!  Module: multiphase_clsvof_coupling_mod
 !
 !  Responsibilities:
 !     - 
@@ -10,11 +10,11 @@
 !
 !====================================================================
 
-MODULE multiphase_clsvof_mod
+MODULE multiphase_clsvof_coupling_mod
     
     IMPLICIT NONE
 
 CONTAINS
 
 
-END MODULE multiphase_clsvof_mod
+END MODULE multiphase_clsvof_coupling_mod

@@ -6,9 +6,8 @@
 !     multiphase model.
 !
 !  Responsibilities:
-!     - Stores volume fraction field C
-!     - Computes mixture density and viscosity
-!     - Provides interface geometry utilities
+!     - Initializes steering values
+!     - Initializes multiphase fields
 !
 !  Author:      Valentin Ruhs
 !  Created:     2026-02
@@ -44,9 +43,10 @@ CONTAINS
         ! Local variables
         TYPE(config_t) :: multiphaseconf
         INTEGER(intk), PARAMETER :: units_c(7) = [0, 0, 0, 0, 0, 0, 0]
-        CHARACTER(len=*), PARAMETER :: description_c = "Color-function field c is 0 for fluid 1 and 1 for fluid 2"
+        CHARACTER(len=*), PARAMETER :: description_c = "Color-function"
+        CHARACTER(len=*), PARAMETER :: description_phi = "Level set function"
 
-        ! Read configuration values for multiphase flow
+        ! Decide wether multiphase is used or not
         has_multiphase = .FALSE.
         IF (.NOT. fort7%exists("/multiphase")) THEN
             IF (myid == 0) THEN
@@ -59,9 +59,14 @@ CONTAINS
 
         ! Initialize multiphaseconf
         CALL fort7%get(multiphaseconf, "/multiphase")
+
+        ! Read steering input
         CALL multiphaseconf%get_value("/solve", solve_multiphase, .TRUE.)
 
+        ! Initialize multiphase fields
         CALL set_field("C", description=description_c , units=units_c, &
+            dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("PHI", description=description_phi , units=units_phi, &
             dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
 
     END SUBROUTINE init_multiphasecore
