@@ -43,6 +43,7 @@ CONTAINS
         ! Local variables
         TYPE(config_t) :: multiphaseconf
         INTEGER(intk), PARAMETER :: units_c(7) = [0, 0, 0, 0, 0, 0, 0]
+        INTEGER(intk), PARAMETER :: units_phi(7) = [0, 1, 0, 0, 0, 0, 0]
         CHARACTER(len=*), PARAMETER :: description_c = "Color-function"
         CHARACTER(len=*), PARAMETER :: description_phi = "Level set function"
 
