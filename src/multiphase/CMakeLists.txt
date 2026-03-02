@@ -1,6 +1,7 @@
 add_library(multiphase STATIC
 	multiphasecore_mod.F90
 	multiphase_mod.F90
+	multiphase_io_mod.F90
 	multiphase_vof_transport_mod.F90
 	multiphase_material_mod.F90
 	multiphase_plic_mod.F90

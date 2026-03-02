@@ -3,12 +3,12 @@
         "dt": 0.05,
         "mtstep": 1000,
         "tstat": 100.0,
-	"read": true
+	"read": false
     },
     "io": {
         "grids": "grids.h5",
         "infile": "fields.h5",
-        "outfile": "fields.h5"
+        "outfile": "fields_out.h5"
     },
     "ib": {
         "type": "noib"

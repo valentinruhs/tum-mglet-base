@@ -23,8 +23,8 @@ COMPILED PRECISION:
     INTEGER(ifk):  8 bytes
 
 JOB INFORMATION:
-    Date:          2026-02-25
-    Time:          18:29:20
+    Date:          2026-02-26
+    Time:          14:08:22
 
 HDF5 collective IO: T
 
@@ -42,7 +42,7 @@ ARRAY DIMENSIONS:
     idim2d:        64
     idim1d:        8
 
-Read gridspacing arrays in  0.002 seconds
+Read gridspacing arrays in  0.004 seconds
 
 CONNECT STATISTICS:
     Faces:               0    with geometry:       0
@@ -51,50 +51,416 @@ CONNECT STATISTICS:
 
 Using 'noib' immersed boundary method
 
-Opening file fields.h5 for reading
-HDF5-DIAG: Error detected in HDF5 (1.14.3) MPI-process 0:
-  #000: H5D.c line 1061 in H5Dread(): can't synchronously read data
-    major: Dataset
-    minor: Read failed
-  #001: H5D.c line 1008 in H5D__read_api_common(): can't read data
-    major: Dataset
-    minor: Read failed
-  #002: H5VLcallback.c line 2092 in H5VL_dataset_read_direct(): dataset read failed
-    major: Virtual Object Layer
-    minor: Read failed
-  #003: H5VLcallback.c line 2048 in H5VL__dataset_read(): dataset read failed
-    major: Virtual Object Layer
-    minor: Read failed
-  #004: H5VLnative_dataset.c line 366 in H5VL__native_dataset_read(): unable to set up file and memory dataspaces
-    major: Dataset
-    minor: Unable to initialize object
-  #005: H5VLnative_dataset.c line 187 in H5VL__native_dataset_io_setup(): selection + offset not within extent for file dataspace
-    major: Dataspace
-    minor: Out of range
+NO SCALAR
 
-ERRR: 0 MGLET FATAL ERROR
-ERRR: 0 CODE:    254
-ERRR: 0 MESSAGE: MGLET Error
-ERRR: 0 FILE:    /home/vruhs/master_thesis/tum-mglet-base/src/core/fieldio2_mod.F90
-ERRR: 0 LINE:    1286
+ITSTEP, WTIME, DELTA:        0           0.000           0.000
+ITTOT, TIME, DT:             0      0.00000000      5.0000E-02
+LEVEL:  1 IPC=   0 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
 
-#0  0x7517abc23e59 in ???
-#1  0x61673e213a01 in __err_mod_MOD_err_print
-#2  0x61673e2135a2 in __err_mod_MOD_err_abort
-#3  0x61673e21353d in __err_mod_MOD_errr
-#4  0x61673e5803f7 in __fieldio2_mod_MOD_read_grids_data
-#5  0x61673e581b67 in __fieldio2_mod_MOD_read_data
-#6  0x61673e587895 in __fieldio2_mod_MOD_fieldio_read
-#7  0x61673e5956f3 in __fields_mod_MOD_set_field
-#8  0x61673e10a0d8 in __flowcore_mod_MOD_init_flowcore
-#9  0x61673e10d079 in __flow_mod_MOD_init_flow
-#10  0x61673e0ce844 in MAIN__
-#11  0x61673e0ce8cb in main
---------------------------------------------------------------------------
-MPI_ABORT was invoked on rank 0 in communicator MPI_COMM_WORLD
-with errorcode 254.
+ITSTEP, WTIME, DELTA:       10           0.007           0.001
+ITTOT, TIME, DT:            10      0.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
 
-NOTE: invoking MPI_ABORT causes Open MPI to kill all MPI processes.
-You may or may not see output from other processes, depending on
-exactly when Open MPI kills them.
---------------------------------------------------------------------------
+ITSTEP, WTIME, DELTA:       20           0.013           0.001
+ITTOT, TIME, DT:            20      1.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:       30           0.020           0.001
+ITTOT, TIME, DT:            30      1.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:       40           0.027           0.001
+ITTOT, TIME, DT:            40      2.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:       50           0.033           0.001
+ITTOT, TIME, DT:            50      2.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:       60           0.040           0.001
+ITTOT, TIME, DT:            60      3.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:       70           0.046           0.001
+ITTOT, TIME, DT:            70      3.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:       80           0.053           0.001
+ITTOT, TIME, DT:            80      4.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:       90           0.060           0.001
+ITTOT, TIME, DT:            90      4.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      100           0.069           0.001
+ITTOT, TIME, DT:           100      5.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      110           0.076           0.001
+ITTOT, TIME, DT:           110      5.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      120           0.082           0.001
+ITTOT, TIME, DT:           120      6.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      130           0.089           0.001
+ITTOT, TIME, DT:           130      6.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      140           0.095           0.001
+ITTOT, TIME, DT:           140      7.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      150           0.101           0.001
+ITTOT, TIME, DT:           150      7.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      160           0.109           0.001
+ITTOT, TIME, DT:           160      8.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      170           0.116           0.001
+ITTOT, TIME, DT:           170      8.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      180           0.123           0.001
+ITTOT, TIME, DT:           180      9.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      190           0.129           0.001
+ITTOT, TIME, DT:           190      9.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      200           0.136           0.001
+ITTOT, TIME, DT:           200     10.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      210           0.143           0.001
+ITTOT, TIME, DT:           210     10.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      220           0.149           0.001
+ITTOT, TIME, DT:           220     11.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      230           0.157           0.001
+ITTOT, TIME, DT:           230     11.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      240           0.164           0.001
+ITTOT, TIME, DT:           240     12.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      250           0.172           0.001
+ITTOT, TIME, DT:           250     12.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      260           0.182           0.001
+ITTOT, TIME, DT:           260     13.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      270           0.189           0.001
+ITTOT, TIME, DT:           270     13.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      280           0.196           0.001
+ITTOT, TIME, DT:           280     14.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      290           0.202           0.001
+ITTOT, TIME, DT:           290     14.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      300           0.209           0.001
+ITTOT, TIME, DT:           300     15.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      310           0.216           0.001
+ITTOT, TIME, DT:           310     15.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      320           0.222           0.001
+ITTOT, TIME, DT:           320     16.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      330           0.229           0.001
+ITTOT, TIME, DT:           330     16.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      340           0.236           0.001
+ITTOT, TIME, DT:           340     17.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      350           0.242           0.001
+ITTOT, TIME, DT:           350     17.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      360           0.248           0.001
+ITTOT, TIME, DT:           360     18.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      370           0.255           0.001
+ITTOT, TIME, DT:           370     18.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      380           0.261           0.001
+ITTOT, TIME, DT:           380     19.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      390           0.267           0.001
+ITTOT, TIME, DT:           390     19.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      400           0.274           0.001
+ITTOT, TIME, DT:           400     20.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      410           0.280           0.001
+ITTOT, TIME, DT:           410     20.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      420           0.287           0.001
+ITTOT, TIME, DT:           420     21.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      430           0.293           0.001
+ITTOT, TIME, DT:           430     21.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      440           0.300           0.001
+ITTOT, TIME, DT:           440     22.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      450           0.306           0.001
+ITTOT, TIME, DT:           450     22.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      460           0.312           0.001
+ITTOT, TIME, DT:           460     23.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      470           0.320           0.001
+ITTOT, TIME, DT:           470     23.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      480           0.326           0.001
+ITTOT, TIME, DT:           480     24.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      490           0.333           0.001
+ITTOT, TIME, DT:           490     24.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      500           0.339           0.001
+ITTOT, TIME, DT:           500     25.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      510           0.346           0.001
+ITTOT, TIME, DT:           510     25.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      520           0.352           0.001
+ITTOT, TIME, DT:           520     26.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      530           0.359           0.001
+ITTOT, TIME, DT:           530     26.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      540           0.365           0.001
+ITTOT, TIME, DT:           540     27.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      550           0.371           0.001
+ITTOT, TIME, DT:           550     27.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      560           0.378           0.001
+ITTOT, TIME, DT:           560     28.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      570           0.385           0.001
+ITTOT, TIME, DT:           570     28.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      580           0.395           0.001
+ITTOT, TIME, DT:           580     29.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      590           0.403           0.001
+ITTOT, TIME, DT:           590     29.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      600           0.411           0.001
+ITTOT, TIME, DT:           600     30.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      610           0.417           0.001
+ITTOT, TIME, DT:           610     30.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      620           0.424           0.001
+ITTOT, TIME, DT:           620     31.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      630           0.432           0.001
+ITTOT, TIME, DT:           630     31.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      640           0.438           0.001
+ITTOT, TIME, DT:           640     32.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      650           0.446           0.001
+ITTOT, TIME, DT:           650     32.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      660           0.453           0.001
+ITTOT, TIME, DT:           660     33.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      670           0.463           0.001
+ITTOT, TIME, DT:           670     33.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      680           0.469           0.001
+ITTOT, TIME, DT:           680     34.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      690           0.476           0.001
+ITTOT, TIME, DT:           690     34.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      700           0.483           0.001
+ITTOT, TIME, DT:           700     35.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      710           0.489           0.001
+ITTOT, TIME, DT:           710     35.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      720           0.496           0.001
+ITTOT, TIME, DT:           720     36.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      730           0.502           0.001
+ITTOT, TIME, DT:           730     36.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      740           0.509           0.001
+ITTOT, TIME, DT:           740     37.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      750           0.516           0.001
+ITTOT, TIME, DT:           750     37.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      760           0.522           0.001
+ITTOT, TIME, DT:           760     38.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      770           0.528           0.001
+ITTOT, TIME, DT:           770     38.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      780           0.535           0.001
+ITTOT, TIME, DT:           780     39.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      790           0.542           0.001
+ITTOT, TIME, DT:           790     39.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      800           0.548           0.001
+ITTOT, TIME, DT:           800     40.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      810           0.556           0.001
+ITTOT, TIME, DT:           810     40.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      820           0.562           0.001
+ITTOT, TIME, DT:           820     41.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      830           0.569           0.001
+ITTOT, TIME, DT:           830     41.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      840           0.576           0.001
+ITTOT, TIME, DT:           840     42.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      850           0.583           0.001
+ITTOT, TIME, DT:           850     42.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      860           0.589           0.001
+ITTOT, TIME, DT:           860     43.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      870           0.595           0.001
+ITTOT, TIME, DT:           870     43.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      880           0.602           0.001
+ITTOT, TIME, DT:           880     44.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      890           0.609           0.001
+ITTOT, TIME, DT:           890     44.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      900           0.616           0.001
+ITTOT, TIME, DT:           900     45.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      910           0.622           0.001
+ITTOT, TIME, DT:           910     45.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      920           0.628           0.001
+ITTOT, TIME, DT:           920     46.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      930           0.635           0.001
+ITTOT, TIME, DT:           930     46.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      940           0.641           0.001
+ITTOT, TIME, DT:           940     47.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      950           0.648           0.001
+ITTOT, TIME, DT:           950     47.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      960           0.656           0.001
+ITTOT, TIME, DT:           960     48.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      970           0.663           0.001
+ITTOT, TIME, DT:           970     48.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      980           0.670           0.001
+ITTOT, TIME, DT:           980     49.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:      990           0.676           0.001
+ITTOT, TIME, DT:           990     49.50000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ITSTEP, WTIME, DELTA:     1000           0.683           0.001
+ITTOT, TIME, DT:          1000     50.00000000      5.0000E-02
+LEVEL:  1 IPC=   5 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+STOP SIMULATION, MTSTEP REACHED         1000         1000
+
+Opening file fields_out.h5 with mode w
+Wrote all fields in  0.006 seconds
+
+MGLET FINISHED SUCCESSFULLY!
+
