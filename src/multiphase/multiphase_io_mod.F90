@@ -16,6 +16,9 @@ MODULE multiphase_io_mod
     USE field_mod, ONLY: field_t
 
     IMPLICIT NONE
+    PRIVATE 
+
+    PUBLIC :: read_color_function
 
 CONTAINS
 

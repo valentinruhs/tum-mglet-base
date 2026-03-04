@@ -25,6 +25,7 @@ target_include_directories(flow
 target_link_libraries(flow
     PRIVATE core
     PRIVATE ib
+    PRIVATE multiphase
     PRIVATE ${MPI_Fortran_LIBRARIES}
 )
 

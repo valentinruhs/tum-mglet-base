@@ -15,8 +15,13 @@ MODULE multiphase_vof_transport_mod
     USE precision_mod, ONLY: intk, realk
     USE grids_mod, ONLY: nmygrids, mygrids
     USE field_mod, ONLY: field_t
+    USE fields_mod, ONLY: get_field
+    USE grids_mod, ONLY: get_mgdims, get_mgbasb
     
     IMPLICIT NONE
+    PRIVATE 
+
+    PUBLIC :: multiphase_vof_transport
 
 CONTAINS
 
@@ -101,23 +106,24 @@ CONTAINS
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
         ! Local variables
+        REAL(realk) :: fluxx(kk, jj, ii), fluxy(kk, jj, ii), fluxz(kk, jj, ii)
         REAL(realk), PARAMETER :: tol = 1.0E-15
         LOGICAL :: adv_x = .TRUE., adv_y = .FALSE., adv_z = .FALSE.
 
         ! Move c in x-direction--------------------------------------
-        CALL compute_fluxx(fluxx, kk, jj, ii, c, u, ddy, ddz, tol & 
+        CALL compute_fluxx(fluxx, kk, jj, ii, c, u, ddy, ddz, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
             adv_x, adv_y, adv_z, dx, dy, dz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
 
         ! Move c in y-direction--------------------------------------
-        CALL compute_fluxy(fluxy, kk, jj, ii, c, v, ddx, ddz, tol & 
+        CALL compute_fluxy(fluxy, kk, jj, ii, c, v, ddx, ddz, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
             adv_x, adv_y, adv_z, dx, dy, dz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
 
         ! Move c in z-direction--------------------------------------
-        CALL compute_fluxz(fluxz, kk, jj, ii, c, w, ddx, ddy, tol & 
+        CALL compute_fluxz(fluxz, kk, jj, ii, c, w, ddx, ddy, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
             adv_x, adv_y, adv_z, dx, dy, dz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
@@ -126,7 +132,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_fluxx(fluxx, kk, jj, ii, c, u, ddy, ddz, tol & 
+    SUBROUTINE compute_fluxx(fluxx, kk, jj, ii, c, u, ddy, ddz, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
 
         ! Subroutine arguments
@@ -141,6 +147,7 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
+        REAL(realk) :: c_flux
 
         nfu = 0
         nbu = 0
@@ -182,7 +189,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_fluxy(fluxy, kk, jj, ii, c, v, ddx, ddz, tol & 
+    SUBROUTINE compute_fluxy(fluxy, kk, jj, ii, c, v, ddx, ddz, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
 
         ! Subroutine arguments
@@ -197,6 +204,7 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
+        REAL(realk) :: c_flux
 
         nfu = 0
         nbu = 0
@@ -238,7 +246,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_fluxz(fluxz, kk, jj, ii, c, w, ddx, ddy, tol & 
+    SUBROUTINE compute_fluxz(fluxz, kk, jj, ii, c, w, ddx, ddy, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
 
         ! Subroutine arguments
@@ -253,6 +261,7 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
+        REAL(realk) :: c_flux
 
         nfu = 0
         nbu = 0
@@ -307,7 +316,8 @@ CONTAINS
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
         ! Local variables
-        ! None
+        INTEGER(intk) :: k, j, i
+        INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
 
         nfu = 0
         nbu = 0
@@ -334,7 +344,7 @@ CONTAINS
             DO i = 3-nfu, ii-3+nbu
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        c(k,j,i) = c(k,j,i) + dtfu * (  ) 
+                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxx(i-1,j,k) - fluxx(i,j,k) ) / ( dx(i) * dy(j) * dz(k) )
                     END DO 
                 END DO 
             END DO
@@ -348,7 +358,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3-nrv, jj-3+nlv
                     DO k = 3, kk-2
-
+                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxy(i,j-1,k) - fluxy(i,j,k) ) / ( dx(i) * dy(j) * dz(k) )
                     END DO 
                 END DO 
             END DO
@@ -362,7 +372,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3-nbw, kk-3+ntw
-
+                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxz(i,j,k-1) - fluxz(i,j,k) ) / ( dx(i) * dy(j) * dz(k) )
                     END DO 
                 END DO 
             END DO

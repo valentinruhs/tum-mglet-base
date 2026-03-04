@@ -12,6 +12,7 @@ MODULE timeintegration_mod
     USE setboundarybuffers_mod
     USE boussinesqterm_mod, ONLY: boussinesqterm
     USE coriolisterm_mod, ONLY: coriolisterm
+    USE multiphase_vof_transport_mod, ONLY: multiphase_vof_transport
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -32,7 +33,7 @@ CONTAINS
         LOGICAL :: lastrk
         INTEGER(intk) :: ilevel
         REAL(realk) :: frhs, fu, dtrk, dtrki, timerk
-        TYPE(field_t), POINTER :: u, v, w, ut, vt, wt, pwu, pwv, pww, p, g
+        TYPE(field_t), POINTER :: u, v, w, ut, vt, wt, pwu, pwv, pww, p, g, c
         TYPE(field_t), POINTER :: du, dv, dw
         TYPE(field_t) :: uo, vo, wo
 
@@ -45,6 +46,7 @@ CONTAINS
         CALL get_field(w, "W")
         CALL get_field(p, "P")
         CALL get_field(g, "G")
+        CALL get_field(c, "C")
 
         ! In all implemented RK schemes FRHS is 0.0 for IRK 1, this means
         ! that the method itself takes care of "initializing" these fields
@@ -101,6 +103,8 @@ CONTAINS
         CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
         CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
         CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
+
+        CALL multiphase_vof_transport(c, u, v, w, dt*fu)
 
         IF (ib%type == "GHOSTCELL") THEN
             ! Equivalent to old "cop3dzero"
