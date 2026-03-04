@@ -21,6 +21,7 @@
 MODULE multiphase_mod
 
     USE multiphasecore_mod, ONLY: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase
+    USE multiphase_io_mod, ONLY: read_color_function
     USE fields_mod, ONLY: get_field
     USE field_mod, ONLY: field_t
     
@@ -67,6 +68,8 @@ CONTAINS
         TYPE(field_t), POINTER :: c
         
         CALL get_field(c, "C")
+
+        CALL read_color_function(c)
 
     END SUBROUTINE init_c
 
