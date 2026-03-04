@@ -36,13 +36,14 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE multiphase_vof_transport(c_f, u_f, v_f, w_f)
+    SUBROUTINE multiphase_vof_transport(c_f, u_f, v_f, w_f, dtfu)
 
         ! Subroutine arguments
         TYPE(field_t), INTENT(inout) :: c_f
         TYPE(field_t), INTENT(in) :: u_f
         TYPE(field_t), INTENT(in) :: v_f
         TYPE(field_t), INTENT(in) :: w_f
+        REAL(realk), INTENT(in) :: dtfu
 
         ! Local variables
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
@@ -80,7 +81,7 @@ CONTAINS
             CALL ddz_f%get_ptr(ddz, igrid)
 
             CALL multiphase_vof_transport_advection(kk, jj, ii, c, u, v, w, & 
-                dx, dy, dz, ddx, ddy, ddz, nfro, nbac, nrgt, nlft, nbot, ntop)
+                dx, dy, dz, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
         END DO
 
     END SUBROUTINE multiphase_vof_transport
@@ -88,7 +89,7 @@ CONTAINS
     !================================================================
     
     SUBROUTINE multiphase_vof_transport_advection(kk, jj, ii, c, u, v, w, & 
-        dx, dy, dz, ddx, ddy, ddz, nfro, nbac, nrgt, nlft, nbot, ntop)
+        dx, dy, dz, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
@@ -96,17 +97,50 @@ CONTAINS
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: dtfu
+        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+
+        ! Local variables
+        REAL(realk), PARAMETER :: tol = 1.0E-15
+        LOGICAL :: adv_x = .TRUE., adv_y = .FALSE., adv_z = .FALSE.
+
+        ! Move c in x-direction--------------------------------------
+        CALL compute_fluxx(fluxx, kk, jj, ii, c, u, ddy, ddz, tol & 
+            nfro, nbac, nrgt, nlft, nbot, ntop)
+        CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
+            adv_x, adv_y, adv_z, dx, dy, dz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+
+        ! Move c in y-direction--------------------------------------
+        CALL compute_fluxy(fluxy, kk, jj, ii, c, v, ddx, ddz, tol & 
+            nfro, nbac, nrgt, nlft, nbot, ntop)
+        CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
+            adv_x, adv_y, adv_z, dx, dy, dz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+
+        ! Move c in z-direction--------------------------------------
+        CALL compute_fluxz(fluxz, kk, jj, ii, c, w, ddx, ddy, tol & 
+            nfro, nbac, nrgt, nlft, nbot, ntop)
+        CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
+            adv_x, adv_y, adv_z, dx, dy, dz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+
+    END SUBROUTINE multiphase_vof_transport_advection
+
+    !================================================================
+
+    SUBROUTINE compute_fluxx(fluxx, kk, jj, ii, c, u, ddy, ddz, tol & 
+        nfro, nbac, nrgt, nlft, nbot, ntop)
+
+        ! Subroutine arguments
+        REAL(realk), INTENT(out) :: fluxx(kk, jj, ii)
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(in) :: u(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: tol
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
-        REAL(realk) :: ax, ay, az
-        REAL(realk) :: fw, fe, ft, fb, fn, fs
-        REAL(realk) :: qw, qe, qt, qb, qn, qs
-        REAL(realk) :: tol
-        
-        tol = 1.0E-15
 
         nfu = 0
         nbu = 0
@@ -128,33 +162,217 @@ CONTAINS
         IF (nbot == 3) nbw = 1
         IF (ntop == 3) ntw = 1
 
+        ! Calculate flux in x-direction------------------------------
         DO i = 3-nfu, ii-3+nbu
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    ax = ddy(j)*ddz(k)
-                    ay = dx(i)*ddz(k)
-                    az = dx(i)*ddy(j)
-
-                    IF ( u(k, j, i) > tol ) THEN
-
-                        
-
-                    ELSE IF ( u(k, j, i) < -tol ) THEN
-
-                        
-
+                    IF ( u(k,j,i) > tol ) THEN
+                        c_flux = c(k,j,i) * abs( u(k,j,i) ) * ddy(j) * ddz(k)
+                    ELSE IF ( u(k,j,i) < -tol ) THEN
+                        c_flux = c(k,j,i+1) * abs( u(k,j,i) ) * ddy(j+1) * ddz(k+1)
                     ELSE
-
-                        
-
+                        c_flux = 0.0
                     END IF
-
-                    
-
+                    fluxx(k,j,i) = sign( 1.0, u(k,j,i) ) * c_flux
                 END DO
             END DO
         END DO
 
-    END SUBROUTINE multiphase_vof_transport_advection
+    END SUBROUTINE compute_fluxx
+
+    !================================================================
+
+    SUBROUTINE compute_fluxy(fluxy, kk, jj, ii, c, v, ddx, ddz, tol & 
+        nfro, nbac, nrgt, nlft, nbot, ntop)
+
+        ! Subroutine arguments
+        REAL(realk), INTENT(out) :: fluxy(kk, jj, ii)
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(in) :: v(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddz(kk)
+        REAL(realk), INTENT(in) :: tol
+        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
+
+        nfu = 0
+        nbu = 0
+        nrv = 0
+        nlv = 0
+        nbw = 0
+        ntw = 0
+
+        ! CON = 7
+        IF (nbac == 7) nbu = 1
+        IF (nlft == 7) nlv = 1
+        IF (ntop == 7) ntw = 1
+
+        ! OP1 = 3
+        IF (nfro == 3) nfu = 1
+        IF (nbac == 3) nbu = 1
+        IF (nrgt == 3) nrv = 1
+        IF (nlft == 3) nlv = 1
+        IF (nbot == 3) nbw = 1
+        IF (ntop == 3) ntw = 1
+
+        ! Calculate flux in y-direction------------------------------
+        DO i = 3, ii-2
+            DO j = 3-nrv, jj-3+nlv
+                DO k = 3, kk-2
+                    IF ( v(k,j,i) > tol ) THEN
+                        c_flux = c(k,j,i) * abs( v(k,j,i) ) * ddx(i) * ddz(k)
+                    ELSE IF ( v(k,j,i) < -tol ) THEN
+                        c_flux = c(k,j,i+1) * abs( v(k,j,i) ) * ddx(i+1) * ddz(k+1)
+                    ELSE
+                        c_flux = 0.0
+                    END IF
+                    fluxy(k,j,i) = sign( 1.0, v(k,j,i) ) * c_flux
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE compute_fluxy
+
+    !================================================================
+
+    SUBROUTINE compute_fluxz(fluxz, kk, jj, ii, c, w, ddx, ddy, tol & 
+        nfro, nbac, nrgt, nlft, nbot, ntop)
+
+        ! Subroutine arguments
+        REAL(realk), INTENT(out) :: fluxz(kk, jj, ii)
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(in) :: w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj)
+        REAL(realk), INTENT(in) :: tol
+        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
+
+        nfu = 0
+        nbu = 0
+        nrv = 0
+        nlv = 0
+        nbw = 0
+        ntw = 0
+
+        ! CON = 7
+        IF (nbac == 7) nbu = 1
+        IF (nlft == 7) nlv = 1
+        IF (ntop == 7) ntw = 1
+
+        ! OP1 = 3
+        IF (nfro == 3) nfu = 1
+        IF (nbac == 3) nbu = 1
+        IF (nrgt == 3) nrv = 1
+        IF (nlft == 3) nlv = 1
+        IF (nbot == 3) nbw = 1
+        IF (ntop == 3) ntw = 1
+
+        ! Calculate flux in z-direction------------------------------
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3-nbw, kk-3+ntw
+                    IF ( w(k,j,i) > tol ) THEN
+                        c_flux = c(k,j,i) * abs( w(k,j,i) ) * ddx(i) * ddy(j)
+                    ELSE IF ( w(k,j,i) < -tol ) THEN
+                        c_flux = c(k,j,i+1) * abs( w(k,j,i) ) * ddx(i+1) * ddy(j+1)
+                    ELSE
+                        c_flux = 0.0
+                    END IF
+                    fluxz(k,j,i) = sign( 1.0, w(k,j,i) ) * c_flux
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE compute_fluxz
+
+    !================================================================
+
+    SUBROUTINE update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
+            adv_x, adv_y, adv_z, dx, dy, dz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(inout) :: c(kk, jj, ii)
+        REAL(realk), INTENT(in) :: fluxx(kk, jj, ii), fluxy(kk, jj, ii), fluxz(kk, jj, ii)
+        LOGICAL, INTENT(inout) :: adv_x, adv_y, adv_z
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: dtfu
+        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+
+        ! Local variables
+        ! None
+
+        nfu = 0
+        nbu = 0
+        nrv = 0
+        nlv = 0
+        nbw = 0
+        ntw = 0
+
+        ! CON = 7
+        IF (nbac == 7) nbu = 1
+        IF (nlft == 7) nlv = 1
+        IF (ntop == 7) ntw = 1
+
+        ! OP1 = 3
+        IF (nfro == 3) nfu = 1
+        IF (nbac == 3) nbu = 1
+        IF (nrgt == 3) nrv = 1
+        IF (nlft == 3) nlv = 1
+        IF (nbot == 3) nbw = 1
+        IF (ntop == 3) ntw = 1
+
+        IF ( adv_x ) THEN 
+
+            DO i = 3-nfu, ii-3+nbu
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        c(k,j,i) = c(k,j,i) + dtfu * (  ) 
+                    END DO 
+                END DO 
+            END DO
+
+            adv_x = .false.
+            adv_y = .true.
+            adv_z = .false.
+
+        ELSEIF ( adv_y ) THEN
+
+            DO i = 3, ii-2
+                DO j = 3-nrv, jj-3+nlv
+                    DO k = 3, kk-2
+
+                    END DO 
+                END DO 
+            END DO
+
+            adv_x = .false.
+            adv_y = .false.
+            adv_z = .true.
+
+        ELSEIF ( adv_z ) THEN
+
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3-nbw, kk-3+ntw
+
+                    END DO 
+                END DO 
+            END DO
+
+            adv_x = .true.
+            adv_y = .false.
+            adv_z = .false.
+
+        END IF
+
+    END SUBROUTINE update_color_function
 
 END MODULE multiphase_vof_transport_mod
