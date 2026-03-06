@@ -1,3 +1,6 @@
+# Multiphase test
+tests/Multiphase
+
 # Compiled Object files
 *.slo
 *.lo

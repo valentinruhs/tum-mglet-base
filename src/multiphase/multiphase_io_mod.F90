@@ -47,9 +47,9 @@ CONTAINS
         INTEGER(intk) :: Nx, Ny, Nz
         INTEGER(intk) :: i, unit
 
-        Nx = 54
-        Ny = 54
-        Nz = 54
+        Nx = 20
+        Ny = 20
+        Nz = 20
 
         OPEN(newunit=unit,file="c.csv",status="old",action="read")
         DO i = 1, Nx*Ny*Nz
