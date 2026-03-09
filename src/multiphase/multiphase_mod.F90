@@ -28,7 +28,7 @@ MODULE multiphase_mod
     IMPLICIT NONE(type, external)
     PRIVATE
 
-    PUBLIC :: init_multiphase, finish_multiphase
+    PUBLIC :: init_multiphase, finish_multiphase, init_c
 
 CONTAINS
 
