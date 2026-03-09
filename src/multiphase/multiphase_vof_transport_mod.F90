@@ -53,15 +53,10 @@ CONTAINS
         ! Local variables
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
         REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: c, u, v, w
-        REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         INTEGER(intk) :: i, igrid
         INTEGER(intk) :: kk, jj, ii
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
-
-        CALL get_field(dx_f, "DX")
-        CALL get_field(dy_f, "DY")
-        CALL get_field(dz_f, "DZ")
 
         CALL get_field(ddx_f, "DDX")
         CALL get_field(ddy_f, "DDY")
@@ -77,16 +72,12 @@ CONTAINS
             CALL v_f%get_ptr(v, igrid)
             CALL w_f%get_ptr(w, igrid)
 
-            CALL dx_f%get_ptr(dx, igrid)
-            CALL dy_f%get_ptr(dy, igrid)
-            CALL dz_f%get_ptr(dz, igrid)
-
             CALL ddx_f%get_ptr(ddx, igrid)
             CALL ddy_f%get_ptr(ddy, igrid)
             CALL ddz_f%get_ptr(ddz, igrid)
 
             CALL multiphase_vof_transport_advection(kk, jj, ii, c, u, v, w, & 
-                dx, dy, dz, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+                ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
         END DO
 
     END SUBROUTINE multiphase_vof_transport
@@ -94,13 +85,12 @@ CONTAINS
     !================================================================
     
     SUBROUTINE multiphase_vof_transport_advection(kk, jj, ii, c, u, v, w, & 
-        dx, dy, dz, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+        ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(inout) :: c(kk, jj, ii)
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dtfu
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
@@ -114,19 +104,19 @@ CONTAINS
         CALL compute_fluxx(fluxx, kk, jj, ii, c, u, ddy, ddz, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
-            adv_x, adv_y, adv_z, dx, dy, dz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+            adv_x, adv_y, adv_z, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
 
         ! Move c in y-direction--------------------------------------
         CALL compute_fluxy(fluxy, kk, jj, ii, c, v, ddx, ddz, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
-            adv_x, adv_y, adv_z, dx, dy, dz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+            adv_x, adv_y, adv_z, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
 
         ! Move c in z-direction--------------------------------------
         CALL compute_fluxz(fluxz, kk, jj, ii, c, w, ddx, ddy, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
-            adv_x, adv_y, adv_z, dx, dy, dz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+            adv_x, adv_y, adv_z, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
 
     END SUBROUTINE multiphase_vof_transport_advection
 
@@ -304,14 +294,14 @@ CONTAINS
     !================================================================
 
     SUBROUTINE update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
-            adv_x, adv_y, adv_z, dx, dy, dz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+            adv_x, adv_y, adv_z, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(inout) :: c(kk, jj, ii)
         REAL(realk), INTENT(in) :: fluxx(kk, jj, ii), fluxy(kk, jj, ii), fluxz(kk, jj, ii)
         LOGICAL, INTENT(inout) :: adv_x, adv_y, adv_z
-        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dtfu
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
@@ -344,7 +334,7 @@ CONTAINS
             DO i = 3-nfu, ii-3+nbu
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxx(k,j,i-1) - fluxx(k,j,i) ) / ( dx(i) * dy(j) * dz(k) )
+                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxx(k,j,i-1) - fluxx(k,j,i) ) / ( ddx(i) * ddy(j) * ddz(k) )
                     END DO 
                 END DO 
             END DO
@@ -358,7 +348,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3-nrv, jj-3+nlv
                     DO k = 3, kk-2
-                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxy(k,j-1,i) - fluxy(k,j,i) ) / ( dx(i) * dy(j) * dz(k) )
+                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxy(k,j-1,i) - fluxy(k,j,i) ) / ( ddx(i) * ddy(j) * ddz(k) )
                     END DO 
                 END DO 
             END DO
@@ -372,7 +362,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3-nbw, kk-3+ntw
-                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxz(k-1,j,i) - fluxz(k,j,i) ) / ( dx(i) * dy(j) * dz(k) )
+                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxz(k-1,j,i) - fluxz(k,j,i) ) / ( ddx(i) * ddy(j) * ddz(k) )
                     END DO 
                 END DO 
             END DO
