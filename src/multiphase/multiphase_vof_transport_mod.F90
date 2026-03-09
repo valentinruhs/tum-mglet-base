@@ -344,7 +344,7 @@ CONTAINS
             DO i = 3-nfu, ii-3+nbu
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxx(i-1,j,k) - fluxx(i,j,k) ) / ( dx(i) * dy(j) * dz(k) )
+                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxx(k,j,i-1) - fluxx(k,j,i) ) / ( dx(i) * dy(j) * dz(k) )
                     END DO 
                 END DO 
             END DO
@@ -358,7 +358,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3-nrv, jj-3+nlv
                     DO k = 3, kk-2
-                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxy(i,j-1,k) - fluxy(i,j,k) ) / ( dx(i) * dy(j) * dz(k) )
+                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxy(k,j-1,i) - fluxy(k,j,i) ) / ( dx(i) * dy(j) * dz(k) )
                     END DO 
                 END DO 
             END DO
@@ -372,7 +372,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3-nbw, kk-3+ntw
-                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxz(i,j,k-1) - fluxz(i,j,k) ) / ( dx(i) * dy(j) * dz(k) )
+                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxz(k-1,j,i) - fluxz(k,j,i) ) / ( dx(i) * dy(j) * dz(k) )
                     END DO 
                 END DO 
             END DO
