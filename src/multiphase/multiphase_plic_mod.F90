@@ -16,5 +16,20 @@ MODULE multiphase_plic_mod
 
 CONTAINS
 
+    SUBROUTINE init_multiphase_plic()
+
+        continue
+
+    END SUBROUTINE init_multiphase_plic
+
+    !================================================================
+
+    SUBROUTINE finish_multiphase_plic()
+
+        continue
+
+    END SUBROUTINE finish_multiphase_plic
+
+    !================================================================
 
 END MODULE multiphase_plic_mod
