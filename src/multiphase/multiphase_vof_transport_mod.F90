@@ -18,6 +18,7 @@ MODULE multiphase_vof_transport_mod
     USE fields_mod, ONLY: get_field
     USE grids_mod, ONLY: get_mgdims, get_mgbasb
     USE err_mod, ONLY: errr
+    USE multiphase_plic_mod, ONLY: track_interface, compute_normal_vector, compute_alpha
     
     IMPLICIT NONE
     PRIVATE 
@@ -97,40 +98,58 @@ CONTAINS
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
         ! Local variables
+        LOGICAL :: is_interface(kk, jj, ii)
+        REAL(realk) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
+        REAL(realk) :: alpha(kk, jj, ii)
         REAL(realk) :: fluxx(kk, jj, ii), fluxy(kk, jj, ii), fluxz(kk, jj, ii)
         REAL(realk), PARAMETER :: tol = 1.0E-15
         LOGICAL :: adv_x = .TRUE., adv_y = .FALSE., adv_z = .FALSE.
 
         ! Move c in x-direction--------------------------------------
-        CALL compute_fluxx(fluxx, kk, jj, ii, c, u, ddy, ddz, tol, & 
+        CALL track_interface(is_interface, kk, jj, ii, c)
+        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, c, ddx, ddy, ddz, tol)
+        CALL compute_alpha(alpha, kk, jj, ii, c, is_interface, ddx, ddy, ddz, normx, normy, normz)
+        CALL compute_fluxx(fluxx, kk, jj, ii, c, is_interface, u, alpha, normx, normy, normz, ddy, ddz, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
             adv_x, adv_y, adv_z, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+        CALL clip_color_function(kk, ii, jj, c, tol)
 
         ! Move c in y-direction--------------------------------------
-        CALL compute_fluxy(fluxy, kk, jj, ii, c, v, ddx, ddz, tol, & 
+        CALL track_interface(is_interface, kk, jj, ii, c)
+        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, c, ddx, ddy, ddz, tol)
+        CALL compute_alpha(alpha, kk, jj, ii, c, is_interface, ddx, ddy, ddz, normx, normy, normz)
+        CALL compute_fluxy(fluxy, kk, jj, ii, c, is_interface, v, alpha, normx, normy, normz, ddx, ddz, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
             adv_x, adv_y, adv_z, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+        CALL clip_color_function(kk, ii, jj, c, tol)
 
         ! Move c in z-direction--------------------------------------
-        CALL compute_fluxz(fluxz, kk, jj, ii, c, w, ddx, ddy, tol, & 
+        CALL track_interface(is_interface, kk, jj, ii, c)
+        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, c, ddx, ddy, ddz, tol)
+        CALL compute_alpha(alpha, kk, jj, ii, c, is_interface, ddx, ddy, ddz, normx, normy, normz)
+        CALL compute_fluxz(fluxz, kk, jj, ii, c, is_interface, w, alpha, normx, normy, normz, ddx, ddy, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
             adv_x, adv_y, adv_z, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+        CALL clip_color_function(kk, ii, jj, c, tol)
 
     END SUBROUTINE multiphase_vof_transport_advection
 
     !================================================================
 
-    SUBROUTINE compute_fluxx(fluxx, kk, jj, ii, c, u, ddy, ddz, tol, & 
+    SUBROUTINE compute_fluxx(fluxx, kk, jj, ii, c, is_interface, u, alpha, normx, normy, normz, ddy, ddz, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
 
         ! Subroutine arguments
         REAL(realk), INTENT(out) :: fluxx(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        LOGICAL, INTENT(in) :: is_interface(kk, jj, ii)
         REAL(realk), INTENT(in) :: u(kk, jj, ii)
+        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
+        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
@@ -165,9 +184,21 @@ CONTAINS
             DO j = 3, jj-2
                 DO k = 3, kk-2
                     IF ( u(k,j,i) > tol ) THEN
-                        c_flux = c(k,j,i) * abs( u(k,j,i) ) * ddy(j) * ddz(k)
+                        IF ( is_interface(k,j,i) ) THEN
+                            ! Calculate flux for multiphase cell-----
+                            
+                        ELSE
+                            ! Calculate flux for singlephase cell---- 
+                            c_flux = c(k,j,i) * abs( u(k,j,i) ) * ddy(j) * ddz(k)
+                        END IF
                     ELSE IF ( u(k,j,i) < -tol ) THEN
-                        c_flux = c(k,j,i+1) * abs( u(k,j,i) ) * ddy(j+1) * ddz(k+1)
+                        IF ( is_interface(k,j,i) ) THEN
+                            ! Calculate flux for multiphase cell-----
+
+                        ELSE
+                            ! Calculate flux for singlephase cell----
+                            c_flux = c(k,j,i+1) * abs( u(k,j,i) ) * ddy(j+1) * ddz(k+1)
+                        END IF
                     ELSE
                         c_flux = 0.0
                     END IF
@@ -180,14 +211,17 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_fluxy(fluxy, kk, jj, ii, c, v, ddx, ddz, tol, & 
+    SUBROUTINE compute_fluxy(fluxy, kk, jj, ii, c, is_interface, v, alpha, normx, normy, normz, ddx, ddz, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
 
         ! Subroutine arguments
         REAL(realk), INTENT(out) :: fluxy(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        LOGICAL, INTENT(in) :: is_interface(kk, jj, ii)
         REAL(realk), INTENT(in) :: v(kk, jj, ii)
+        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
+        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddz(kk)
         REAL(realk), INTENT(in) :: tol
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
@@ -222,9 +256,21 @@ CONTAINS
             DO j = 3-nrv, jj-3+nlv
                 DO k = 3, kk-2
                     IF ( v(k,j,i) > tol ) THEN
-                        c_flux = c(k,j,i) * abs( v(k,j,i) ) * ddx(i) * ddz(k)
+                        IF ( is_interface(k,j,i) ) THEN
+                            ! Calculate flux for multiphase cell-----
+
+                        ELSE
+                            ! Calculate flux for singlephase cell----
+                            c_flux = c(k,j,i) * abs( v(k,j,i) ) * ddx(i) * ddz(k)
+                        END IF
                     ELSE IF ( v(k,j,i) < -tol ) THEN
-                        c_flux = c(k,j,i+1) * abs( v(k,j,i) ) * ddx(i+1) * ddz(k+1)
+                        IF ( is_interface(k,j,i) ) THEN
+                            ! Calculate flux for multiphase cell-----
+
+                        ELSE
+                            ! Calculate flux for singlephase cell----
+                            c_flux = c(k,j,i+1) * abs( v(k,j,i) ) * ddx(i+1) * ddz(k+1)
+                        END IF
                     ELSE
                         c_flux = 0.0
                     END IF
@@ -237,14 +283,17 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_fluxz(fluxz, kk, jj, ii, c, w, ddx, ddy, tol, & 
+    SUBROUTINE compute_fluxz(fluxz, kk, jj, ii, c, is_interface, w, alpha, normx, normy, normz, ddx, ddy, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
 
         ! Subroutine arguments
         REAL(realk), INTENT(out) :: fluxz(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        LOGICAL, INTENT(in) :: is_interface(kk, jj, ii)
         REAL(realk), INTENT(in) :: w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
+        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj)
         REAL(realk), INTENT(in) :: tol
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
@@ -279,9 +328,21 @@ CONTAINS
             DO j = 3, jj-2
                 DO k = 3-nbw, kk-3+ntw
                     IF ( w(k,j,i) > tol ) THEN
-                        c_flux = c(k,j,i) * abs( w(k,j,i) ) * ddx(i) * ddy(j)
+                        IF ( is_interface(k,j,i) ) THEN
+                            ! Calculate flux for multiphase cell-----
+
+                        ELSE
+                            ! Calculate flux for singlephase cell----
+                            c_flux = c(k,j,i) * abs( w(k,j,i) ) * ddx(i) * ddy(j)
+                        END IF
                     ELSE IF ( w(k,j,i) < -tol ) THEN
-                        c_flux = c(k,j,i+1) * abs( w(k,j,i) ) * ddx(i+1) * ddy(j+1)
+                        IF ( is_interface(k,j,i) ) THEN
+                            ! Calculate flux for multiphase cell-----
+
+                        ELSE
+                            ! Calculate flux for singlephase cell----
+                            c_flux = c(k,j,i+1) * abs( w(k,j,i) ) * ddx(i+1) * ddy(j+1)
+                        END IF
                     ELSE
                         c_flux = 0.0
                     END IF
@@ -396,5 +457,21 @@ CONTAINS
         END IF
 
     END SUBROUTINE update_color_function
+
+    !================================================================
+
+    SUBROUTINE clip_color_function(kk, ii, jj, c, tol)
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(inout) :: c(kk, jj, ii)
+        REAL(realk), INTENT(in) :: tol
+
+        ! Local variables
+
+
+        continue
+
+    END SUBROUTINE clip_color_function
 
 END MODULE multiphase_vof_transport_mod
