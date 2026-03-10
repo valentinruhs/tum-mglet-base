@@ -2,7 +2,7 @@
 !  Module: multiphase_vof_transport_mod
 !
 !  Responsibilities:
-!     - Solves the volume fraction transport equation
+!     - Solves the incompressible volume fraction transport equation
 !
 !  Author:      Valentin Ruhs
 !  Created:     2026-02
@@ -17,6 +17,7 @@ MODULE multiphase_vof_transport_mod
     USE field_mod, ONLY: field_t
     USE fields_mod, ONLY: get_field
     USE grids_mod, ONLY: get_mgdims, get_mgbasb
+    USE err_mod, ONLY: errr
     
     IMPLICIT NONE
     PRIVATE 
@@ -328,7 +329,8 @@ CONTAINS
         IF (nlft == 3) nlv = 1
         IF (nbot == 3) nbw = 1
         IF (ntop == 3) ntw = 1
-
+        
+        ! Update color-function with x fluxes------------------------
         IF ( adv_x ) THEN 
 
             DO i = 3-nfu, ii-3+nbu
@@ -343,6 +345,7 @@ CONTAINS
             adv_y = .true.
             adv_z = .false.
 
+        ! Update color-function with y fluxes------------------------
         ELSEIF ( adv_y ) THEN
 
             DO i = 3, ii-2
@@ -357,6 +360,7 @@ CONTAINS
             adv_y = .false.
             adv_z = .true.
 
+        ! Update color-function with z fluxes------------------------
         ELSEIF ( adv_z ) THEN
 
             DO i = 3, ii-2
@@ -370,7 +374,25 @@ CONTAINS
             adv_x = .true.
             adv_y = .false.
             adv_z = .false.
+        END IF
 
+        ! DEBUG------------------------------------------------------
+        IF ( c(k,j,i) < 0.0 .OR. c(k,j,i) > 1.0 ) THEN
+            WRITE(*, *) "Color-function c must be in [0,1]: ", c(k,j,i)
+            IF ( adv_x ) THEN
+                WRITE(*, *) "Out of bounds value occured during x-advection"
+                WRITE(*, *) "-1/2 fluxx: ", fluxx(k,j,i-1)
+                WRITE(*, *) "+1/2 fluxx: ", fluxx(k,j,i)
+            ELSEIF ( adv_y ) THEN
+                WRITE(*, *) "Out of bounds value occured during y-advection"
+                WRITE(*, *) "-1/2 fluxy: ", fluxy(k,j-1,i)
+                WRITE(*, *) "+1/2 fluxy: ", fluxy(k,j,i)
+            ELSEIF ( adv_z ) THEN
+                WRITE(*, *) "Out of bounds value occured during z-advection"
+                WRITE(*, *) "-1/2 fluxz: ", fluxz(k-1,j,i)
+                WRITE(*, *) "+1/2 fluxz: ", fluxz(k,j,i)
+            END IF
+            CALL errr(__FILE__, __LINE__)
         END IF
 
     END SUBROUTINE update_color_function
