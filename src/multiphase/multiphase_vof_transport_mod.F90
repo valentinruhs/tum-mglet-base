@@ -219,7 +219,7 @@ CONTAINS
 
                         ELSE
                             ! Calculate flux for singlephase cell----
-                            c_flux = c(k,j,i+1) * abs( u(k,j,i) ) * ddy(j+1) * ddz(k+1)
+                            c_flux = c(k,j,i+1) * abs( u(k,j,i) ) * ddy(j) * ddz(k)
                         END IF
                     ELSE
                         c_flux = 0.0
@@ -291,7 +291,7 @@ CONTAINS
 
                         ELSE
                             ! Calculate flux for singlephase cell----
-                            c_flux = c(k,j,i+1) * abs( v(k,j,i) ) * ddx(i+1) * ddz(k+1)
+                            c_flux = c(k,j,i+1) * abs( v(k,j,i) ) * ddx(i) * ddz(k)
                         END IF
                     ELSE
                         c_flux = 0.0
@@ -363,7 +363,7 @@ CONTAINS
 
                         ELSE
                             ! Calculate flux for singlephase cell----
-                            c_flux = c(k,j,i+1) * abs( w(k,j,i) ) * ddx(i+1) * ddy(j+1)
+                            c_flux = c(k,j,i+1) * abs( w(k,j,i) ) * ddx(i) * ddy(j)
                         END IF
                     ELSE
                         c_flux = 0.0
