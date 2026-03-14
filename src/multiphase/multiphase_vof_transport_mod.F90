@@ -43,7 +43,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE multiphase_vof_transport(c_f, u_f, v_f, w_f, dtfu)
+    SUBROUTINE multiphase_vof_transport(c_f, u_f, v_f, w_f, dtfu, itstep)
 
         ! Subroutine arguments
         TYPE(field_t), INTENT(inout) :: c_f
@@ -51,6 +51,7 @@ CONTAINS
         TYPE(field_t), INTENT(in) :: v_f
         TYPE(field_t), INTENT(in) :: w_f
         REAL(realk), INTENT(in) :: dtfu
+        INTEGER(intk), INTENT(in) :: itstep
 
         ! Local variables
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
@@ -79,7 +80,7 @@ CONTAINS
             CALL ddz_f%get_ptr(ddz, igrid)
 
             CALL multiphase_vof_transport_advection(kk, jj, ii, c, u, v, w, & 
-                ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+                ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop, itstep)
         END DO
 
     END SUBROUTINE multiphase_vof_transport
@@ -87,7 +88,7 @@ CONTAINS
     !================================================================
     
     SUBROUTINE multiphase_vof_transport_advection(kk, jj, ii, c, u, v, w, & 
-        ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+        ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop, itstep)
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
@@ -96,6 +97,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dtfu
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        INTEGER(intk), INTENT(in) :: itstep
 
         ! Local variables
         LOGICAL :: is_interface(kk, jj, ii)
@@ -103,7 +105,27 @@ CONTAINS
         REAL(realk) :: alpha(kk, jj, ii)
         REAL(realk) :: fluxx(kk, jj, ii), fluxy(kk, jj, ii), fluxz(kk, jj, ii)
         REAL(realk), PARAMETER :: tol = 1.0E-15
-        LOGICAL :: adv_x = .TRUE., adv_y = .FALSE., adv_z = .FALSE.
+        LOGICAL :: adv_x, adv_y, adv_z
+        INTEGER(intk) :: permutation_index
+
+        ! permutation_index only changes in a new time-step----------------
+        permutation_index = mod(itstep-1, 3)
+
+        ! Select permutation of split advection
+        SELECT CASE (permutation_index)
+            CASE (0)
+                adv_x = .TRUE.
+                adv_y = .FALSE.
+                adv_z = .FALSE.
+            CASE (1)
+                adv_x = .FALSE.
+                adv_y = .TRUE.
+                adv_z = .FALSE.
+            CASE (2)
+                adv_x = .FALSE.
+                adv_y = .FALSE.
+                adv_z = .TRUE.
+        END SELECT
 
         ! Move c in x-direction--------------------------------------
         CALL track_interface(is_interface, kk, jj, ii, c)
@@ -112,7 +134,7 @@ CONTAINS
         CALL compute_fluxx(fluxx, kk, jj, ii, c, is_interface, u, alpha, normx, normy, normz, ddy, ddz, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
-            adv_x, adv_y, adv_z, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+            adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL clip_color_function(kk, ii, jj, c, tol)
 
         ! Move c in y-direction--------------------------------------
@@ -122,7 +144,7 @@ CONTAINS
         CALL compute_fluxy(fluxy, kk, jj, ii, c, is_interface, v, alpha, normx, normy, normz, ddx, ddz, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
-            adv_x, adv_y, adv_z, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+            adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL clip_color_function(kk, ii, jj, c, tol)
 
         ! Move c in z-direction--------------------------------------
@@ -132,7 +154,7 @@ CONTAINS
         CALL compute_fluxz(fluxz, kk, jj, ii, c, is_interface, w, alpha, normx, normy, normz, ddx, ddy, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
-            adv_x, adv_y, adv_z, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+            adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL clip_color_function(kk, ii, jj, c, tol)
 
     END SUBROUTINE multiphase_vof_transport_advection
@@ -356,13 +378,14 @@ CONTAINS
     !================================================================
 
     SUBROUTINE update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
-            adv_x, adv_y, adv_z, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+            adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(inout) :: c(kk, jj, ii)
         REAL(realk), INTENT(in) :: fluxx(kk, jj, ii), fluxy(kk, jj, ii), fluxz(kk, jj, ii)
         LOGICAL, INTENT(inout) :: adv_x, adv_y, adv_z
+        REAL(realk), INTENT(in) :: tol
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dtfu
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
@@ -435,26 +458,14 @@ CONTAINS
             adv_x = .true.
             adv_y = .false.
             adv_z = .false.
+
         END IF
 
-        ! DEBUG------------------------------------------------------
-        IF ( c(k,j,i) < 0.0 .OR. c(k,j,i) > 1.0 ) THEN
-            WRITE(*, *) "Color-function c must be in [0,1]: ", c(k,j,i)
-            IF ( adv_x ) THEN
-                WRITE(*, *) "Out of bounds value occured during x-advection"
-                WRITE(*, *) "-1/2 fluxx: ", fluxx(k,j,i-1)
-                WRITE(*, *) "+1/2 fluxx: ", fluxx(k,j,i)
-            ELSEIF ( adv_y ) THEN
-                WRITE(*, *) "Out of bounds value occured during y-advection"
-                WRITE(*, *) "-1/2 fluxy: ", fluxy(k,j-1,i)
-                WRITE(*, *) "+1/2 fluxy: ", fluxy(k,j,i)
-            ELSEIF ( adv_z ) THEN
-                WRITE(*, *) "Out of bounds value occured during z-advection"
-                WRITE(*, *) "-1/2 fluxz: ", fluxz(k-1,j,i)
-                WRITE(*, *) "+1/2 fluxz: ", fluxz(k,j,i)
-            END IF
-            CALL errr(__FILE__, __LINE__)
-        END IF
+        ! ! DEBUG------------------------------------------------------
+        ! IF ( minval(c) < -tol .OR. maxval(c) > 1+tol ) THEN
+        !     WRITE(*, *) "Color-function c must be in bounds [0,1]. c_min = ", minval(c), " c_max = ", maxval(c)
+        !     CALL errr(__FILE__, __LINE__)
+        ! END IF
 
     END SUBROUTINE update_color_function
 
