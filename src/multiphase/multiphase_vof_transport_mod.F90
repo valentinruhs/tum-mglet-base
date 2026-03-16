@@ -44,6 +44,12 @@ CONTAINS
     !================================================================
 
     SUBROUTINE multiphase_vof_transport(c_f, u_f, v_f, w_f, dtfu, itstep)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   The subroutine gets all nescessary input variables to perform
+    !   the Volume-of-Fluid advection. It also manages the
+    !   calculation on all grids.
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         TYPE(field_t), INTENT(inout) :: c_f
@@ -89,6 +95,17 @@ CONTAINS
     
     SUBROUTINE multiphase_vof_transport_advection(kk, jj, ii, c, u, v, w, & 
         ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop, itstep)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Coordinates the Volume-of-Fluid advection.
+    !   1. Track interface cells
+    !   2. Compute gradient unit normal vectors
+    !   3. Compute interface distance
+    !      => Interface is located
+    !   4. Calculate fluxes
+    !   5. Time integration of Color-Function
+    !   6. Clip Color-Function to its bounds 
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
@@ -108,7 +125,7 @@ CONTAINS
         LOGICAL :: adv_x, adv_y, adv_z
         INTEGER(intk) :: permutation_index
 
-        ! permutation_index only changes in a new time-step----------------
+        ! permutation_index only changes in a new time-step
         permutation_index = mod(itstep-1, 3)
 
         ! Select permutation of split advection
@@ -127,7 +144,7 @@ CONTAINS
                 adv_z = .TRUE.
         END SELECT
 
-        ! Move c in x-direction--------------------------------------
+        ! Move c in x-direction
         CALL track_interface(is_interface, kk, jj, ii, c, tol)
         CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, c, ddx, ddy, ddz, tol)
         CALL compute_alpha(alpha, kk, jj, ii, c, is_interface, ddx, ddy, ddz, normx, normy, normz)
@@ -137,7 +154,7 @@ CONTAINS
             adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL clip_color_function(kk, ii, jj, c, tol)
 
-        ! Move c in y-direction--------------------------------------
+        ! Move c in y-direction
         CALL track_interface(is_interface, kk, jj, ii, c, tol)
         CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, c, ddx, ddy, ddz, tol)
         CALL compute_alpha(alpha, kk, jj, ii, c, is_interface, ddx, ddy, ddz, normx, normy, normz)
@@ -147,7 +164,7 @@ CONTAINS
             adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL clip_color_function(kk, ii, jj, c, tol)
 
-        ! Move c in z-direction--------------------------------------
+        ! Move c in z-direction
         CALL track_interface(is_interface, kk, jj, ii, c, tol)
         CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, c, ddx, ddy, ddz, tol)
         CALL compute_alpha(alpha, kk, jj, ii, c, is_interface, ddx, ddy, ddz, normx, normy, normz)
@@ -163,6 +180,12 @@ CONTAINS
 
     SUBROUTINE compute_fluxx(fluxx, kk, jj, ii, c, is_interface, u, alpha, normx, normy, normz, ddy, ddz, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   This subroutine calculates the flux of the Color-Function c
+    !   in the x direction. The interface area is taken into account.
+    !   Therefore the flux has a unit of L^3/T. 
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         REAL(realk), INTENT(out) :: fluxx(kk, jj, ii)
@@ -201,24 +224,24 @@ CONTAINS
         IF (nbot == 3) nbw = 1
         IF (ntop == 3) ntw = 1
 
-        ! Calculate flux in x-direction------------------------------
+        ! Calculate flux in x-direction
         DO i = 3-nfu, ii-3+nbu
             DO j = 3, jj-2
                 DO k = 3, kk-2
                     IF ( u(k,j,i) > tol ) THEN
                         IF ( is_interface(k,j,i) ) THEN
-                            ! Calculate flux for multiphase cell-----
+                            ! Calculate flux for multiphase cell
                             
                         ELSE
-                            ! Calculate flux for singlephase cell---- 
+                            ! Calculate flux for singlephase cell
                             c_flux = c(k,j,i) * abs( u(k,j,i) ) * ddy(j) * ddz(k)
                         END IF
                     ELSE IF ( u(k,j,i) < -tol ) THEN
                         IF ( is_interface(k,j,i) ) THEN
-                            ! Calculate flux for multiphase cell-----
+                            ! Calculate flux for multiphase cell
 
                         ELSE
-                            ! Calculate flux for singlephase cell----
+                            ! Calculate flux for singlephase cell
                             c_flux = c(k,j,i+1) * abs( u(k,j,i) ) * ddy(j) * ddz(k)
                         END IF
                     ELSE
@@ -235,6 +258,12 @@ CONTAINS
 
     SUBROUTINE compute_fluxy(fluxy, kk, jj, ii, c, is_interface, v, alpha, normx, normy, normz, ddx, ddz, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   This subroutine calculates the flux of the Color-Function c
+    !   in the y direction. The interface area is taken into account.
+    !   Therefore the flux has a unit of L^3/T. 
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         REAL(realk), INTENT(out) :: fluxy(kk, jj, ii)
@@ -273,24 +302,24 @@ CONTAINS
         IF (nbot == 3) nbw = 1
         IF (ntop == 3) ntw = 1
 
-        ! Calculate flux in y-direction------------------------------
+        ! Calculate flux in y-direction
         DO i = 3, ii-2
             DO j = 3-nrv, jj-3+nlv
                 DO k = 3, kk-2
                     IF ( v(k,j,i) > tol ) THEN
                         IF ( is_interface(k,j,i) ) THEN
-                            ! Calculate flux for multiphase cell-----
+                            ! Calculate flux for multiphase cell
 
                         ELSE
-                            ! Calculate flux for singlephase cell----
+                            ! Calculate flux for singlephase cell
                             c_flux = c(k,j,i) * abs( v(k,j,i) ) * ddx(i) * ddz(k)
                         END IF
                     ELSE IF ( v(k,j,i) < -tol ) THEN
                         IF ( is_interface(k,j,i) ) THEN
-                            ! Calculate flux for multiphase cell-----
+                            ! Calculate flux for multiphase cell
 
                         ELSE
-                            ! Calculate flux for singlephase cell----
+                            ! Calculate flux for singlephase cell
                             c_flux = c(k,j,i+1) * abs( v(k,j,i) ) * ddx(i) * ddz(k)
                         END IF
                     ELSE
@@ -307,6 +336,12 @@ CONTAINS
 
     SUBROUTINE compute_fluxz(fluxz, kk, jj, ii, c, is_interface, w, alpha, normx, normy, normz, ddx, ddy, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   This subroutine calculates the flux of the Color-Function c
+    !   in the z direction. The interface area is taken into account.
+    !   Therefore the flux has a unit of L^3/T. 
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         REAL(realk), INTENT(out) :: fluxz(kk, jj, ii)
@@ -345,24 +380,24 @@ CONTAINS
         IF (nbot == 3) nbw = 1
         IF (ntop == 3) ntw = 1
 
-        ! Calculate flux in z-direction------------------------------
+        ! Calculate flux in z-direction
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3-nbw, kk-3+ntw
                     IF ( w(k,j,i) > tol ) THEN
                         IF ( is_interface(k,j,i) ) THEN
-                            ! Calculate flux for multiphase cell-----
+                            ! Calculate flux for multiphase cell
 
                         ELSE
-                            ! Calculate flux for singlephase cell----
+                            ! Calculate flux for singlephase cell
                             c_flux = c(k,j,i) * abs( w(k,j,i) ) * ddx(i) * ddy(j)
                         END IF
                     ELSE IF ( w(k,j,i) < -tol ) THEN
                         IF ( is_interface(k,j,i) ) THEN
-                            ! Calculate flux for multiphase cell-----
+                            ! Calculate flux for multiphase cell
 
                         ELSE
-                            ! Calculate flux for singlephase cell----
+                            ! Calculate flux for singlephase cell
                             c_flux = c(k,j,i+1) * abs( w(k,j,i) ) * ddx(i) * ddy(j)
                         END IF
                     ELSE
@@ -379,6 +414,18 @@ CONTAINS
 
     SUBROUTINE update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
             adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   The subroutine performs the time integration of the Color-
+    !   Function c. In each Runge-Kutta step the subroutine is called
+    !   three times. Each time c is updated taking into account one
+    !   spatial dimension. Each time-step the order of the 
+    !   dimensional splitting is permuted by the calling subroutine.
+    !   The variables adv_(.) track, which dimension will be 
+    !   integrated. At the moment this time integration performes one
+    !   Euler step with the length of the Runge-Kutta sub-step. The 
+    !   previous Runge-Kutta stages are not considered.
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
@@ -414,7 +461,7 @@ CONTAINS
         IF (nbot == 3) nbw = 1
         IF (ntop == 3) ntw = 1
         
-        ! Update color-function with x fluxes------------------------
+        ! Update color-function with x fluxes
         IF ( adv_x ) THEN 
 
             DO i = 3-nfu, ii-3+nbu
@@ -429,7 +476,7 @@ CONTAINS
             adv_y = .true.
             adv_z = .false.
 
-        ! Update color-function with y fluxes------------------------
+        ! Update color-function with y fluxes
         ELSEIF ( adv_y ) THEN
 
             DO i = 3, ii-2
@@ -444,7 +491,7 @@ CONTAINS
             adv_y = .false.
             adv_z = .true.
 
-        ! Update color-function with z fluxes------------------------
+        ! Update color-function with z fluxes
         ELSEIF ( adv_z ) THEN
 
             DO i = 3, ii-2
@@ -461,7 +508,7 @@ CONTAINS
 
         END IF
 
-        ! ! DEBUG------------------------------------------------------
+        ! ! DEBUG
         ! IF ( minval(c) < -tol .OR. maxval(c) > 1+tol ) THEN
         !     WRITE(*, *) "Color-function c must be in bounds [0,1]. c_min = ", minval(c), " c_max = ", maxval(c)
         !     CALL errr(__FILE__, __LINE__)
@@ -472,6 +519,11 @@ CONTAINS
     !================================================================
 
     SUBROUTINE clip_color_function(kk, ii, jj, c, tol)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   This subroutine ensures that the Color-Function c stays
+    !   within its bounds of [0,1].
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii

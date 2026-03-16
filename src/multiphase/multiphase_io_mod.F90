@@ -2,7 +2,7 @@
 !  Module: multiphase_io_mod
 !
 !  Responsibilities:
-!     - Reads initial color-function field c
+!     - Reads initial Color-Function field c
 !
 !  Author:      Valentin Ruhs
 !  Created:     2026-02
@@ -39,6 +39,12 @@ CONTAINS
     !================================================================
 
     SUBROUTINE read_color_function(c)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   This subroutine reads the initial values of the Color-
+    !   Function field from a csv-file generated in column-major 
+    !   order. The grid size needs to be specified via Nx, Ny and Nz.
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         TYPE(field_t), INTENT(inout) :: c

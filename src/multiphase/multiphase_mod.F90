@@ -64,6 +64,11 @@ CONTAINS
     !================================================================
 
     SUBROUTINE init_c()
+    !----------------------------------------------------------------
+    !   What it does:
+    !   The subroutine manages the allocation of the Color-Function
+    !   field. 
+    !----------------------------------------------------------------
 
         TYPE(field_t), POINTER :: c
         

@@ -37,6 +37,13 @@ CONTAINS
     !================================================================
 
     SUBROUTINE track_interface(is_interface, kk, jj, ii, c, tol)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Identifies which of the cells in the domain contains a volume
+    !   fraction of two fluids. These cells have to be taken into
+    !   account when reconstructing interfaces. Therefore the
+    !   variable containign this information is called is_interface.
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         LOGICAL, INTENT(out) :: is_interface(kk, jj, ii)
@@ -49,7 +56,7 @@ CONTAINS
 
         is_interface = .FALSE.
 
-        ! Find cells with interface----------------------------------
+        ! Find cells with interface
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
@@ -65,6 +72,20 @@ CONTAINS
     !================================================================
 
     SUBROUTINE compute_normal_vector(normx, normy, normz, kk, jj, ii, c, ddx, ddy, ddz, tol)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Computes the normal vector components normx, normy and normz
+    !   of the gradient of the Color-Function c. The components are 
+    !   normalized by the length to get the unit normal components. 
+    !   The gradient in each cell is calculated by taking into 
+    !   account its eight surrounding cells weighted with the 
+    !   three-dimensional sobel operator:
+    !           1  2  1
+    !   sobel = 2  4  2
+    !           1  2  1
+    !   The gradient is approximated by a central-difference scheme:
+    !   norm(.) = (upwind sum - downwind sum) / 2 * dd(.) * sobel sum
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
