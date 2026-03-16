@@ -128,7 +128,7 @@ CONTAINS
         END SELECT
 
         ! Move c in x-direction--------------------------------------
-        CALL track_interface(is_interface, kk, jj, ii, c)
+        CALL track_interface(is_interface, kk, jj, ii, c, tol)
         CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, c, ddx, ddy, ddz, tol)
         CALL compute_alpha(alpha, kk, jj, ii, c, is_interface, ddx, ddy, ddz, normx, normy, normz)
         CALL compute_fluxx(fluxx, kk, jj, ii, c, is_interface, u, alpha, normx, normy, normz, ddy, ddz, tol, & 
@@ -138,7 +138,7 @@ CONTAINS
         CALL clip_color_function(kk, ii, jj, c, tol)
 
         ! Move c in y-direction--------------------------------------
-        CALL track_interface(is_interface, kk, jj, ii, c)
+        CALL track_interface(is_interface, kk, jj, ii, c, tol)
         CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, c, ddx, ddy, ddz, tol)
         CALL compute_alpha(alpha, kk, jj, ii, c, is_interface, ddx, ddy, ddz, normx, normy, normz)
         CALL compute_fluxy(fluxy, kk, jj, ii, c, is_interface, v, alpha, normx, normy, normz, ddx, ddz, tol, & 
@@ -148,7 +148,7 @@ CONTAINS
         CALL clip_color_function(kk, ii, jj, c, tol)
 
         ! Move c in z-direction--------------------------------------
-        CALL track_interface(is_interface, kk, jj, ii, c)
+        CALL track_interface(is_interface, kk, jj, ii, c, tol)
         CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, c, ddx, ddy, ddz, tol)
         CALL compute_alpha(alpha, kk, jj, ii, c, is_interface, ddx, ddy, ddz, normx, normy, normz)
         CALL compute_fluxz(fluxz, kk, jj, ii, c, is_interface, w, alpha, normx, normy, normz, ddx, ddy, tol, & 

@@ -2,7 +2,9 @@
 !  Module: multiphase_plic_mod
 !
 !  Responsibilities:
-!     - 
+!     - Tracks the cells containing an interfac
+!     - Computes the interface normal vector within a cell
+!     - Computes the distance of the interface alpha within a cell
 !
 !  Author:      Valentin Ruhs
 !  Created:     2026-02
@@ -34,17 +36,29 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE track_interface(is_interface, kk, jj, ii, c)
+    SUBROUTINE track_interface(is_interface, kk, jj, ii, c, tol)
 
         ! Subroutine arguments
         LOGICAL, INTENT(out) :: is_interface(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(in) :: tol
 
         ! Local variables
+        INTEGER(intk) :: k, j, i
 
+        is_interface = .FALSE.
 
-        continue
+        ! Find cells with interface----------------------------------
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    IF ( c(k,j,i) > tol .AND. c(k,j,i) < 1.0 - tol ) THEN
+                        is_interface(k,j,i) = .TRUE.
+                    END IF
+                END DO
+            END DO
+        END DO
 
     END SUBROUTINE track_interface
 
@@ -60,9 +74,46 @@ CONTAINS
         REAL(realk), INTENT(in) :: tol
 
         ! Local variables
-        
+        INTEGER(intk) :: k, j, i, dDim1, dDim2
+        INTEGER(intk), PARAMETER :: sobel(-1:1, -1:1) = reshape([1, 2, 1, 2, 4, 2, 1, 2, 1], [3,3])
+        REAL(realk) :: normLength
+        REAL(realk) :: sumStencilx, sumStencily, sumStencilz
 
-        continue
+        ! Loop over cells
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+
+                    sumStencilx = 0.0_realk
+                    sumStencily = 0.0_realk
+                    sumStencilz = 0.0_realk
+
+                    ! Loop over sobel stencil
+                    DO dDim2 = -1, 1
+                        DO dDim1 = -1, 1
+                            sumStencilx = sumStencilx + sobel(dDim1, dDim2) * ( c(k+dDim1, j+dDim2, i+1) - c(k+dDim1, j+dDim2, i-1) )
+                            sumStencily = sumStencily + sobel(dDim1, dDim2) * ( c(k+dDim1, j+1, i+dDim2) - c(k+dDim1, j-1, i+dDim2) )
+                            sumStencilz = sumStencilz + sobel(dDim1, dDim2) * ( c(k+1, j+dDim1, i+dDim2) - c(k-1, j+dDim1, i+dDim2) )
+                        END DO
+                    END DO
+
+                    normx(k,j,i) = sumStencilx / ( 2 * sum(sobel) * ddx(i) )
+                    normy(k,j,i) = sumStencily / ( 2 * sum(sobel) * ddy(j) )
+                    normz(k,j,i) = sumStencilz / ( 2 * sum(sobel) * ddz(k) )
+
+                    ! Calculate normal vector length
+                    normLength = sqrt( normx(k,j,i)**2 + normy(k,j,i)**2 + normz(k,j,i)**2 )
+
+                    ! Normalize with direction from high c to low c
+                    IF ( normLength > tol ) THEN
+                        normx(k,j,i) = - normx(k,j,i) / normLength
+                        normy(k,j,i) = - normy(k,j,i) / normLength
+                        normz(k,j,i) = - normz(k,j,i) / normLength     
+                    END IF
+
+                END DO
+            END DO
+        END DO
 
     END SUBROUTINE compute_normal_vector
 
