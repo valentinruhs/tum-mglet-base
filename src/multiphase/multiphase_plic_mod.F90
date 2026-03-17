@@ -141,6 +141,17 @@ CONTAINS
     !================================================================
 
     SUBROUTINE compute_alpha(alpha, kk, jj, ii, c, is_interface, ddx, ddy, ddz, normx, normy, normz)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   This subroutine calculates the alpha value for PLIC. The 
+    !   alpha value describes the distance of the interface in a cell
+    !   from a defined reference (left bottom front corner).
+    !   1. Assign norm(.) to m1, m2 and m3 and d1-d3 respectively
+    !   2. Transform c to a actual volume and alpha to [0,0.5]
+    !   3. Solve the standart cases for alpha
+    !   4. Transform alpha back to [0,1]
+    !   5. Transform alpha if negative
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
@@ -151,10 +162,103 @@ CONTAINS
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
 
         ! Local variables
-        
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: m1, m2, m3, c1, c2, c3
 
-        continue
+
+        ! Loop over cells
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+
+                    ! Only calculate interface for intersected cells
+                    IF ( .NOT. is_interface(k,j,i) ) THEN 
+                        CYCLE
+                    END IF
+
+                    CALL get_corner_crossing_order(m1, m2, m3, c1, c2, c3, normx(k,j,i), normy(k,j,i), normz(k,j,i), ddx(i), ddy(j), ddz(k))
+
+                END DO
+            END DO
+        END DO
 
     END SUBROUTINE compute_alpha
+
+    !================================================================
+
+    PURE SUBROUTINE get_corner_crossing_order(m1, m2, m3, c1, c2, c3, normx, normy, normz, ddx, ddy, ddz)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   This is a pure subroutine to enhance the performance by 
+    !   inlining. It determines the order of the scaled normal values
+    !   and writes it to m1-m3 and c1-c3 respectively.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        REAL(realk), INTENT(out) :: m1, m2, m3, c1, c2, c3
+        REAL(realk), INTENT(in) :: normx, normy, normz
+        REAL(realk), INTENT(in) :: ddx, ddy, ddz
+
+        ! Local variables
+        REAL(realk) :: scaledNorm1, scaledNorm2, scaledNorm3, tmp
+        INTEGER(intk) :: i1, i2, i3, tmpi
+
+        ! Set initial order
+        scaledNorm1 = normx*ddx
+        scaledNorm2 = normy*ddy
+        scaledNorm3 = normz*ddz
+
+        i1 = 1; i2 = 2; i3 = 3
+
+        ! normx*ddx >= normy*ddy => normx is m2 or m3 and normy is m1 or m2
+        ! normx*ddx <  normy*ddy => normx is m1 or m2 and normy is m2 or m3
+        IF (scaledNorm1 >= scaledNorm2) THEN
+            tmp = scaledNorm1; scaledNorm1 = scaledNorm2; scaledNorm2 = tmp
+            tmpi = i1; i1 = i2; i2 = tmpi
+        END IF
+
+        ! normx*ddx >= normz*ddz => normx is m3 and normz is m1 or m2
+        ! normx*ddx <  normz*ddz => normz is m3 and normx is m1 (or m2)
+        ! --OR--
+        ! normy*ddy >= normz*ddz => normy is m3 and normz is m1 or m2
+        ! normy*ddy <  normz*ddz => normz is m3 and normy is m1 (or m2)
+        IF (scaledNorm2 >= scaledNorm3) THEN
+            tmp = scaledNorm2; scaledNorm2 = scaledNorm3; scaledNorm3 = tmp
+            tmpi = i2; i2 = i3; i3 = tmpi
+        END IF
+
+        ! normx*ddx >= normz*ddz => normx is m2 and normz is m1
+        ! normx*ddx <  normz*ddz => normz is m2 and normx is m1
+        ! --OR--
+        ! normy*ddy >= normz*ddz => normy is m2 and normz is m1
+        ! normy*ddy <  normz*ddz => normz is m2 and normy is m1
+        ! --OR--
+        ! normy*ddy >= normx*ddx => normy is m2 and normz is m1
+        ! normy*ddy <  normx*ddx => normx is m2 and normy is m1
+        IF (scaledNorm1 >= scaledNorm2) THEN
+            tmp = scaledNorm1; scaledNorm1 = scaledNorm2; scaledNorm2 = tmp
+            tmpi = i1; i1 = i2; i2 = tmpi
+        END IF
+
+        ! Assign new order to m1-m3 and c1-c3 respectively
+        SELECT CASE (i1)
+        CASE (1); m1 = normx; c1 = ddx
+        CASE (2); m1 = normy; c2 = ddy
+        CASE (3); m1 = normz; c3 = ddz
+        end SELECT
+
+        SELECT CASE (i2)
+        CASE (1); m1 = normx; c1 = ddx
+        CASE (2); m1 = normy; c2 = ddy
+        CASE (3); m1 = normz; c3 = ddz
+        end SELECT
+
+        SELECT CASE (i3)
+        CASE (1); m1 = normx; c1 = ddx
+        CASE (2); m1 = normy; c2 = ddy
+        CASE (3); m1 = normz; c3 = ddz
+        end SELECT
+
+    END SUBROUTINE get_corner_crossing_order
 
 END MODULE multiphase_plic_mod
