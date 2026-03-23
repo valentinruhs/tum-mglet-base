@@ -173,7 +173,7 @@ CONTAINS
         REAL(realk) :: vol
         REAL(realk) :: base_area, critical_base_area
         REAL(realk) :: V1, V2, V3
-        REAL(realk) :: a0, a1, a2, a3
+        REAL(realk) :: a0, a1, a2
         REAL(realk) :: qo, po
         REAL(realk) :: theta
 
@@ -209,39 +209,39 @@ CONTAINS
                             alpha(k,j,i) = vol / (c1*c2)
                         ELSE
                             ! Two-dimensional cases
-                            alpha_max(k,j,i) = mc2 * mc3
+                            alpha_max(k,j,i) = mc2 + mc3
 
                             ! actual base area
                             base_area = vol / c1
 
-                            ! When the critical base area is exceeded the volume shape transforms to a trapezoidal prism instead of triangular prism
-                            critical_base_area = 1/2 * c2**2 * m2/m3
+                            ! When the critical base area is exceeded the volume shape transforms to a chamfered rectangle prism instead of triangular prism
+                            critical_base_area = 1.0/2.0 * c2**2 * m2/m3
 
                             IF ( base_area <= critical_base_area ) THEN
                                 ! Here both interception points of the interface are within the cell => triangular prism
                                 alpha(k,j,i) = sqrt(2 * base_area * m2 * m3)
                             ELSE
-                                ! Here one interception point (on the c2 axis) is outside the cell => trapezoidal prism
+                                ! Here one interception point (on the c2 axis) is outside the cell => chamfered rectangle prism
                                 alpha(k,j,i) = (m3) / (c2) * base_area + (mc2) / 2 
                             END IF
                         END IF
                     ELSE
                         ! Three-dimensional cases
-                        alpha_max(k,j,i) = mc1 * mc2 * mc3
+                        alpha_max(k,j,i) = mc1 + mc2 + mc3
                         ! Define interval boundaries V1, V2, V3
-                        V1 = mc1**2 / ( max(6*mc2*mc3, tol) )
-                        V2 = V1 + ( mc2 - mc1 ) / ( 2*mc3 )
+                        V1 = mc1**2 * c1 / ( max(6*m2*m3, tol) )
+                        V2 = V1 + c1 * c2 * ( mc2 - mc1 ) / ( 2*m3 )
                         IF ( mc3 < mc1 + mc2 ) THEN
-                            V3 = ( mc3**2 * ( 3 * ( mc1 + mc2 ) - mc3 ) + mc1**2 * ( mc1 - 3 * mc3 ) + mc2**2 * ( mc2 - 3 * mc3 ) ) / ( 6 * mc1 * mc2 * mc3 )
+                            V3 = ( mc3**2 * ( 3 * ( mc1 + mc2 ) - mc3 ) + mc1**2 * ( mc1 - 3 * mc3 ) + mc2**2 * ( mc2 - 3 * mc3 ) ) / ( 6 * m1 * m2 * m3 )
                         ELSE
-                            V3 = ( mc1 + mc2 ) / ( 2 * mc3 )
+                            V3 = c1 * c2 * ( mc1 + mc2 ) / ( 2 * m3 )
                         END IF
 
                         ! Calculate alpha dependent on V1, V2 and V3
                         IF ( vol < V1 ) THEN
-                            alpha(k,j,i) = ( 6 * m1 * m2 * m3 * vol )**( 1/3 )
+                            alpha(k,j,i) = ( 6 * m1 * m2 * m3 * vol )**( 1.0/3.0 )
                         ELSE IF ( vol < V2 ) THEN
-                            alpha(k,j,i) = 1/2 * ( m1 + sqrt(m1**2 + 8 * m2 * m3 * (vol - V1)) )
+                            alpha(k,j,i) = 1.0/2.0 * ( mc1 + sqrt(mc1**2 + 8 * m2 * m3 * (vol - V1) / c1) )
                         ELSE IF ( vol < V3 ) THEN
                             a2 = - 3 * ( mc1 + mc2 )
                             a1 = 3 * ( mc1**2 + mc2**2 )
@@ -249,32 +249,50 @@ CONTAINS
                             po = a1 / 3 - a2**2 / 9
                             qo = ( a1 * a2 - 3 * a0 ) / 6 - a2**3 / 27
 
-                            ! Debug
-                            IF ( po**3 + qo**2 > 0 .OR. po > 0 ) THEN
-                                WRITE(*, *) "No real roots for alpha. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
-                                CALL errr(__FILE__, __LINE__)
-                            END IF
+                            ! ! Debug
+                            ! IF ( po**3 + qo**2 > 0 .OR. po > 0 ) THEN
+                            !     WRITE(*, *) "No real roots for alpha. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
+                            !     CALL errr(__FILE__, __LINE__)
+                            ! END IF
 
                             theta = acos(qo / sqrt((-po)**3)) / 3
                             alpha(k,j,i) = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3
                         ELSE IF ( vol >= V3 .AND. mc3 <= mc1 + mc2 ) THEN
-                            a2 = - 3/2
-                            a1 = 3/2 * ( mc1**2 + mc2**2 +mc3**2 )
-                            a0 = - 1/2 * (mc1**3 + mc2**3) + 3 * m1 * m2 * m3 * vol
+                            a2 = - 3.0/2.0
+                            a1 = 3.0/2.0 * ( mc1**2 + mc2**2 + mc3**2 )
+                            a0 = - 1.0/2.0 * (mc1**3 + mc2**3) + 3 * m1 * m2 * m3 * vol
                             po = a1 / 3 - a2**2 / 9
                             qo = ( a1 * a2 - 3 * a0 ) / 6 - a2**3 / 27
 
-                            ! Debug
-                            IF ( po**3 + qo**2 > 0 .OR. po > 0 ) THEN
-                                WRITE(*, *) "No real roots for alpha. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
-                                CALL errr(__FILE__, __LINE__)
-                            END IF
+                            ! ! Debug
+                            ! IF ( po**3 + qo**2 > 0 .OR. po > 0 ) THEN
+                            !     WRITE(*, *) "No real roots for alpha. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
+                            !     CALL errr(__FILE__, __LINE__)
+                            ! END IF
 
                             theta = acos(qo / sqrt((-po)**3)) / 3
                             alpha(k,j,i) = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3
                         ELSE IF ( vol >= V3 .AND. mc3 > mc1 + mc2 ) THEN
                             alpha(k,j,i) = m3 * vol / ( c1 * c2 ) + ( mc1 + mc2 ) / 2
                         END IF
+                    END IF
+
+                    ! 
+                    IF ( c(k,j,i) > 1.0/2.0 ) THEN
+                        alpha(k,j,i) = alpha_max(k,j,i) - alpha(k,j,i)
+                    END IF
+
+                    ! 
+                    IF ( normx(k,j,i) < 0.0 ) THEN
+                        alpha(k,j,i) = alpha(k,j,i) + ddx(i)*normx(k,j,i)
+                    END IF
+
+                    IF ( normy(k,j,i) < 0.0 ) THEN
+                        alpha(k,j,i) = alpha(k,j,i) + ddy(j)*normy(k,j,i)
+                    END IF
+
+                    IF ( normz(k,j,i) < 0.0 ) THEN
+                        alpha(k,j,i) = alpha(k,j,i) + ddz(k)*normz(k,j,i)
                     END IF
 
                 END DO
@@ -303,9 +321,9 @@ CONTAINS
         INTEGER(intk) :: i1, i2, i3, tmpi
 
         ! Set initial order
-        scaledNorm1 = normx*ddx
-        scaledNorm2 = normy*ddy
-        scaledNorm3 = normz*ddz
+        scaledNorm1 = abs(normx)*ddx
+        scaledNorm2 = abs(normy)*ddy
+        scaledNorm3 = abs(normz)*ddz
 
         i1 = 1; i2 = 2; i3 = 3
 
@@ -342,20 +360,20 @@ CONTAINS
         ! Assign new order to m1-m3 and c1-c3 respectively
         SELECT CASE (i1)
         CASE (1); m1 = abs(normx); c1 = ddx
-        CASE (2); m1 = abs(normy); c2 = ddy
-        CASE (3); m1 = abs(normz); c3 = ddz
+        CASE (2); m1 = abs(normy); c1 = ddy
+        CASE (3); m1 = abs(normz); c1 = ddz
         end SELECT
 
         SELECT CASE (i2)
-        CASE (1); m1 = abs(normx); c1 = ddx
-        CASE (2); m1 = abs(normy); c2 = ddy
-        CASE (3); m1 = abs(normz); c3 = ddz
+        CASE (1); m2 = abs(normx); c2 = ddx
+        CASE (2); m2 = abs(normy); c2 = ddy
+        CASE (3); m2 = abs(normz); c2 = ddz
         end SELECT
 
         SELECT CASE (i3)
-        CASE (1); m1 = abs(normx); c1 = ddx
-        CASE (2); m1 = abs(normy); c2 = ddy
-        CASE (3); m1 = abs(normz); c3 = ddz
+        CASE (1); m3 = abs(normx); c3 = ddx
+        CASE (2); m3 = abs(normy); c3 = ddy
+        CASE (3); m3 = abs(normz); c3 = ddz
         end SELECT
 
     END SUBROUTINE get_corner_crossing_order

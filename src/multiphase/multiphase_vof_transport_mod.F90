@@ -231,7 +231,7 @@ CONTAINS
                     IF ( u(k,j,i) > tol ) THEN
                         IF ( is_interface(k,j,i) ) THEN
                             ! Calculate flux for multiphase cell
-                            
+                            c_flux = 0.0
                         ELSE
                             ! Calculate flux for singlephase cell
                             c_flux = c(k,j,i) * abs( u(k,j,i) ) * ddy(j) * ddz(k)
@@ -239,7 +239,7 @@ CONTAINS
                     ELSE IF ( u(k,j,i) < -tol ) THEN
                         IF ( is_interface(k,j,i) ) THEN
                             ! Calculate flux for multiphase cell
-
+                            c_flux = 0.0
                         ELSE
                             ! Calculate flux for singlephase cell
                             c_flux = c(k,j,i+1) * abs( u(k,j,i) ) * ddy(j) * ddz(k)
@@ -309,7 +309,7 @@ CONTAINS
                     IF ( v(k,j,i) > tol ) THEN
                         IF ( is_interface(k,j,i) ) THEN
                             ! Calculate flux for multiphase cell
-
+                            c_flux = 0.0
                         ELSE
                             ! Calculate flux for singlephase cell
                             c_flux = c(k,j,i) * abs( v(k,j,i) ) * ddx(i) * ddz(k)
@@ -317,7 +317,7 @@ CONTAINS
                     ELSE IF ( v(k,j,i) < -tol ) THEN
                         IF ( is_interface(k,j,i) ) THEN
                             ! Calculate flux for multiphase cell
-
+                            c_flux = 0.0
                         ELSE
                             ! Calculate flux for singlephase cell
                             c_flux = c(k,j,i+1) * abs( v(k,j,i) ) * ddx(i) * ddz(k)
@@ -387,7 +387,7 @@ CONTAINS
                     IF ( w(k,j,i) > tol ) THEN
                         IF ( is_interface(k,j,i) ) THEN
                             ! Calculate flux for multiphase cell
-
+                            c_flux = 0.0
                         ELSE
                             ! Calculate flux for singlephase cell
                             c_flux = c(k,j,i) * abs( w(k,j,i) ) * ddx(i) * ddy(j)
@@ -395,7 +395,7 @@ CONTAINS
                     ELSE IF ( w(k,j,i) < -tol ) THEN
                         IF ( is_interface(k,j,i) ) THEN
                             ! Calculate flux for multiphase cell
-
+                            c_flux = 0.0
                         ELSE
                             ! Calculate flux for singlephase cell
                             c_flux = c(k,j,i+1) * abs( w(k,j,i) ) * ddx(i) * ddy(j)
