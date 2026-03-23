@@ -151,10 +151,12 @@ CONTAINS
     !   alpha value describes the distance of the interface in a cell
     !   from a defined reference (left bottom front corner).
     !   1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
-    !   2. Transform c to a actual volume in bounds [0,0.5]
-    !   3. Solve the standart cases for alpha
-    !   4. Transform alpha back to [0,1]
-    !   5. Transform alpha if negative
+    !   2. Transform c to a actual volume in bounds [0,0.5] * dV
+    !   3. Solve the standart case for alpha
+    !   4. If necessary, transform alpha back to volume bounds 
+    !      [0,1] * dV
+    !   5. If necessary, transform alpha regarding to its negative
+    !      normal vector components
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -192,7 +194,7 @@ CONTAINS
                     ! To enhance performance consider inlining
                     CALL get_corner_crossing_order(m1, m2, m3, c1, c2, c3, normx(k,j,i), normy(k,j,i), normz(k,j,i), ddx(i), ddy(j), ddz(k))
 
-                    ! 2. Transform c to a actual volume in bounds [0,0.5]
+                    ! 2. Transform c to a actual volume in bounds [0,0.5] * dV
                     vol = min(c(k,j,i), 1 - c(k,j,i)) * ddx(i) * ddy(j) * ddz(k)
 
                     ! 3. Solve the standart cases for alpha
@@ -277,12 +279,16 @@ CONTAINS
                         END IF
                     END IF
 
-                    ! 
+                    ! 4. If necessary, transform alpha back to volume bounds [0,1] * dV
+                    ! If the Color-Function has a value above 0.5 the "inverse problem" is solved. Therefore, the result is no longer 
+                    ! alpha, but alpha_max - alpha
                     IF ( c(k,j,i) > 1.0/2.0 ) THEN
                         alpha(k,j,i) = alpha_max(k,j,i) - alpha(k,j,i)
                     END IF
 
-                    ! 
+                    ! 5. If necessary, transform alpha regarding to its negative normal vector components
+                    ! If one of the normal vector components is negative, a mirrored case is solved. Therefore, the solution
+                    ! has to be transformed back
                     IF ( normx(k,j,i) < 0.0 ) THEN
                         alpha(k,j,i) = alpha(k,j,i) + ddx(i)*normx(k,j,i)
                     END IF
