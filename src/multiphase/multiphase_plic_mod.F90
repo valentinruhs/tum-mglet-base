@@ -170,14 +170,8 @@ CONTAINS
 
         ! Local variables
         INTEGER(intk) :: k, j, i
-        REAL(realk) :: m1, m2, m3, c1, c2, c3, mc1, mc2, mc3
+        REAL(realk) :: m1, m2, m3, c1, c2, c3
         REAL(realk) :: alpha_max(kk, jj, ii)
-        REAL(realk) :: vol
-        REAL(realk) :: base_area, critical_base_area
-        REAL(realk) :: V1, V2, V3
-        REAL(realk) :: a0, a1, a2
-        REAL(realk) :: qo, po
-        REAL(realk) :: theta
 
 
         ! Loop over cells
@@ -195,100 +189,22 @@ CONTAINS
                     CALL get_corner_crossing_order(m1, m2, m3, c1, c2, c3, normx(k,j,i), normy(k,j,i), normz(k,j,i), ddx(i), ddy(j), ddz(k))
 
                     ! 2. Transform c to a actual volume in bounds [0,0.5] * dV
-                    vol = min(c(k,j,i), 1 - c(k,j,i)) * ddx(i) * ddy(j) * ddz(k)
-
                     ! 3. Solve the standart cases for alpha
                     ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
                     !         Journal of Computational Physics, Bd. 164, Nr. 1, S. 228–237, Okt. 2000, doi: 10.1006/jcph.2000.6567.
-                    mc1 = m1*c1
-                    mc2 = m2*c2
-                    mc3 = m3*c3
-                    
-                    IF ( mc1 < tol ) THEN
-                        IF ( mc2 < tol ) THEN
-                            ! One-dimensional case
-                            alpha_max(k,j,i) = mc3
-                            alpha(k,j,i) = vol / (c1*c2)
-                        ELSE
-                            ! Two-dimensional cases
-                            alpha_max(k,j,i) = mc2 + mc3
-
-                            ! actual base area
-                            base_area = vol / c1
-
-                            ! When the critical base area is exceeded the volume shape transforms to a chamfered rectangle prism instead of triangular prism
-                            critical_base_area = 1.0/2.0 * c2**2 * m2/m3
-
-                            IF ( base_area <= critical_base_area ) THEN
-                                ! Here both interception points of the interface are within the cell => triangular prism
-                                alpha(k,j,i) = sqrt(2 * base_area * m2 * m3)
-                            ELSE
-                                ! Here one interception point (on the c2 axis) is outside the cell => chamfered rectangle prism
-                                alpha(k,j,i) = (m3) / (c2) * base_area + (mc2) / 2 
-                            END IF
-                        END IF
-                    ELSE
-                        ! Three-dimensional cases
-                        alpha_max(k,j,i) = mc1 + mc2 + mc3
-                        ! Define interval boundaries V1, V2, V3
-                        V1 = mc1**2 * c1 / ( max(6*m2*m3, tol) )
-                        V2 = V1 + c1 * c2 * ( mc2 - mc1 ) / ( 2*m3 )
-                        IF ( mc3 < mc1 + mc2 ) THEN
-                            V3 = ( mc3**2 * ( 3 * ( mc1 + mc2 ) - mc3 ) + mc1**2 * ( mc1 - 3 * mc3 ) + mc2**2 * ( mc2 - 3 * mc3 ) ) / ( 6 * m1 * m2 * m3 )
-                        ELSE
-                            V3 = c1 * c2 * ( mc1 + mc2 ) / ( 2 * m3 )
-                        END IF
-
-                        ! Calculate alpha dependent on V1, V2 and V3
-                        IF ( vol < V1 ) THEN
-                            alpha(k,j,i) = ( 6 * m1 * m2 * m3 * vol )**( 1.0/3.0 )
-                        ELSE IF ( vol < V2 ) THEN
-                            alpha(k,j,i) = 1.0/2.0 * ( mc1 + sqrt(mc1**2 + 8 * m2 * m3 * (vol - V1) / c1) )
-                        ELSE IF ( vol < V3 ) THEN
-                            a2 = - 3 * ( mc1 + mc2 )
-                            a1 = 3 * ( mc1**2 + mc2**2 )
-                            a0 = - (mc1**3 + mc2**3) + 6 * m1 * m2 * m3 * vol
-                            po = a1 / 3 - a2**2 / 9
-                            qo = ( a1 * a2 - 3 * a0 ) / 6 - a2**3 / 27
-
-                            ! ! Debug
-                            ! IF ( po**3 + qo**2 > 0 .OR. po > 0 ) THEN
-                            !     WRITE(*, *) "No real roots for alpha. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
-                            !     CALL errr(__FILE__, __LINE__)
-                            ! END IF
-
-                            theta = acos(qo / sqrt((-po)**3)) / 3
-                            alpha(k,j,i) = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3
-                        ELSE IF ( vol >= V3 .AND. mc3 <= mc1 + mc2 ) THEN
-                            a2 = - 3.0/2.0
-                            a1 = 3.0/2.0 * ( mc1**2 + mc2**2 + mc3**2 )
-                            a0 = - 1.0/2.0 * (mc1**3 + mc2**3) + 3 * m1 * m2 * m3 * vol
-                            po = a1 / 3 - a2**2 / 9
-                            qo = ( a1 * a2 - 3 * a0 ) / 6 - a2**3 / 27
-
-                            ! ! Debug
-                            ! IF ( po**3 + qo**2 > 0 .OR. po > 0 ) THEN
-                            !     WRITE(*, *) "No real roots for alpha. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
-                            !     CALL errr(__FILE__, __LINE__)
-                            ! END IF
-
-                            theta = acos(qo / sqrt((-po)**3)) / 3
-                            alpha(k,j,i) = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3
-                        ELSE IF ( vol >= V3 .AND. mc3 > mc1 + mc2 ) THEN
-                            alpha(k,j,i) = m3 * vol / ( c1 * c2 ) + ( mc1 + mc2 ) / 2
-                        END IF
-                    END IF
+                    ! To enhance performance consider inlining
+                    CALL solve_alpha_standart_cases(m1, m2, m3, c1, c2, c3, alpha(k,j,i), alpha_max(k,j,i), c(k,j,i), ddx(i), ddy(j), ddz(k), tol)
 
                     ! 4. If necessary, transform alpha back to volume bounds [0,1] * dV
                     ! If the Color-Function has a value above 0.5 the "inverse problem" is solved. Therefore, the result is no longer 
-                    ! alpha, but alpha_max - alpha
+                    ! alpha, but alpha_max - alpha. It can be seen as a rotation of the voxel. This is the inverse rotation (see solve_alpha_standart_cases)
                     IF ( c(k,j,i) > 1.0/2.0 ) THEN
                         alpha(k,j,i) = alpha_max(k,j,i) - alpha(k,j,i)
                     END IF
 
                     ! 5. If necessary, transform alpha regarding to its negative normal vector components
                     ! If one of the normal vector components is negative, a mirrored case is solved. Therefore, the solution
-                    ! has to be transformed back
+                    ! has to be transformed back (see get_corner_crossing_order)
                     IF ( normx(k,j,i) < 0.0 ) THEN
                         alpha(k,j,i) = alpha(k,j,i) + ddx(i)*normx(k,j,i)
                     END IF
@@ -364,6 +280,7 @@ CONTAINS
         END IF
 
         ! Assign new order to m1-m3 and c1-c3 respectively
+        ! The absolute value of norm(.) is a mirror transform (see compute_alpha 5.).
         SELECT CASE (i1)
         CASE (1); m1 = abs(normx); c1 = ddx
         CASE (2); m1 = abs(normy); c1 = ddy
@@ -383,5 +300,131 @@ CONTAINS
         end SELECT
 
     END SUBROUTINE get_corner_crossing_order
+
+    !================================================================
+
+    PURE SUBROUTINE solve_alpha_standart_cases(m1, m2, m3, c1, c2, c3, alpha, alpha_max, c, ddx, ddy, ddz, tol)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   This is a pure subroutine to enhance the performance by 
+    !   inlining. It solves the cubic equation
+    !
+    !   vol = 1 / (6 * m1 * m2 * m3) * [alpha^3
+    !   - sum_{j=1..3} H(alpha - m_j * c_j) * (alpha - m_j * c_j)^3
+    !   + sum_{j=1..3} H(alpha - alpha_max + m_j * c_j) * 
+    !   (alpha - alpha_max + m_j * c_j)^3]
+    !
+    !   where alpha_max = m1*c1 + m2*c2 + m3*c3
+    !
+    !   for alpha. This is done for the standart cases:
+    !       - 0 = mc1 = mc2 < mc3 (one-dimensional)
+    !       - 0 = mc1 < mc3 < mc3 (two-dimensional)
+    !       - mc1 < mc2 < mc3 (three-dimensional)
+    !----------------------------------------------------------------
+
+    ! Subroutine arguments
+    REAL(realk), INTENT(in) :: m1, m2, m3, c1, c2, c3
+    REAL(realk), INTENT(out) :: alpha, alpha_max
+    REAL(realk), INTENT(in) :: c
+    REAL(realk), INTENT(in) :: ddx, ddy, ddz
+    REAL(realk), INTENT(in) :: tol
+    
+    ! Local variables
+    REAL(realk) :: mc1, mc2, mc3
+    REAL(realk) :: vol
+    REAL(realk) :: base_area, critical_base_area
+    REAL(realk) :: V1, V2, V3
+    REAL(realk) :: a0, a1, a2
+    REAL(realk) :: qo, po
+    REAL(realk) :: theta
+
+    ! Transform c to a actual volume in bounds [0,0.5] * dV
+    ! Rotate voxel into standart configuration (see compute_alpha 4.)
+    vol = min(c, 1 - c) * ddx * ddy * ddz
+    
+    ! Solve the standart cases for alpha
+    ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
+    !         Journal of Computational Physics, Bd. 164, Nr. 1, S. 228–237, Okt. 2000, doi: 10.1006/jcph.2000.6567.
+    mc1 = m1*c1
+    mc2 = m2*c2
+    mc3 = m3*c3
+    
+    IF ( mc1 < tol ) THEN
+        IF ( mc2 < tol ) THEN
+            ! One-dimensional case
+            alpha_max = mc3
+            alpha = vol / (c1*c2)
+        ELSE
+            ! Two-dimensional cases
+            alpha_max = mc2 + mc3
+            
+            ! actual base area
+            base_area = vol / c1
+            
+            ! When the critical base area is exceeded the volume shape transforms to a chamfered rectangle prism instead of triangular prism
+            critical_base_area = 1.0/2.0 * c2**2 * m2/m3
+            
+            IF ( base_area <= critical_base_area ) THEN
+                ! Here both interception lines of the interface with the coordinate axis are within the cell => triangular prism
+                alpha = sqrt(2 * base_area * m2 * m3)
+            ELSE
+                ! Here one interception line (with the c2 axis) is outside the cell => chamfered rectangle prism
+                alpha = (m3) / (c2) * base_area + (mc2) / 2 
+            END IF
+        END IF
+    ELSE
+        ! Three-dimensional cases
+        alpha_max = mc1 + mc2 + mc3
+
+        ! Define interval boundaries V1, V2, V3
+        V1 = mc1**2 * c1 / ( max(6*m2*m3, tol) )
+        V2 = V1 + c1 * c2 * ( mc2 - mc1 ) / ( 2*m3 )
+        IF ( mc3 < mc1 + mc2 ) THEN
+            V3 = ( mc3**2 * ( 3 * ( mc1 + mc2 ) - mc3 ) + mc1**2 * ( mc1 - 3 * mc3 ) + mc2**2 * ( mc2 - 3 * mc3 ) ) / ( 6 * m1 * m2 * m3 )
+        ELSE
+            V3 = c1 * c2 * ( mc1 + mc2 ) / ( 2 * m3 )
+        END IF
+        
+        ! Calculate alpha dependent on V1, V2 and V3
+        IF ( vol < V1 ) THEN
+            alpha = ( 6 * m1 * m2 * m3 * vol )**( 1.0/3.0 )
+        ELSE IF ( vol < V2 ) THEN
+            alpha = 1.0/2.0 * ( mc1 + sqrt(mc1**2 + 8 * m2 * m3 * (vol - V1) / c1) )
+        ELSE IF ( vol < V3 ) THEN
+            a2 = - 3 * ( mc1 + mc2 )
+            a1 = 3 * ( mc1**2 + mc2**2 )
+            a0 = - (mc1**3 + mc2**3) + 6 * m1 * m2 * m3 * vol
+            po = a1 / 3 - a2**2 / 9
+            qo = ( a1 * a2 - 3 * a0 ) / 6 - a2**3 / 27
+            
+            ! ! Debug
+            ! IF ( po**3 + qo**2 > 0 .OR. po > 0 ) THEN
+            !     WRITE(*, *) "No real roots for alpha. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
+            !     CALL errr(__FILE__, __LINE__)
+            ! END IF
+            
+            theta = acos(qo / sqrt((-po)**3)) / 3
+            alpha = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3
+        ELSE IF ( vol >= V3 .AND. mc3 <= mc1 + mc2 ) THEN
+            a2 = - 3.0/2.0
+            a1 = 3.0/2.0 * ( mc1**2 + mc2**2 + mc3**2 )
+            a0 = - 1.0/2.0 * (mc1**3 + mc2**3) + 3 * m1 * m2 * m3 * vol
+            po = a1 / 3 - a2**2 / 9
+            qo = ( a1 * a2 - 3 * a0 ) / 6 - a2**3 / 27
+            
+            ! ! Debug
+            ! IF ( po**3 + qo**2 > 0 .OR. po > 0 ) THEN
+            !     WRITE(*, *) "No real roots for alpha. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
+            !     CALL errr(__FILE__, __LINE__)
+            ! END IF
+            
+            theta = acos(qo / sqrt((-po)**3)) / 3
+            alpha = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3
+        ELSE IF ( vol >= V3 .AND. mc3 > mc1 + mc2 ) THEN
+            alpha = m3 * vol / ( c1 * c2 ) + ( mc1 + mc2 ) / 2
+        END IF
+    END IF
+
+    END SUBROUTINE solve_alpha_standart_cases
 
 END MODULE multiphase_plic_mod
