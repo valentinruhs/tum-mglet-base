@@ -20,7 +20,7 @@ MODULE multiphase_plic_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: track_interface, compute_normal_vector, compute_alpha
+    PUBLIC :: track_interface, compute_normal_vector, compute_alpha, compute_c_flux_vol
 
 CONTAINS
 
@@ -153,8 +153,8 @@ CONTAINS
     !   1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
     !   2. Transform c to a actual volume in bounds [0,0.5] * dV
     !   3. Solve the standart case for alpha
-    !   4. If necessary, transform alpha back to volume bounds 
-    !      [0,1] * dV
+    !   4. If necessary, transform alpha to its conjugate 
+    !      alphaMax - alpha
     !   5. If necessary, transform alpha regarding to its negative
     !      normal vector components
     !----------------------------------------------------------------
@@ -171,7 +171,8 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         REAL(realk) :: m1, m2, m3, c1, c2, c3
-        REAL(realk) :: alpha_max(kk, jj, ii)
+        REAL(realk) :: alphaStd(kk, jj, ii)
+        REAL(realk) :: alphaMax(kk, jj, ii)
 
 
         ! Loop over cells
@@ -193,13 +194,14 @@ CONTAINS
                     ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
                     !         Journal of Computational Physics, Bd. 164, Nr. 1, S. 228–237, Okt. 2000, doi: 10.1006/jcph.2000.6567.
                     ! To enhance performance consider inlining
-                    CALL solve_alpha_standart_cases(m1, m2, m3, c1, c2, c3, alpha(k,j,i), alpha_max(k,j,i), c(k,j,i), ddx(i), ddy(j), ddz(k), tol)
+                    CALL solve_alpha_standart_cases(m1, m2, m3, c1, c2, c3, alphaStd(k,j,i), alphaMax(k,j,i), c(k,j,i), ddx(i), ddy(j), ddz(k), tol)
 
                     ! 4. If necessary, transform alpha back to volume bounds [0,1] * dV
                     ! If the Color-Function has a value above 0.5 the "inverse problem" is solved. Therefore, the result is no longer 
-                    ! alpha, but alpha_max - alpha. It can be seen as a rotation of the voxel. This is the inverse rotation (see solve_alpha_standart_cases)
+                    ! alpha, but alphaMax - alpha. It can be seen as a rotation of the voxel. This is the inverse rotation (see solve_alpha_standart_cases)
+                    alpha(k,j,i) = alphaStd(k,j,i)
                     IF ( c(k,j,i) > 1.0/2.0 ) THEN
-                        alpha(k,j,i) = alpha_max(k,j,i) - alpha(k,j,i)
+                        alpha(k,j,i) = alphaMax(k,j,i) - alpha(k,j,i)
                     END IF
 
                     ! 5. If necessary, transform alpha regarding to its negative normal vector components
@@ -222,6 +224,57 @@ CONTAINS
         END DO
 
     END SUBROUTINE compute_alpha
+
+    !================================================================
+
+    SUBROUTINE compute_c_flux_vol(c_flux_vol, alpha, c, ddx, ddy, ddz, normx, normy, normz, tol)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   This subroutine calculates the Color-Function value c in the 
+    !   voxel ddx*ddy*ddz, given alpha. 
+    !   1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
+    !   2. If necessary, transform alpha regarding to its negative
+    !      normal vector components
+    !   3. If necessary, transform alpha to its conjugate 
+    !      alphaMax - alpha 
+    !   4. Solve the standart case for vol
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        REAL(realk), INTENT(out) :: c_flux_vol
+        REAL(realk), INTENT(in) :: alpha
+        REAL(realk), INTENT(in) :: c
+        REAL(realk), INTENT(in) :: ddx, ddy, ddz
+        REAL(realk), INTENT(in) :: normx, normy, normz
+        REAL(realk), INTENT(in) :: tol
+
+        ! Input variables
+        REAL(realk) :: m1, m2, m3, c1, c2, c3
+        REAL(realk) :: alphaLoc
+
+        ! 1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
+        ! To enhance performance consider inlining
+        CALL get_corner_crossing_order(m1, m2, m3, c1, c2, c3, normx, normy, normz, ddx, ddy, ddz)
+
+        ! 2. If necessary, transform alpha regarding to its negative normal vector components
+        alphaLoc = alpha
+        IF ( normx < 0.0 ) THEN
+            alphaLoc = alphaLoc - ddx*normx
+        END IF
+
+        IF ( normy < 0.0 ) THEN
+            alphaLoc = alphaLoc - ddy*normy
+        END IF
+
+        IF ( normz < 0.0 ) THEN
+            alphaLoc = alphaLoc - ddz*normz
+        END IF
+
+        ! 3. If necessary, transform alpha to its conjugate alphaMax - alpha
+        ! 4. Solve the standart case for vol
+        CALL solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, c_flux_vol, tol)
+
+    END SUBROUTINE compute_c_flux_vol
 
     !================================================================
 
@@ -303,128 +356,207 @@ CONTAINS
 
     !================================================================
 
-    PURE SUBROUTINE solve_alpha_standart_cases(m1, m2, m3, c1, c2, c3, alpha, alpha_max, c, ddx, ddy, ddz, tol)
+    PURE SUBROUTINE solve_alpha_standart_cases(m1, m2, m3, c1, c2, c3, alphaStd, alphaMax, c, ddx, ddy, ddz, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   This is a pure subroutine to enhance the performance by 
     !   inlining. It solves the cubic equation
     !
-    !   vol = 1 / (6 * m1 * m2 * m3) * [alpha^3
-    !   - sum_{j=1..3} H(alpha - m_j * c_j) * (alpha - m_j * c_j)^3
-    !   + sum_{j=1..3} H(alpha - alpha_max + m_j * c_j) * 
-    !   (alpha - alpha_max + m_j * c_j)^3]
+    !   vol = 1 / (6 * m1 * m2 * m3) * [alphaStd^3
+    !   - sum_{j=1..3} H(alphaStd - m_j * c_j) * (alphaStd - m_j * c_j)^3
+    !   + sum_{j=1..3} H(alphaStd - alphaMax + m_j * c_j) * 
+    !   (alphaStd - alphaMax + m_j * c_j)^3]
     !
-    !   where alpha_max = m1*c1 + m2*c2 + m3*c3
+    !   where alphaMax = m1*c1 + m2*c2 + m3*c3
     !
-    !   for alpha. This is done for the standart cases:
+    !   for alphaStd. This is done for the standart cases:
     !       - 0 = mc1 = mc2 < mc3 (one-dimensional)
     !       - 0 = mc1 < mc3 < mc3 (two-dimensional)
     !       - mc1 < mc2 < mc3 (three-dimensional)
     !----------------------------------------------------------------
 
-    ! Subroutine arguments
-    REAL(realk), INTENT(in) :: m1, m2, m3, c1, c2, c3
-    REAL(realk), INTENT(out) :: alpha, alpha_max
-    REAL(realk), INTENT(in) :: c
-    REAL(realk), INTENT(in) :: ddx, ddy, ddz
-    REAL(realk), INTENT(in) :: tol
-    
-    ! Local variables
-    REAL(realk) :: mc1, mc2, mc3
-    REAL(realk) :: vol
-    REAL(realk) :: base_area, critical_base_area
-    REAL(realk) :: V1, V2, V3
-    REAL(realk) :: a0, a1, a2
-    REAL(realk) :: qo, po
-    REAL(realk) :: theta
+        ! Subroutine arguments
+        REAL(realk), INTENT(in) :: m1, m2, m3, c1, c2, c3
+        REAL(realk), INTENT(out) :: alphaStd, alphaMax
+        REAL(realk), INTENT(in) :: c
+        REAL(realk), INTENT(in) :: ddx, ddy, ddz
+        REAL(realk), INTENT(in) :: tol
+        
+        ! Local variables
+        REAL(realk) :: mc1, mc2, mc3
+        REAL(realk) :: vol
+        REAL(realk) :: base_area, critical_base_area
+        REAL(realk) :: V1, V2, V3
+        REAL(realk) :: a0, a1, a2
+        REAL(realk) :: qo, po
+        REAL(realk) :: theta
 
-    ! Transform c to a actual volume in bounds [0,0.5] * dV
-    ! Rotate voxel into standart configuration (see compute_alpha 4.)
-    vol = min(c, 1 - c) * ddx * ddy * ddz
-    
-    ! Solve the standart cases for alpha
-    ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
-    !         Journal of Computational Physics, Bd. 164, Nr. 1, S. 228–237, Okt. 2000, doi: 10.1006/jcph.2000.6567.
-    mc1 = m1*c1
-    mc2 = m2*c2
-    mc3 = m3*c3
-    
-    IF ( mc1 < tol ) THEN
-        IF ( mc2 < tol ) THEN
-            ! One-dimensional case
-            alpha_max = mc3
-            alpha = vol / (c1*c2)
-        ELSE
-            ! Two-dimensional cases
-            alpha_max = mc2 + mc3
-            
-            ! actual base area
-            base_area = vol / c1
-            
-            ! When the critical base area is exceeded the volume shape transforms to a chamfered rectangle prism instead of triangular prism
-            critical_base_area = 1.0/2.0 * c2**2 * m2/m3
-            
-            IF ( base_area <= critical_base_area ) THEN
-                ! Here both interception lines of the interface with the coordinate axis are within the cell => triangular prism
-                alpha = sqrt(2 * base_area * m2 * m3)
+        ! Transform c to a actual volume in bounds [0,0.5] * dV
+        ! Rotate voxel into standart configuration (see compute_alpha 4.)
+        vol = min(c, 1.0 - c) * ddx * ddy * ddz
+        
+        ! Solve the standart cases for alphaStd
+        ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
+        !         Journal of Computational Physics, Bd. 164, Nr. 1, S. 228–237, Okt. 2000, doi: 10.1006/jcph.2000.6567.
+        mc1 = m1*c1
+        mc2 = m2*c2
+        mc3 = m3*c3
+        
+        IF ( mc1 < tol ) THEN
+            IF ( mc2 < tol ) THEN
+                ! One-dimensional case
+                alphaMax = mc3
+                alphaStd = vol / (c1*c2)
             ELSE
-                ! Here one interception line (with the c2 axis) is outside the cell => chamfered rectangle prism
-                alpha = (m3) / (c2) * base_area + (mc2) / 2 
+                ! Two-dimensional cases
+                alphaMax = mc2 + mc3
+                
+                ! actual base area
+                base_area = vol / c1
+                
+                ! When the critical base area is exceeded the volume shape transforms to a chamfered rectangle prism instead of triangular prism
+                critical_base_area = 1.0/2.0 * c2**2 * m2/m3
+                
+                IF ( base_area <= critical_base_area ) THEN
+                    ! Here both interception lines of the interface with the coordinate axis are within the cell => triangular prism
+                    alphaStd = sqrt(2.0 * base_area * m2 * m3)
+                ELSE
+                    ! Here one interception line (with the c2 axis) is outside the cell => chamfered rectangle prism
+                    alphaStd = (m3) / (c2) * base_area + (mc2) / 2.0
+                END IF
+            END IF
+        ELSE
+            ! Three-dimensional cases
+            alphaMax = mc1 + mc2 + mc3
+
+            ! Define interval boundaries V1, V2, V3
+            V1 = mc1**2 * c1 / ( max(6.0 * m2 * m3, tol) )
+            V2 = V1 + c1 * c2 * ( mc2 - mc1 ) / ( 2.0*m3 )
+            IF ( mc3 < mc1 + mc2 ) THEN
+                V3 = ( mc3**2 * ( 3.0 * ( mc1 + mc2 ) - mc3 ) + mc1**2 * ( mc1 - 3.0 * mc3 ) + mc2**2 * ( mc2 - 3.0 * mc3 ) ) / ( 6.0 * m1 * m2 * m3 )
+            ELSE
+                V3 = c1 * c2 * ( mc1 + mc2 ) / ( 2.0 * m3 )
+            END IF
+            
+            ! Calculate alphaStd dependent on V1, V2 and V3
+            IF ( vol < V1 ) THEN
+                alphaStd = ( 6.0 * m1 * m2 * m3 * vol )**( 1.0/3.0 )
+            ELSE IF ( vol < V2 ) THEN
+                alphaStd = 1.0/2.0 * ( mc1 + sqrt(mc1**2 + 8.0 * m2 * m3 * (vol - V1) / c1) )
+            ELSE IF ( vol < V3 ) THEN
+                a2 = - 3.0 * ( mc1 + mc2 )
+                a1 = 3.0 * ( mc1**2 + mc2**2 )
+                a0 = - (mc1**3 + mc2**3) + 6.0 * m1 * m2 * m3 * vol
+                po = a1 / 3.0 - a2**2 / 9.0
+                qo = ( a1 * a2 - 3.0 * a0 ) / 6.0 - a2**3 / 27.0
+                
+                ! ! Debug
+                ! IF ( po**3 + qo**2 > 0 .OR. po > 0 ) THEN
+                !     WRITE(*, *) "No real roots for alphaStd. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
+                !     CALL errr(__FILE__, __LINE__)
+                ! END IF
+                
+                theta = acos(qo / sqrt((-po)**3)) / 3.0
+                alphaStd = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3.0
+            ELSE IF ( vol >= V3 .AND. mc3 <= mc1 + mc2 ) THEN
+                a2 = - 3.0/2.0
+                a1 = 3.0/2.0 * ( mc1**2 + mc2**2 + mc3**2 )
+                a0 = - 1.0/2.0 * (mc1**3 + mc2**3) + 3.0 * m1 * m2 * m3 * vol
+                po = a1 / 3.0 - a2**2 / 9.0
+                qo = ( a1 * a2 - 3.0 * a0 ) / 6.0 - a2**3 / 27.0
+                
+                ! ! Debug
+                ! IF ( po**3 + qo**2 > 0 .OR. po > 0 ) THEN
+                !     WRITE(*, *) "No real roots for alphaStd. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
+                !     CALL errr(__FILE__, __LINE__)
+                ! END IF
+                
+                theta = acos(qo / sqrt((-po)**3)) / 3.0
+                alphaStd = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3.0
+            ELSE IF ( vol >= V3 .AND. mc3 > mc1 + mc2 ) THEN
+                alphaStd = m3 * vol / ( c1 * c2 ) + ( mc1 + mc2 ) / 2.0
             END IF
         END IF
-    ELSE
-        ! Three-dimensional cases
-        alpha_max = mc1 + mc2 + mc3
-
-        ! Define interval boundaries V1, V2, V3
-        V1 = mc1**2 * c1 / ( max(6*m2*m3, tol) )
-        V2 = V1 + c1 * c2 * ( mc2 - mc1 ) / ( 2*m3 )
-        IF ( mc3 < mc1 + mc2 ) THEN
-            V3 = ( mc3**2 * ( 3 * ( mc1 + mc2 ) - mc3 ) + mc1**2 * ( mc1 - 3 * mc3 ) + mc2**2 * ( mc2 - 3 * mc3 ) ) / ( 6 * m1 * m2 * m3 )
-        ELSE
-            V3 = c1 * c2 * ( mc1 + mc2 ) / ( 2 * m3 )
-        END IF
-        
-        ! Calculate alpha dependent on V1, V2 and V3
-        IF ( vol < V1 ) THEN
-            alpha = ( 6 * m1 * m2 * m3 * vol )**( 1.0/3.0 )
-        ELSE IF ( vol < V2 ) THEN
-            alpha = 1.0/2.0 * ( mc1 + sqrt(mc1**2 + 8 * m2 * m3 * (vol - V1) / c1) )
-        ELSE IF ( vol < V3 ) THEN
-            a2 = - 3 * ( mc1 + mc2 )
-            a1 = 3 * ( mc1**2 + mc2**2 )
-            a0 = - (mc1**3 + mc2**3) + 6 * m1 * m2 * m3 * vol
-            po = a1 / 3 - a2**2 / 9
-            qo = ( a1 * a2 - 3 * a0 ) / 6 - a2**3 / 27
-            
-            ! ! Debug
-            ! IF ( po**3 + qo**2 > 0 .OR. po > 0 ) THEN
-            !     WRITE(*, *) "No real roots for alpha. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
-            !     CALL errr(__FILE__, __LINE__)
-            ! END IF
-            
-            theta = acos(qo / sqrt((-po)**3)) / 3
-            alpha = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3
-        ELSE IF ( vol >= V3 .AND. mc3 <= mc1 + mc2 ) THEN
-            a2 = - 3.0/2.0
-            a1 = 3.0/2.0 * ( mc1**2 + mc2**2 + mc3**2 )
-            a0 = - 1.0/2.0 * (mc1**3 + mc2**3) + 3 * m1 * m2 * m3 * vol
-            po = a1 / 3 - a2**2 / 9
-            qo = ( a1 * a2 - 3 * a0 ) / 6 - a2**3 / 27
-            
-            ! ! Debug
-            ! IF ( po**3 + qo**2 > 0 .OR. po > 0 ) THEN
-            !     WRITE(*, *) "No real roots for alpha. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
-            !     CALL errr(__FILE__, __LINE__)
-            ! END IF
-            
-            theta = acos(qo / sqrt((-po)**3)) / 3
-            alpha = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3
-        ELSE IF ( vol >= V3 .AND. mc3 > mc1 + mc2 ) THEN
-            alpha = m3 * vol / ( c1 * c2 ) + ( mc1 + mc2 ) / 2
-        END IF
-    END IF
 
     END SUBROUTINE solve_alpha_standart_cases
+
+    !================================================================
+
+    PURE SUBROUTINE solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, c, tol)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   This is a pure subroutine to enhance the performance by 
+    !   inlining. It solves the cubic equation
+    !
+    !   vol = 1 / (6 * m1 * m2 * m3) * [alphaStd^3
+    !   - sum_{j=1..3} H(alphaStd - m_j * c_j) * (alphaStd - m_j * c_j)^3
+    !   + sum_{j=1..3} H(alphaStd - alphaMax + m_j * c_j) * 
+    !   (alphaStd - alphaMax + m_j * c_j)^3]
+    !
+    !   where alphaMax = m1*c1 + m2*c2 + m3*c3
+    !
+    !   for vol. This is done for the standart cases:
+    !       - 0 = mc1 = mc2 < mc3 (one-dimensional)
+    !       - 0 = mc1 < mc3 < mc3 (two-dimensional)
+    !       - mc1 < mc2 < mc3 (three-dimensional)
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        REAL(realk), INTENT(in) :: m1, m2, m3, c1, c2, c3
+        REAL(realk), INTENT(in) :: alphaLoc
+        REAL(realk), INTENT(out) :: c
+        REAL(realk), INTENT(in) :: tol
+        
+        ! Local variables
+        REAL(realk) :: mc1, mc2, mc3
+        REAL(realk) :: vol
+        REAL(realk) :: alphaMax
+        REAL(realk) :: alphaStd
+        REAL(realk) :: V1
+
+        ! Solve the standart cases for vol
+        ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
+        !         Journal of Computational Physics, Bd. 164, Nr. 1, S. 228–237, Okt. 2000, doi: 10.1006/jcph.2000.6567.
+        mc1 = m1*c1
+        mc2 = m2*c2
+        mc3 = m3*c3
+
+        IF ( mc1 < tol ) THEN
+            IF ( mc2 < tol ) THEN
+                ! One-dimensional case
+                alphaMax = mc3
+                alphaStd = min(alphaLoc, alphaMax - alphaLoc)
+                vol = alphaStd * (c1*c2)
+            ELSE
+                ! Two-dimensional cases
+                alphaMax = mc2 + mc3
+                alphaStd = min(alphaLoc, alphaMax - alphaLoc)
+                vol = 0.0
+
+            END IF
+        ELSE
+            ! Three-dimensional cases
+            alphaMax = mc1 + mc2 + mc3
+            alphaStd = min(alphaLoc, alphaMax - alphaLoc)
+
+            V1 = mc1**2 * c1 / ( max(6.0 * m2 * m3, tol) )
+            
+            ! Calculate vol dependent on mc1, mc2 and mc3
+            IF ( alphaStd < mc1 ) THEN
+                vol = alphaStd**3 / ( 6.0 * m1 * m2 * m3 )
+            ELSE IF ( alphaStd < mc2 ) THEN
+                vol = ( alphaStd * c1 * ( alphaStd - mc1 ) ) / ( 2.0 * m2 * m3 ) + V1
+            ELSE IF ( alphaStd < min(mc1 + mc2, mc3) ) THEN
+                vol = ( alphaStd**2 * ( 3.0 * ( mc1 + mc2 ) - alphaStd ) + mc1**2 * ( mc1 - 3.0 * alphaStd ) + mc2**2 * ( mc2 - 3.0 * alphaStd ) ) / ( 6.0 * m1 * m2 * m3 )
+            ELSE IF ( alphaStd >= min(mc1 + mc2, mc3) .AND. mc3 <= mc1 + mc2 ) THEN
+                vol = ( alphaStd**2 * ( 3.0 - 2.0 * alphaStd ) + mc1**2 * ( mc1 - 3.0 * alphaStd ) + mc2**2 * ( mc2 - 3.0 * alphaStd ) + mc3**2 * ( mc3 - 3.0 * alphaStd ) ) / ( 6.0 * m1 * m2 * m3 )
+            ELSE IF ( alphaStd >= min(mc1 + mc2, mc3) .AND. mc3 > mc1 + mc2 ) THEN
+                vol = ( c1 * c2 * ( 2.0 * alphaStd - ( mc1 + mc2 ) ) ) / ( 2.0 * m3 )
+            END IF
+        END IF
+
+        c = vol / ( c1 * c2 * c3 )
+
+    END SUBROUTINE solve_vol_standart_cases
 
 END MODULE multiphase_plic_mod

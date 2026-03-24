@@ -18,7 +18,7 @@ MODULE multiphase_vof_transport_mod
     USE fields_mod, ONLY: get_field
     USE grids_mod, ONLY: get_mgdims, get_mgbasb
     USE err_mod, ONLY: errr
-    USE multiphase_plic_mod, ONLY: track_interface, compute_normal_vector, compute_alpha
+    USE multiphase_plic_mod, ONLY: track_interface, compute_normal_vector, compute_alpha, compute_c_flux_vol
     
     IMPLICIT NONE
     PRIVATE 
