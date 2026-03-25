@@ -431,7 +431,7 @@ CONTAINS
 
             ! Define interval boundaries V1, V2, V3
             V1 = mc1**2 * c1 / ( max(6.0 * m2 * m3, tol) )
-            V2 = V1 + c1 * c2 * ( mc2 - mc1 ) / ( 2.0*m3 )
+            V2 = V1 + c1 * c2 * ( mc2 - mc1 ) / ( 2.0 * m3 )
             IF ( mc3 < mc1 + mc2 ) THEN
                 V3 = ( mc3**2 * ( 3.0 * ( mc1 + mc2 ) - mc3 ) + mc1**2 * ( mc1 - 3.0 * mc3 ) + mc2**2 * ( mc2 - 3.0 * mc3 ) ) / ( 6.0 * m1 * m2 * m3 )
             ELSE
@@ -450,26 +450,26 @@ CONTAINS
                 po = a1 / 3.0 - a2**2 / 9.0
                 qo = ( a1 * a2 - 3.0 * a0 ) / 6.0 - a2**3 / 27.0
                 
-                ! ! Debug
-                ! IF ( po**3 + qo**2 > 0 .OR. po > 0 ) THEN
-                !     WRITE(*, *) "No real roots for alphaStd. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
-                !     CALL errr(__FILE__, __LINE__)
-                ! END IF
+                ! Debug
+                IF ( po**3 + qo**2 > 0 ) THEN
+                    WRITE(*, *) "No real roots for alphaStd. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
+                    CALL errr(__FILE__, __LINE__)
+                END IF
                 
                 theta = acos(qo / sqrt((-po)**3)) / 3.0
                 alphaStd = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3.0
             ELSE IF ( vol >= V3 .AND. mc3 <= mc1 + mc2 ) THEN
-                a2 = - 3.0/2.0
+                a2 = - 3.0/2.0 * ( mc1 + mc2 + mc3 )
                 a1 = 3.0/2.0 * ( mc1**2 + mc2**2 + mc3**2 )
-                a0 = - 1.0/2.0 * (mc1**3 + mc2**3) + 3.0 * m1 * m2 * m3 * vol
+                a0 = - 1.0/2.0 * ( mc1**3 + mc2**3 + mc3**3 ) + 3.0 * m1 * m2 * m3 * vol
                 po = a1 / 3.0 - a2**2 / 9.0
                 qo = ( a1 * a2 - 3.0 * a0 ) / 6.0 - a2**3 / 27.0
                 
-                ! ! Debug
-                ! IF ( po**3 + qo**2 > 0 .OR. po > 0 ) THEN
-                !     WRITE(*, *) "No real roots for alphaStd. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
-                !     CALL errr(__FILE__, __LINE__)
-                ! END IF
+                ! Debug
+                IF ( po**3 + qo**2 > 0 ) THEN
+                    WRITE(*, *) "No real roots for alphaStd. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
+                    CALL errr(__FILE__, __LINE__)
+                END IF
                 
                 theta = acos(qo / sqrt((-po)**3)) / 3.0
                 alphaStd = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3.0
