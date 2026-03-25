@@ -20,7 +20,7 @@ MODULE multiphase_plic_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: track_interface, compute_normal_vector, compute_alpha, compute_c_flux_vol
+    PUBLIC :: track_interface, compute_normal_vector, compute_alpha, compute_cFluxVol
 
 CONTAINS
 
@@ -40,17 +40,17 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE track_interface(is_interface, kk, jj, ii, c, tol)
+    SUBROUTINE track_interface(isInterface, kk, jj, ii, c, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   Identifies which of the cells in the domain contains a volume
     !   fraction of two fluids. These cells have to be taken into
     !   account when reconstructing interfaces. Therefore the
-    !   variable containign this information is called is_interface.
+    !   variable containign this information is called isInterface.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        LOGICAL, INTENT(out) :: is_interface(kk, jj, ii)
+        LOGICAL, INTENT(out) :: isInterface(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
         REAL(realk), INTENT(in) :: tol
@@ -58,14 +58,14 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
 
-        is_interface = .FALSE.
+        isInterface = .FALSE.
 
         ! Find cells with interface
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
                     IF ( c(k,j,i) > tol .AND. c(k,j,i) < 1.0 - tol ) THEN
-                        is_interface(k,j,i) = .TRUE.
+                        isInterface(k,j,i) = .TRUE.
                     END IF
                 END DO
             END DO
@@ -144,7 +144,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_alpha(alpha, kk, jj, ii, c, is_interface, ddx, ddy, ddz, normx, normy, normz, tol)
+    SUBROUTINE compute_alpha(alpha, kk, jj, ii, c, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine calculates the alpha value for PLIC. The 
@@ -163,7 +163,7 @@ CONTAINS
         REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
-        LOGICAL, INTENT(out) :: is_interface(kk, jj, ii)
+        LOGICAL, INTENT(out) :: isInterface(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: tol
@@ -181,7 +181,7 @@ CONTAINS
                 DO k = 3, kk-2
 
                     ! Only calculate interface for intersected cells
-                    IF ( .NOT. is_interface(k,j,i) ) THEN 
+                    IF ( .NOT. isInterface(k,j,i) ) THEN 
                         CYCLE
                     END IF
 
@@ -227,7 +227,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_c_flux_vol(c_flux_vol, alpha, c, ddx, ddy, ddz, normx, normy, normz, tol)
+    SUBROUTINE compute_cFluxVol(cFluxVol, alpha, c, ddx, ddy, ddz, normx, normy, normz, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine calculates the Color-Function value c in the 
@@ -241,7 +241,7 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        REAL(realk), INTENT(out) :: c_flux_vol
+        REAL(realk), INTENT(out) :: cFluxVol
         REAL(realk), INTENT(in) :: alpha
         REAL(realk), INTENT(in) :: c
         REAL(realk), INTENT(in) :: ddx, ddy, ddz
@@ -272,9 +272,9 @@ CONTAINS
 
         ! 3. If necessary, transform alpha to its conjugate alphaMax - alpha
         ! 4. Solve the standart case for vol
-        CALL solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, c_flux_vol, tol)
+        CALL solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, cFluxVol, tol)
 
-    END SUBROUTINE compute_c_flux_vol
+    END SUBROUTINE compute_cFluxVol
 
     !================================================================
 
@@ -385,7 +385,7 @@ CONTAINS
         ! Local variables
         REAL(realk) :: mc1, mc2, mc3
         REAL(realk) :: vol
-        REAL(realk) :: base_area, critical_base_area
+        REAL(realk) :: baseArea, criticalBaseArea
         REAL(realk) :: V1, V2, V3
         REAL(realk) :: a0, a1, a2
         REAL(realk) :: qo, po
@@ -412,17 +412,17 @@ CONTAINS
                 alphaMax = mc2 + mc3
                 
                 ! actual base area
-                base_area = vol / c1
+                baseArea = vol / c1
                 
                 ! When the critical base area is exceeded the volume shape transforms to a chamfered rectangle prism instead of triangular prism
-                critical_base_area = 1.0/2.0 * c2**2 * m2/m3
+                criticalBaseArea = 1.0/2.0 * c2**2 * m2/m3
                 
-                IF ( base_area <= critical_base_area ) THEN
+                IF ( baseArea <= criticalBaseArea ) THEN
                     ! Here both interception lines of the interface with the coordinate axis are within the cell => triangular prism
-                    alphaStd = sqrt(2.0 * base_area * m2 * m3)
+                    alphaStd = sqrt(2.0 * baseArea * m2 * m3)
                 ELSE
                     ! Here one interception line (with the c2 axis) is outside the cell => chamfered rectangle prism
-                    alphaStd = (m3) / (c2) * base_area + (mc2) / 2.0
+                    alphaStd = (m3) / (c2) * baseArea + (mc2) / 2.0
                 END IF
             END IF
         ELSE
@@ -513,6 +513,7 @@ CONTAINS
         REAL(realk) :: alphaMax
         REAL(realk) :: alphaStd
         REAL(realk) :: V1
+        REAL(realk) :: baseArea, chamferedRectangleArea, triangularArea
 
         ! Solve the standart cases for vol
         ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
@@ -531,8 +532,15 @@ CONTAINS
                 ! Two-dimensional cases
                 alphaMax = mc2 + mc3
                 alphaStd = min(alphaLoc, alphaMax - alphaLoc)
-                vol = 0.0
-
+                
+                IF ( alphaStd < mc2 ) THEN
+                    baseArea = 1.0/2.0 * alphaStd**2 / ( m2 * m3 )
+                    vol = baseArea * c1
+                ELSE
+                    triangularArea = 1.0/2.0 * c2**2 * m2 / m3
+                    chamferedRectangleArea = c2 * alphaStd / m3 - triangularArea
+                    vol = chamferedRectangleArea * c1
+                END IF
             END IF
         ELSE
             ! Three-dimensional cases
@@ -556,6 +564,10 @@ CONTAINS
         END IF
 
         c = vol / ( c1 * c2 * c3 )
+
+        IF ( alphaLoc > 0.5 * alphaMax .AND. alphaLoc < alphaMax ) THEN
+            c = 1 - c
+        END IF
 
     END SUBROUTINE solve_vol_standart_cases
 
