@@ -8,7 +8,7 @@ PROGRAM main
     USE ib_mod, ONLY: init_ib, finish_ib, ib
     USE timeloop_mod, ONLY: init_timeloop, finish_timeloop, timeloop
     USE scalar_mod, ONLY: init_scalar, finish_scalar
-    USE multiphase_mod, ONLY: init_c
+    USE multiphase_mod, ONLY: init_vff
 
     IMPLICIT NONE (type, external)
 
@@ -45,7 +45,7 @@ PROGRAM main
         ! any more
         CALL fields_end_rw()
 
-        CALL init_c()
+        CALL init_vff()
 
         ! Run time loop
         CALL timeloop()

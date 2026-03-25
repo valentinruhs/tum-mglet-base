@@ -27,23 +27,23 @@ MODULE multiphase_vof_transport_mod
 
 CONTAINS
 
-    SUBROUTINE init_multiphase_vof_transport()
+    ! SUBROUTINE init_multiphase_vof_transport()
 
-        continue
+    !     continue
 
-    END SUBROUTINE init_multiphase_vof_transport
+    ! END SUBROUTINE init_multiphase_vof_transport
 
-    !================================================================
+    ! !================================================================
 
-    SUBROUTINE finish_multiphase_vof_transport()
+    ! SUBROUTINE finish_multiphase_vof_transport()
 
-        continue
+    !     continue
 
-    END SUBROUTINE finish_multiphase_vof_transport
+    ! END SUBROUTINE finish_multiphase_vof_transport
 
-    !================================================================
+    ! !================================================================
 
-    SUBROUTINE multiphase_vof_transport(c_f, u_f, v_f, w_f, dtfu, itstep)
+    SUBROUTINE multiphase_vof_transport(vff_f, u_f, v_f, w_f, dtfu, itstep)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine gets all nescessary input variables to perform
@@ -52,7 +52,7 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        TYPE(field_t), INTENT(inout) :: c_f
+        TYPE(field_t), INTENT(inout) :: vff_f
         TYPE(field_t), INTENT(in) :: u_f
         TYPE(field_t), INTENT(in) :: v_f
         TYPE(field_t), INTENT(in) :: w_f
@@ -60,8 +60,8 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: itstep
 
         ! Local variables
-        TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
-        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: c, u, v, w
+        TYPE(field_t), POINTER :: ddx_f, ddy_f, ddz_f
+        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: vff, u, v, w
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         INTEGER(intk) :: i, igrid
         INTEGER(intk) :: kk, jj, ii
@@ -76,7 +76,7 @@ CONTAINS
             CALL get_mgdims(kk, jj, ii, igrid)
             CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
 
-            CALL c_f%get_ptr(c, igrid)
+            CALL vff_f%get_ptr(vff, igrid)
             CALL u_f%get_ptr(u, igrid)
             CALL v_f%get_ptr(v, igrid)
             CALL w_f%get_ptr(w, igrid)
@@ -85,7 +85,7 @@ CONTAINS
             CALL ddy_f%get_ptr(ddy, igrid)
             CALL ddz_f%get_ptr(ddz, igrid)
 
-            CALL multiphase_vof_transport_advection(kk, jj, ii, c, u, v, w, & 
+            CALL multiphase_vof_transport_advection(kk, jj, ii, vff, u, v, w, & 
                 ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop, itstep)
         END DO
 
@@ -93,7 +93,7 @@ CONTAINS
 
     !================================================================
     
-    SUBROUTINE multiphase_vof_transport_advection(kk, jj, ii, c, u, v, w, & 
+    SUBROUTINE multiphase_vof_transport_advection(kk, jj, ii, vff, u, v, w, & 
         ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop, itstep)
     !----------------------------------------------------------------
     !   What it does:
@@ -103,13 +103,13 @@ CONTAINS
     !   3. Compute interface distance
     !      => Interface is located
     !   4. Calculate fluxes
-    !   5. Time integration of Color-Function
-    !   6. Clip Color-Function to its bounds 
+    !   5. Time integration of volume fraction field
+    !   6. Clip volume fraction field to its bounds 
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(inout) :: c(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dtfu
@@ -144,53 +144,53 @@ CONTAINS
                 adv_z = .TRUE.
         END SELECT
 
-        ! Move c in x-direction
-        CALL track_interface(isInterface, kk, jj, ii, c, tol)
-        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, c, ddx, ddy, ddz, tol)
-        CALL compute_alpha(alpha, kk, jj, ii, c, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        CALL compute_fluxx(fluxx, kk, jj, ii, c, isInterface, u, alpha, normx, normy, normz, ddy, ddz, tol, & 
+        ! Move vff in x-direction
+        CALL track_interface(isInterface, kk, jj, ii, vff, tol)
+        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
+        CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+        CALL compute_fluxx(fluxx, kk, jj, ii, vff, isInterface, u, alpha, normx, normy, normz, ddy, ddz, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
-        CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
+        CALL update_volume_fraction_field(kk, jj, ii, vff, fluxx, fluxy, fluxz, & 
             adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
-        CALL clip_color_function(kk, ii, jj, c, tol)
+        CALL clip_volume_fraction_field(kk, ii, jj, vff, tol)
 
-        ! Move c in y-direction
-        CALL track_interface(isInterface, kk, jj, ii, c, tol)
-        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, c, ddx, ddy, ddz, tol)
-        CALL compute_alpha(alpha, kk, jj, ii, c, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        CALL compute_fluxy(fluxy, kk, jj, ii, c, isInterface, v, alpha, normx, normy, normz, ddx, ddz, tol, & 
+        ! Move vff in y-direction
+        CALL track_interface(isInterface, kk, jj, ii, vff, tol)
+        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
+        CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+        CALL compute_fluxy(fluxy, kk, jj, ii, vff, isInterface, v, alpha, normx, normy, normz, ddx, ddz, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
-        CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
+        CALL update_volume_fraction_field(kk, jj, ii, vff, fluxx, fluxy, fluxz, & 
             adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
-        CALL clip_color_function(kk, ii, jj, c, tol)
+        CALL clip_volume_fraction_field(kk, ii, jj, vff, tol)
 
-        ! Move c in z-direction
-        CALL track_interface(isInterface, kk, jj, ii, c, tol)
-        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, c, ddx, ddy, ddz, tol)
-        CALL compute_alpha(alpha, kk, jj, ii, c, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        CALL compute_fluxz(fluxz, kk, jj, ii, c, isInterface, w, alpha, normx, normy, normz, ddx, ddy, tol, & 
+        ! Move vff in z-direction
+        CALL track_interface(isInterface, kk, jj, ii, vff, tol)
+        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
+        CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+        CALL compute_fluxz(fluxz, kk, jj, ii, vff, isInterface, w, alpha, normx, normy, normz, ddx, ddy, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
-        CALL update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
+        CALL update_volume_fraction_field(kk, jj, ii, vff, fluxx, fluxy, fluxz, & 
             adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
-        CALL clip_color_function(kk, ii, jj, c, tol)
+        CALL clip_volume_fraction_field(kk, ii, jj, vff, tol)
 
     END SUBROUTINE multiphase_vof_transport_advection
 
     !================================================================
 
-    SUBROUTINE compute_fluxx(fluxx, kk, jj, ii, c, isInterface, u, alpha, normx, normy, normz, ddy, ddz, tol, & 
+    SUBROUTINE compute_fluxx(fluxx, kk, jj, ii, vff, isInterface, u, alpha, normx, normy, normz, ddy, ddz, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
-    !   This subroutine calculates the flux of the Color-Function c
-    !   in the x direction. The interface area is taken into account.
-    !   Therefore the flux has a unit of L^3/T. 
+    !   This subroutine calculates the flux of the volume fraction
+    !   field vff in the x direction. The interface area is taken 
+    !   into account. Therefore the flux has a unit of L^3/T. 
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        REAL(realk), INTENT(out) :: fluxx(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(out) :: fluxx(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
         REAL(realk), INTENT(in) :: u(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
@@ -202,7 +202,7 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
-        REAL(realk) :: c_flux
+        REAL(realk) :: cFlux
 
         nfu = 0
         nbu = 0
@@ -231,23 +231,23 @@ CONTAINS
                     IF ( u(k,j,i) > tol ) THEN
                         IF ( isInterface(k,j,i) ) THEN
                             ! Calculate flux for multiphase cell
-                            c_flux = 0.0
+                            cFlux = 0.0
                         ELSE
                             ! Calculate flux for singlephase cell
-                            c_flux = c(k,j,i) * abs( u(k,j,i) ) * ddy(j) * ddz(k)
+                            cFlux = vff(k,j,i) * abs( u(k,j,i) ) * ddy(j) * ddz(k)
                         END IF
                     ELSE IF ( u(k,j,i) < -tol ) THEN
                         IF ( isInterface(k,j,i) ) THEN
                             ! Calculate flux for multiphase cell
-                            c_flux = 0.0
+                            cFlux = 0.0
                         ELSE
                             ! Calculate flux for singlephase cell
-                            c_flux = c(k,j,i+1) * abs( u(k,j,i) ) * ddy(j) * ddz(k)
+                            cFlux = vff(k,j,i+1) * abs( u(k,j,i) ) * ddy(j) * ddz(k)
                         END IF
                     ELSE
-                        c_flux = 0.0
+                        cFlux = 0.0
                     END IF
-                    fluxx(k,j,i) = sign( 1.0, u(k,j,i) ) * c_flux
+                    fluxx(k,j,i) = sign( 1.0, u(k,j,i) ) * cFlux
                 END DO
             END DO
         END DO
@@ -256,19 +256,19 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_fluxy(fluxy, kk, jj, ii, c, isInterface, v, alpha, normx, normy, normz, ddx, ddz, tol, & 
+    SUBROUTINE compute_fluxy(fluxy, kk, jj, ii, vff, isInterface, v, alpha, normx, normy, normz, ddx, ddz, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
-    !   This subroutine calculates the flux of the Color-Function c
-    !   in the y direction. The interface area is taken into account.
-    !   Therefore the flux has a unit of L^3/T. 
+    !   This subroutine calculates the flux of the volume fraction
+    !   field vff in the y direction. The interface area is taken 
+    !   into account. Therefore the flux has a unit of L^3/T. 
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        REAL(realk), INTENT(out) :: fluxy(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(out) :: fluxy(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
         REAL(realk), INTENT(in) :: v(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
@@ -280,7 +280,7 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
-        REAL(realk) :: c_flux
+        REAL(realk) :: cFlux
 
         nfu = 0
         nbu = 0
@@ -309,23 +309,23 @@ CONTAINS
                     IF ( v(k,j,i) > tol ) THEN
                         IF ( isInterface(k,j,i) ) THEN
                             ! Calculate flux for multiphase cell
-                            c_flux = 0.0
+                            cFlux = 0.0
                         ELSE
                             ! Calculate flux for singlephase cell
-                            c_flux = c(k,j,i) * abs( v(k,j,i) ) * ddx(i) * ddz(k)
+                            cFlux = vff(k,j,i) * abs( v(k,j,i) ) * ddx(i) * ddz(k)
                         END IF
                     ELSE IF ( v(k,j,i) < -tol ) THEN
                         IF ( isInterface(k,j,i) ) THEN
                             ! Calculate flux for multiphase cell
-                            c_flux = 0.0
+                            cFlux = 0.0
                         ELSE
                             ! Calculate flux for singlephase cell
-                            c_flux = c(k,j,i+1) * abs( v(k,j,i) ) * ddx(i) * ddz(k)
+                            cFlux = vff(k,j,i+1) * abs( v(k,j,i) ) * ddx(i) * ddz(k)
                         END IF
                     ELSE
-                        c_flux = 0.0
+                        cFlux = 0.0
                     END IF
-                    fluxy(k,j,i) = sign( 1.0, v(k,j,i) ) * c_flux
+                    fluxy(k,j,i) = sign( 1.0, v(k,j,i) ) * cFlux
                 END DO
             END DO
         END DO
@@ -334,19 +334,19 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_fluxz(fluxz, kk, jj, ii, c, isInterface, w, alpha, normx, normy, normz, ddx, ddy, tol, & 
+    SUBROUTINE compute_fluxz(fluxz, kk, jj, ii, vff, isInterface, w, alpha, normx, normy, normz, ddx, ddy, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
-    !   This subroutine calculates the flux of the Color-Function c
-    !   in the z direction. The interface area is taken into account.
-    !   Therefore the flux has a unit of L^3/T. 
+    !   This subroutine calculates the flux of the volume fraction
+    !   field vff in the z direction. The interface area is taken 
+    !   into account. Therefore the flux has a unit of L^3/T. 
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        REAL(realk), INTENT(out) :: fluxz(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(out) :: fluxz(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
         REAL(realk), INTENT(in) :: w(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
@@ -358,7 +358,7 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
-        REAL(realk) :: c_flux
+        REAL(realk) :: cFlux
 
         nfu = 0
         nbu = 0
@@ -387,23 +387,23 @@ CONTAINS
                     IF ( w(k,j,i) > tol ) THEN
                         IF ( isInterface(k,j,i) ) THEN
                             ! Calculate flux for multiphase cell
-                            c_flux = 0.0
+                            cFlux = 0.0
                         ELSE
                             ! Calculate flux for singlephase cell
-                            c_flux = c(k,j,i) * abs( w(k,j,i) ) * ddx(i) * ddy(j)
+                            cFlux = vff(k,j,i) * abs( w(k,j,i) ) * ddx(i) * ddy(j)
                         END IF
                     ELSE IF ( w(k,j,i) < -tol ) THEN
                         IF ( isInterface(k,j,i) ) THEN
                             ! Calculate flux for multiphase cell
-                            c_flux = 0.0
+                            cFlux = 0.0
                         ELSE
                             ! Calculate flux for singlephase cell
-                            c_flux = c(k,j,i+1) * abs( w(k,j,i) ) * ddx(i) * ddy(j)
+                            cFlux = vff(k,j,i+1) * abs( w(k,j,i) ) * ddx(i) * ddy(j)
                         END IF
                     ELSE
-                        c_flux = 0.0
+                        cFlux = 0.0
                     END IF
-                    fluxz(k,j,i) = sign( 1.0, w(k,j,i) ) * c_flux
+                    fluxz(k,j,i) = sign( 1.0, w(k,j,i) ) * cFlux
                 END DO
             END DO
         END DO
@@ -412,24 +412,24 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE update_color_function(kk, jj, ii, c, fluxx, fluxy, fluxz, & 
+    SUBROUTINE update_volume_fraction_field(kk, jj, ii, vff, fluxx, fluxy, fluxz, & 
             adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtfu, nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
-    !   The subroutine performs the time integration of the Color-
-    !   Function c. In each Runge-Kutta step the subroutine is called
-    !   three times. Each time c is updated taking into account one
-    !   spatial dimension. Each time-step the order of the 
-    !   dimensional splitting is permuted by the calling subroutine.
-    !   The variables adv_(.) track, which dimension will be 
-    !   integrated. At the moment this time integration performes one
-    !   Euler step with the length of the Runge-Kutta sub-step. The 
-    !   previous Runge-Kutta stages are not considered.
+    !   The subroutine performs the time integration of the volume 
+    !   fraction field vff. In each Runge-Kutta step the subroutine 
+    !   is called three times. Each time vff is updated taking into 
+    !   account one spatial dimension. Each time-step the order of 
+    !   the dimensional splitting is permuted by the calling 
+    !   subroutine. The variables adv_(.) track, which dimension will 
+    !   be integrated. At the moment this time integration performes 
+    !   one Euler step with the length of the Runge-Kutta sub-step. 
+    !   The previous Runge-Kutta stages are not considered.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(inout) :: c(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: fluxx(kk, jj, ii), fluxy(kk, jj, ii), fluxz(kk, jj, ii)
         LOGICAL, INTENT(inout) :: adv_x, adv_y, adv_z
         REAL(realk), INTENT(in) :: tol
@@ -461,13 +461,13 @@ CONTAINS
         IF (nbot == 3) nbw = 1
         IF (ntop == 3) ntw = 1
         
-        ! Update color-function with x fluxes
+        ! Update volume fraction field with x fluxes
         IF ( adv_x ) THEN 
 
             DO i = 3-nfu, ii-3+nbu
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxx(k,j,i-1) - fluxx(k,j,i) ) / ( ddx(i) * ddy(j) * ddz(k) )
+                        vff(k,j,i) = vff(k,j,i) + dtfu * ( fluxx(k,j,i-1) - fluxx(k,j,i) ) / ( ddx(i) * ddy(j) * ddz(k) )
                     END DO 
                 END DO 
             END DO
@@ -476,13 +476,13 @@ CONTAINS
             adv_y = .true.
             adv_z = .false.
 
-        ! Update color-function with y fluxes
+        ! Update volume fraction field with y fluxes
         ELSEIF ( adv_y ) THEN
 
             DO i = 3, ii-2
                 DO j = 3-nrv, jj-3+nlv
                     DO k = 3, kk-2
-                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxy(k,j-1,i) - fluxy(k,j,i) ) / ( ddx(i) * ddy(j) * ddz(k) )
+                        vff(k,j,i) = vff(k,j,i) + dtfu * ( fluxy(k,j-1,i) - fluxy(k,j,i) ) / ( ddx(i) * ddy(j) * ddz(k) )
                     END DO 
                 END DO 
             END DO
@@ -491,13 +491,13 @@ CONTAINS
             adv_y = .false.
             adv_z = .true.
 
-        ! Update color-function with z fluxes
+        ! Update volume fraction field with z fluxes
         ELSEIF ( adv_z ) THEN
 
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3-nbw, kk-3+ntw
-                        c(k,j,i) = c(k,j,i) + dtfu * ( fluxz(k-1,j,i) - fluxz(k,j,i) ) / ( ddx(i) * ddy(j) * ddz(k) )
+                        vff(k,j,i) = vff(k,j,i) + dtfu * ( fluxz(k-1,j,i) - fluxz(k,j,i) ) / ( ddx(i) * ddy(j) * ddz(k) )
                     END DO 
                 END DO 
             END DO
@@ -509,25 +509,25 @@ CONTAINS
         END IF
 
         ! ! DEBUG
-        ! IF ( minval(c) < -tol .OR. maxval(c) > 1+tol ) THEN
-        !     WRITE(*, *) "Color-function c must be in bounds [0,1]. c_min = ", minval(c), " c_max = ", maxval(c)
+        ! IF ( minval(vff) < -tol .OR. maxval(vff) > 1+tol ) THEN
+        !     WRITE(*, *) "volume fraction field vff must be in bounds [0,1]. c_min = ", minval(vff), " c_max = ", maxval(vff)
         !     CALL errr(__FILE__, __LINE__)
         ! END IF
 
-    END SUBROUTINE update_color_function
+    END SUBROUTINE update_volume_fraction_field
 
     !================================================================
 
-    SUBROUTINE clip_color_function(kk, ii, jj, c, tol)
+    SUBROUTINE clip_volume_fraction_field(kk, ii, jj, vff, tol)
     !----------------------------------------------------------------
     !   What it does:
-    !   This subroutine ensures that the Color-Function c stays
+    !   This subroutine ensures that the volume fraction field vff stays
     !   within its bounds of [0,1].
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(inout) :: c(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: tol
 
         ! Local variables
@@ -535,6 +535,6 @@ CONTAINS
 
         continue
 
-    END SUBROUTINE clip_color_function
+    END SUBROUTINE clip_volume_fraction_field
 
 END MODULE multiphase_vof_transport_mod

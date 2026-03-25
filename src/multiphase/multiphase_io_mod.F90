@@ -2,7 +2,7 @@
 !  Module: multiphase_io_mod
 !
 !  Responsibilities:
-!     - Reads initial Color-Function field c
+!     - Reads initial volume fraction field vff
 !
 !  Author:      Valentin Ruhs
 !  Created:     2026-02
@@ -18,36 +18,36 @@ MODULE multiphase_io_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: read_color_function
+    PUBLIC :: read_vff
 
 CONTAINS
 
-    SUBROUTINE init_multiphase_io()
+    ! SUBROUTINE init_multiphase_io()
 
-        continue
+    !     continue
 
-    END SUBROUTINE init_multiphase_io
+    ! END SUBROUTINE init_multiphase_io
 
-    !================================================================
+    ! !================================================================
 
-    SUBROUTINE finish_multiphase_io()
+    ! SUBROUTINE finish_multiphase_io()
 
-        continue
+    !     continue
 
-    END SUBROUTINE finish_multiphase_io
+    ! END SUBROUTINE finish_multiphase_io
 
-    !================================================================
+    ! !================================================================
 
-    SUBROUTINE read_color_function(c)
+    SUBROUTINE read_vff(vff)
     !----------------------------------------------------------------
     !   What it does:
-    !   This subroutine reads the initial values of the Color-
-    !   Function field from a csv-file generated in column-major 
+    !   This subroutine reads the initial values of the volume
+    !   fraction field from a csv-file generated in column-major 
     !   order. The grid size needs to be specified via Nx, Ny and Nz.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        TYPE(field_t), INTENT(inout) :: c
+        TYPE(field_t), INTENT(inout) :: vff
         
         ! Local variables
         INTEGER(intk) :: Nx, Ny, Nz
@@ -57,12 +57,12 @@ CONTAINS
         Ny = 20
         Nz = 20
 
-        OPEN(newunit=unit,file="c.csv",status="old",action="read")
+        OPEN(newunit=unit,file="vff.csv",status="old",action="read")
         DO i = 1, Nx*Ny*Nz
-            READ(unit,*) c%arr(i)
+            READ(unit,*) vff%arr(i)
         END DO
         CLOSE(unit)
 
-    END SUBROUTINE read_color_function
+    END SUBROUTINE read_vff
 
 END MODULE multiphase_io_mod

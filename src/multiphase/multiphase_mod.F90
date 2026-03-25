@@ -21,14 +21,14 @@
 MODULE multiphase_mod
 
     USE multiphasecore_mod, ONLY: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase
-    USE multiphase_io_mod, ONLY: read_color_function
+    USE multiphase_io_mod, ONLY: read_vff
     USE fields_mod, ONLY: get_field
     USE field_mod, ONLY: field_t
     
     IMPLICIT NONE(type, external)
     PRIVATE
 
-    PUBLIC :: init_multiphase, finish_multiphase, init_c
+    PUBLIC :: init_multiphase, finish_multiphase, init_vff
 
 CONTAINS
 
@@ -43,7 +43,7 @@ CONTAINS
         CALL init_multiphasecore()
         IF(.NOT. has_multiphase) RETURN
 
-        CALL init_c()
+        CALL init_vff()
         
 
         IF(.NOT. solve_multiphase) RETURN
@@ -63,19 +63,19 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE init_c()
+    SUBROUTINE init_vff()
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine manages the allocation of the Color-Function
     !   field. 
     !----------------------------------------------------------------
 
-        TYPE(field_t), POINTER :: c
+        TYPE(field_t), POINTER :: vff
         
-        CALL get_field(c, "C")
+        CALL get_field(vff, "VFF")
 
-        CALL read_color_function(c)
+        CALL read_vff(vff)
 
-    END SUBROUTINE init_c
+    END SUBROUTINE init_vff
 
 END MODULE multiphase_mod

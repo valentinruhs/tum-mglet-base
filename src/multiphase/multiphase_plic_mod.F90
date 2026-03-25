@@ -24,23 +24,23 @@ MODULE multiphase_plic_mod
 
 CONTAINS
 
-    SUBROUTINE init_multiphase_plic()
+    ! SUBROUTINE init_multiphase_plic()
 
-        continue
+    !     continue
 
-    END SUBROUTINE init_multiphase_plic
+    ! END SUBROUTINE init_multiphase_plic
 
-    !================================================================
+    ! !================================================================
 
-    SUBROUTINE finish_multiphase_plic()
+    ! SUBROUTINE finish_multiphase_plic()
 
-        continue
+    !     continue
 
-    END SUBROUTINE finish_multiphase_plic
+    ! END SUBROUTINE finish_multiphase_plic
 
-    !================================================================
+    ! !================================================================
 
-    SUBROUTINE track_interface(isInterface, kk, jj, ii, c, tol)
+    SUBROUTINE track_interface(isInterface, kk, jj, ii, vff, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   Identifies which of the cells in the domain contains a volume
@@ -50,9 +50,9 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        LOGICAL, INTENT(out) :: isInterface(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        LOGICAL, INTENT(out) :: isInterface(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: tol
 
         ! Local variables
@@ -64,7 +64,7 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    IF ( c(k,j,i) > tol .AND. c(k,j,i) < 1.0 - tol ) THEN
+                    IF ( vff(k,j,i) > tol .AND. vff(k,j,i) < 1.0 - tol ) THEN
                         isInterface(k,j,i) = .TRUE.
                     END IF
                 END DO
@@ -75,15 +75,15 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_normal_vector(normx, normy, normz, kk, jj, ii, c, ddx, ddy, ddz, tol)
+    SUBROUTINE compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the normal vector components normx, normy and normz
-    !   of the gradient of the Color-Function c. The components are 
-    !   normalized by the length to get the unit normal components. 
-    !   The gradient in each cell is calculated by taking into 
-    !   account its eight surrounding cells weighted with the 
-    !   three-dimensional sobel operator:
+    !   of the gradient of the volume fraction function vff. The 
+    !   components are normalized by the length to get the unit
+    !   normal components. The gradient in each cell is calculated
+    !   by taking into account its eight surrounding cells weighted
+    !   with the three-dimensional sobel operator:
     !           1  2  1
     !   sobel = 2  4  2
     !           1  2  1
@@ -92,9 +92,9 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol
 
@@ -116,9 +116,9 @@ CONTAINS
                     ! Loop over sobel stencil
                     DO dDim2 = -1, 1
                         DO dDim1 = -1, 1
-                            sumStencilx = sumStencilx + sobel(dDim1, dDim2) * ( c(k+dDim1, j+dDim2, i+1) - c(k+dDim1, j+dDim2, i-1) )
-                            sumStencily = sumStencily + sobel(dDim1, dDim2) * ( c(k+dDim1, j+1, i+dDim2) - c(k+dDim1, j-1, i+dDim2) )
-                            sumStencilz = sumStencilz + sobel(dDim1, dDim2) * ( c(k+1, j+dDim1, i+dDim2) - c(k-1, j+dDim1, i+dDim2) )
+                            sumStencilx = sumStencilx + sobel(dDim1, dDim2) * ( vff(k+dDim1, j+dDim2, i+1) - vff(k+dDim1, j+dDim2, i-1) )
+                            sumStencily = sumStencily + sobel(dDim1, dDim2) * ( vff(k+dDim1, j+1, i+dDim2) - vff(k+dDim1, j-1, i+dDim2) )
+                            sumStencilz = sumStencilz + sobel(dDim1, dDim2) * ( vff(k+1, j+dDim1, i+dDim2) - vff(k-1, j+dDim1, i+dDim2) )
                         END DO
                     END DO
 
@@ -129,7 +129,7 @@ CONTAINS
                     ! Calculate normal vector length
                     normLength = sqrt( normx(k,j,i)**2 + normy(k,j,i)**2 + normz(k,j,i)**2 )
 
-                    ! Normalize with direction from high c to low c
+                    ! Normalize with direction from high vff to low vff
                     IF ( normLength > tol ) THEN
                         normx(k,j,i) = - normx(k,j,i) / normLength
                         normy(k,j,i) = - normy(k,j,i) / normLength
@@ -144,14 +144,14 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_alpha(alpha, kk, jj, ii, c, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+    SUBROUTINE compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine calculates the alpha value for PLIC. The 
     !   alpha value describes the distance of the interface in a cell
     !   from a defined reference (left bottom front corner).
     !   1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
-    !   2. Transform c to a actual volume in bounds [0,0.5] * dV
+    !   2. Transform vff to a actual volume in bounds [0,0.5] * dV
     !   3. Solve the standart case for alpha
     !   4. If necessary, transform alpha to its conjugate 
     !      alphaMax - alpha
@@ -160,9 +160,9 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         LOGICAL, INTENT(out) :: isInterface(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
@@ -189,18 +189,18 @@ CONTAINS
                     ! To enhance performance consider inlining
                     CALL get_corner_crossing_order(m1, m2, m3, c1, c2, c3, normx(k,j,i), normy(k,j,i), normz(k,j,i), ddx(i), ddy(j), ddz(k))
 
-                    ! 2. Transform c to a actual volume in bounds [0,0.5] * dV
+                    ! 2. Transform vff to a actual volume in bounds [0,0.5] * dV
                     ! 3. Solve the standart cases for alpha
                     ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
                     !         Journal of Computational Physics, Bd. 164, Nr. 1, S. 228–237, Okt. 2000, doi: 10.1006/jcph.2000.6567.
                     ! To enhance performance consider inlining
-                    CALL solve_alpha_standart_cases(m1, m2, m3, c1, c2, c3, alphaStd(k,j,i), alphaMax(k,j,i), c(k,j,i), ddx(i), ddy(j), ddz(k), tol)
+                    CALL solve_alpha_standart_cases(m1, m2, m3, c1, c2, c3, alphaStd(k,j,i), alphaMax(k,j,i), vff(k,j,i), ddx(i), ddy(j), ddz(k), tol)
 
                     ! 4. If necessary, transform alpha back to volume bounds [0,1] * dV
-                    ! If the Color-Function has a value above 0.5 the "inverse problem" is solved. Therefore, the result is no longer 
+                    ! If the volume fraction function has a value above 0.5 the "inverse problem" is solved. Therefore, the result is no longer 
                     ! alpha, but alphaMax - alpha. It can be seen as a rotation of the voxel. This is the inverse rotation (see solve_alpha_standart_cases)
                     alpha(k,j,i) = alphaStd(k,j,i)
-                    IF ( c(k,j,i) > 1.0/2.0 ) THEN
+                    IF ( vff(k,j,i) > 1.0/2.0 ) THEN
                         alpha(k,j,i) = alphaMax(k,j,i) - alpha(k,j,i)
                     END IF
 
@@ -227,11 +227,11 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_cFluxVol(cFluxVol, alpha, c, ddx, ddy, ddz, normx, normy, normz, tol)
+    SUBROUTINE compute_cFluxVol(cFluxVol, alpha, vff, ddx, ddy, ddz, normx, normy, normz, tol)
     !----------------------------------------------------------------
     !   What it does:
-    !   This subroutine calculates the Color-Function value c in the 
-    !   voxel ddx*ddy*ddz, given alpha. 
+    !   This subroutine calculates the value of the volume fraction 
+    !   function vff in the voxel ddx*ddy*ddz, given alpha. 
     !   1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
     !   2. If necessary, transform alpha regarding to its negative
     !      normal vector components
@@ -243,7 +243,7 @@ CONTAINS
         ! Subroutine arguments
         REAL(realk), INTENT(out) :: cFluxVol
         REAL(realk), INTENT(in) :: alpha
-        REAL(realk), INTENT(in) :: c
+        REAL(realk), INTENT(in) :: vff
         REAL(realk), INTENT(in) :: ddx, ddy, ddz
         REAL(realk), INTENT(in) :: normx, normy, normz
         REAL(realk), INTENT(in) :: tol
@@ -356,7 +356,7 @@ CONTAINS
 
     !================================================================
 
-    PURE SUBROUTINE solve_alpha_standart_cases(m1, m2, m3, c1, c2, c3, alphaStd, alphaMax, c, ddx, ddy, ddz, tol)
+    PURE SUBROUTINE solve_alpha_standart_cases(m1, m2, m3, c1, c2, c3, alphaStd, alphaMax, vff, ddx, ddy, ddz, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   This is a pure subroutine to enhance the performance by 
@@ -378,7 +378,7 @@ CONTAINS
         ! Subroutine arguments
         REAL(realk), INTENT(in) :: m1, m2, m3, c1, c2, c3
         REAL(realk), INTENT(out) :: alphaStd, alphaMax
-        REAL(realk), INTENT(in) :: c
+        REAL(realk), INTENT(in) :: vff
         REAL(realk), INTENT(in) :: ddx, ddy, ddz
         REAL(realk), INTENT(in) :: tol
         
@@ -391,9 +391,9 @@ CONTAINS
         REAL(realk) :: qo, po
         REAL(realk) :: theta
 
-        ! Transform c to a actual volume in bounds [0,0.5] * dV
+        ! Transform vff to a actual volume in bounds [0,0.5] * dV
         ! Rotate voxel into standart configuration (see compute_alpha 4.)
-        vol = min(c, 1.0 - c) * ddx * ddy * ddz
+        vol = min(vff, 1.0 - vff) * ddx * ddy * ddz
         
         ! Solve the standart cases for alphaStd
         ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
@@ -450,11 +450,11 @@ CONTAINS
                 po = a1 / 3.0 - a2**2 / 9.0
                 qo = ( a1 * a2 - 3.0 * a0 ) / 6.0 - a2**3 / 27.0
                 
-                ! Debug
-                IF ( po**3 + qo**2 > 0 ) THEN
-                    WRITE(*, *) "No real roots for alphaStd. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
-                    CALL errr(__FILE__, __LINE__)
-                END IF
+                ! ! Debug
+                ! IF ( po**3 + qo**2 > 0 ) THEN
+                !     WRITE(*, *) "No real roots for alphaStd. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
+                !     CALL errr(__FILE__, __LINE__)
+                ! END IF
                 
                 theta = acos(qo / sqrt((-po)**3)) / 3.0
                 alphaStd = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3.0
@@ -465,11 +465,11 @@ CONTAINS
                 po = a1 / 3.0 - a2**2 / 9.0
                 qo = ( a1 * a2 - 3.0 * a0 ) / 6.0 - a2**3 / 27.0
                 
-                ! Debug
-                IF ( po**3 + qo**2 > 0 ) THEN
-                    WRITE(*, *) "No real roots for alphaStd. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
-                    CALL errr(__FILE__, __LINE__)
-                END IF
+                ! ! Debug
+                ! IF ( po**3 + qo**2 > 0 ) THEN
+                !     WRITE(*, *) "No real roots for alphaStd. po^3 + qo^2 = ", po**3 + qo**2, " po = ", po
+                !     CALL errr(__FILE__, __LINE__)
+                ! END IF
                 
                 theta = acos(qo / sqrt((-po)**3)) / 3.0
                 alphaStd = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3.0
@@ -482,7 +482,7 @@ CONTAINS
 
     !================================================================
 
-    PURE SUBROUTINE solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, c, tol)
+    PURE SUBROUTINE solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, vff, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   This is a pure subroutine to enhance the performance by 
@@ -504,7 +504,7 @@ CONTAINS
         ! Subroutine arguments
         REAL(realk), INTENT(in) :: m1, m2, m3, c1, c2, c3
         REAL(realk), INTENT(in) :: alphaLoc
-        REAL(realk), INTENT(out) :: c
+        REAL(realk), INTENT(out) :: vff
         REAL(realk), INTENT(in) :: tol
         
         ! Local variables
@@ -563,10 +563,10 @@ CONTAINS
             END IF
         END IF
 
-        c = vol / ( c1 * c2 * c3 )
+        vff = vol / ( c1 * c2 * c3 )
 
         IF ( alphaLoc > 0.5 * alphaMax .AND. alphaLoc < alphaMax ) THEN
-            c = 1 - c
+            vff = 1 - vff
         END IF
 
     END SUBROUTINE solve_vol_standart_cases

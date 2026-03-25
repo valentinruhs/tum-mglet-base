@@ -42,10 +42,10 @@ CONTAINS
 
         ! Local variables
         TYPE(config_t) :: multiphaseconf
-        INTEGER(intk), PARAMETER :: units_c(7) = [0, 0, 0, 0, 0, 0, 0]
-        INTEGER(intk), PARAMETER :: units_phi(7) = [0, 1, 0, 0, 0, 0, 0]
-        CHARACTER(len=*), PARAMETER :: description_c = "Color-function"
-        CHARACTER(len=*), PARAMETER :: description_phi = "Level set function"
+        INTEGER(intk), PARAMETER :: unitsvff(7) = [0, 0, 0, 0, 0, 0, 0]
+        INTEGER(intk), PARAMETER :: unitsphi(7) = [0, 1, 0, 0, 0, 0, 0]
+        CHARACTER(len=*), PARAMETER :: descriptionvff = "Volume fraction field"
+        CHARACTER(len=*), PARAMETER :: descriptionphi = "Level set function"
 
         ! Decide wether multiphase is used or not
         has_multiphase = .FALSE.
@@ -65,9 +65,9 @@ CONTAINS
         CALL multiphaseconf%get_value("/solve", solve_multiphase, .TRUE.)
 
         ! Initialize multiphase fields
-        CALL set_field("C", description=description_c , units=units_c, &
+        CALL set_field("VFF", description=descriptionvff , units=unitsvff, &
             dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("PHI", description=description_phi , units=units_phi, &
+        CALL set_field("PHI", description=descriptionphi , units=unitsphi, &
             dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
 
     END SUBROUTINE init_multiphasecore
