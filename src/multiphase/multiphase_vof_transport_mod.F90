@@ -44,7 +44,7 @@ CONTAINS
 
     ! !================================================================
 
-    SUBROUTINE multiphase_vof_transport(vff_f, u_f, v_f, w_f, rkscheme, irk, itstep)
+    SUBROUTINE multiphase_vof_transport(vff_f, u_f, v_f, w_f, rkscheme, irk, dt, itstep)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine gets all nescessary input variables to perform
@@ -59,18 +59,21 @@ CONTAINS
         TYPE(field_t), INTENT(in) :: w_f
         TYPE(rk_2n_t), INTENT(in) :: rkscheme
         INTEGER(intk), INTENT(in) :: irk
+        REAL(realk), INTENT(in) :: dt
         INTEGER(intk), INTENT(in) :: itstep
 
         ! Local variables
         TYPE(field_t), POINTER :: ddx_f, ddy_f, ddz_f
         REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: vff, u, v, w
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
-        REAL(realk) :: frhs, fu, dtrk, dtrki
+        REAL(realk) :: frhs, fu, dtrk, dtrki, dtEffective
         INTEGER(intk) :: i, igrid
         INTEGER(intk) :: kk, jj, ii
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
         CALL rkscheme%get_coeffs(frhs, fu, dtrk, dtrki, irk)
+
+        dtEffective = dtrki * dt
 
         CALL get_field(ddx_f, "DDX")
         CALL get_field(ddy_f, "DDY")
@@ -91,7 +94,7 @@ CONTAINS
             CALL ddz_f%get_ptr(ddz, igrid)
 
             CALL multiphase_vof_transport_advection(kk, jj, ii, vff, u, v, w, & 
-                ddx, ddy, ddz, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop, itstep)
+                ddx, ddy, ddz, dtEffective, nfro, nbac, nrgt, nlft, nbot, ntop, itstep)
         END DO
 
     END SUBROUTINE multiphase_vof_transport
@@ -99,7 +102,7 @@ CONTAINS
     !================================================================
     
     SUBROUTINE multiphase_vof_transport_advection(kk, jj, ii, vff, u, v, w, & 
-        ddx, ddy, ddz, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop, itstep)
+        ddx, ddy, ddz, dtEffective, nfro, nbac, nrgt, nlft, nbot, ntop, itstep)
     !----------------------------------------------------------------
     !   What it does:
     !   Coordinates the Volume-of-Fluid advection.
@@ -117,7 +120,7 @@ CONTAINS
         REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(in) :: dtrki
+        REAL(realk), INTENT(in) :: dtEffective
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
         INTEGER(intk), INTENT(in) :: itstep
 
@@ -157,30 +160,30 @@ CONTAINS
         CALL track_interface(isInterface, kk, jj, ii, vff, tol)
         CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
         CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        CALL compute_fluxx(fluxx, kk, jj, ii, vff, isInterface, u, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, & 
+        CALL compute_fluxx(fluxx, kk, jj, ii, vff, isInterface, u, alpha, dtEffective, normx, normy, normz, ddx, ddy, ddz, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_volume_fraction_field(kk, jj, ii, vff, fluxx, fluxy, fluxz, uDivergence, vDivergence, wDivergence, & 
-            adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
+            adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtEffective, nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL clip_volume_fraction_field(kk, ii, jj, vff, tol)
 
         ! Move vff in y-direction
         CALL track_interface(isInterface, kk, jj, ii, vff, tol)
         CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
         CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        CALL compute_fluxy(fluxy, kk, jj, ii, vff, isInterface, v, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, & 
+        CALL compute_fluxy(fluxy, kk, jj, ii, vff, isInterface, v, alpha, dtEffective, normx, normy, normz, ddx, ddy, ddz, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_volume_fraction_field(kk, jj, ii, vff, fluxx, fluxy, fluxz, uDivergence, vDivergence, wDivergence, & 
-            adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
+            adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtEffective, nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL clip_volume_fraction_field(kk, ii, jj, vff, tol)
 
         ! Move vff in z-direction
         CALL track_interface(isInterface, kk, jj, ii, vff, tol)
         CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
         CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        CALL compute_fluxz(fluxz, kk, jj, ii, vff, isInterface, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, & 
+        CALL compute_fluxz(fluxz, kk, jj, ii, vff, isInterface, w, alpha, dtEffective, normx, normy, normz, ddx, ddy, ddz, tol, & 
             nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL update_volume_fraction_field(kk, jj, ii, vff, fluxx, fluxy, fluxz, uDivergence, vDivergence, wDivergence, & 
-            adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
+            adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtEffective, nfro, nbac, nrgt, nlft, nbot, ntop)
         CALL clip_volume_fraction_field(kk, ii, jj, vff, tol)
 
     END SUBROUTINE multiphase_vof_transport_advection
@@ -232,7 +235,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_fluxx(fluxx, kk, jj, ii, vff, isInterface, u, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, & 
+    SUBROUTINE compute_fluxx(fluxx, kk, jj, ii, vff, isInterface, u, alpha, dtEffective, normx, normy, normz, ddx, ddy, ddz, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
@@ -247,7 +250,7 @@ CONTAINS
         LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
         REAL(realk), INTENT(in) :: u(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
-        REAL(realk), INTENT(in) :: dtrki
+        REAL(realk), INTENT(in) :: dtEffective
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol
@@ -285,37 +288,37 @@ CONTAINS
                     IF ( u(k,j,i) > tol ) THEN
                         IF ( isInterface(k,j,i) ) THEN
                             ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                            eulerianFluxWidth = abs( u(k,j,i) ) * dtrki
+                            eulerianFluxWidth = abs( u(k,j,i) ) * dtEffective
                             eulerianFluxAlpha = alpha(k,j,i) - normx(k,j,i) * ( ddx(i) - eulerianFluxWidth )
 
                             ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
                             CALL compute_vffFluxVol(vffFluxVol, eulerianFluxAlpha, vff(k,j,i), eulerianFluxWidth, ddy(j), ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
 
                             ! Calculate flux for multiphase cell
-                            vffFlux = vffFluxVol * ( abs( u(k,j,i) ) * dtrki / ddx(i) )
+                            vffFlux = vffFluxVol * ( abs( u(k,j,i) ) * dtEffective / ddx(i) )
                         ELSE
                             ! Calculate flux for singlephase cell
-                            vffFlux = vff(k,j,i) * ( abs( u(k,j,i) ) * dtrki / ddx(i) )
+                            vffFlux = vff(k,j,i) * ( abs( u(k,j,i) ) * dtEffective / ddx(i) )
                         END IF
                     ELSE IF ( u(k,j,i) < -tol ) THEN
                         IF ( isInterface(k,j,i) ) THEN
                             ! Calculate the width of the fluxed volume and the alpha value for this subcell of the eastern cell
-                            eulerianFluxWidth = abs( u(k,j,i) ) * dtrki
+                            eulerianFluxWidth = abs( u(k,j,i) ) * dtEffective
                             eulerianFluxAlpha = alpha(k,j,i+1)
 
                             ! Caluculate the volume fraction in the fluxed volume subcell of the eastern cell
                             CALL compute_vffFluxVol(vffFluxVol, eulerianFluxAlpha, vff(k,j,i+1), eulerianFluxWidth, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
 
                             ! Calculate flux for multiphase cell
-                            vffFlux = vffFluxVol * ( abs( u(k,j,i) ) * dtrki / ddx(i+1) )
+                            vffFlux = vffFluxVol * ( abs( u(k,j,i) ) * dtEffective / ddx(i+1) )
                         ELSE
                             ! Calculate flux for singlephase cell
-                            vffFlux = vff(k,j,i+1) * ( abs( u(k,j,i) ) * dtrki / ddx(i+1) )
+                            vffFlux = vff(k,j,i+1) * ( abs( u(k,j,i) ) * dtEffective / ddx(i+1) )
                         END IF
                     ELSE
                         vffFlux = 0.0
                     END IF
-                    fluxx(k,j,i) = sign( 1.0, u(k,j,i) ) * vffFlux / dtrki
+                    fluxx(k,j,i) = sign( 1.0, u(k,j,i) ) * vffFlux / dtEffective
                 END DO
             END DO
         END DO
@@ -324,7 +327,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_fluxy(fluxy, kk, jj, ii, vff, isInterface, v, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, & 
+    SUBROUTINE compute_fluxy(fluxy, kk, jj, ii, vff, isInterface, v, alpha, dtEffective, normx, normy, normz, ddx, ddy, ddz, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
@@ -340,7 +343,7 @@ CONTAINS
         LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
         REAL(realk), INTENT(in) :: v(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
-        REAL(realk), INTENT(in) :: dtrki
+        REAL(realk), INTENT(in) :: dtEffective
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol
@@ -378,37 +381,37 @@ CONTAINS
                     IF ( v(k,j,i) > tol ) THEN
                         IF ( isInterface(k,j,i) ) THEN
                             ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                            eulerianFluxWidth = abs( v(k,j,i) ) * dtrki
+                            eulerianFluxWidth = abs( v(k,j,i) ) * dtEffective
                             eulerianFluxAlpha = alpha(k,j,i) - normy(k,j,i) * ( ddy(j) - eulerianFluxWidth )
 
                             ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
                             CALL compute_vffFluxVol(vffFluxVol, eulerianFluxAlpha, vff(k,j,i), ddx(i), eulerianFluxWidth, ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
 
                             ! Calculate flux for multiphase cell
-                            vffFlux = vffFluxVol * ( abs( v(k,j,i) ) * dtrki / ddy(j) )
+                            vffFlux = vffFluxVol * ( abs( v(k,j,i) ) * dtEffective / ddy(j) )
                         ELSE
                             ! Calculate flux for singlephase cell
-                            vffFlux = vff(k,j,i) * ( abs( v(k,j,i) ) * dtrki / ddy(j) )
+                            vffFlux = vff(k,j,i) * ( abs( v(k,j,i) ) * dtEffective / ddy(j) )
                         END IF
                     ELSE IF ( v(k,j,i) < -tol ) THEN
                         IF ( isInterface(k,j,i) ) THEN
                             ! Calculate the width of the fluxed volume and the alpha value for this subcell of the northern cell
-                            eulerianFluxWidth = abs( v(k,j,i) ) * dtrki
+                            eulerianFluxWidth = abs( v(k,j,i) ) * dtEffective
                             eulerianFluxAlpha = alpha(k,j+1,i)
 
                             ! Caluculate the volume fraction in the fluxed volume subcell of the northern cell 
                             CALL compute_vffFluxVol(vffFluxVol, eulerianFluxAlpha, vff(k,j+1,i), ddx(i), eulerianFluxWidth, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
 
                             ! Calculate flux for multiphase cell
-                            vffFlux = vffFluxVol * ( abs( v(k,j,i) ) * dtrki / ddy(j+1) )
+                            vffFlux = vffFluxVol * ( abs( v(k,j,i) ) * dtEffective / ddy(j+1) )
                         ELSE
                             ! Calculate flux for singlephase cell
-                            vffFlux = vff(k,j+1,i) * ( abs( v(k,j,i) ) * dtrki / ddy(j+1) )
+                            vffFlux = vff(k,j+1,i) * ( abs( v(k,j,i) ) * dtEffective / ddy(j+1) )
                         END IF
                     ELSE
                         vffFlux = 0.0
                     END IF
-                    fluxy(k,j,i) = sign( 1.0, v(k,j,i) ) * vffFlux / dtrki
+                    fluxy(k,j,i) = sign( 1.0, v(k,j,i) ) * vffFlux / dtEffective
                 END DO
             END DO
         END DO
@@ -417,7 +420,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_fluxz(fluxz, kk, jj, ii, vff, isInterface, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, & 
+    SUBROUTINE compute_fluxz(fluxz, kk, jj, ii, vff, isInterface, w, alpha, dtEffective, normx, normy, normz, ddx, ddy, ddz, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
@@ -433,7 +436,7 @@ CONTAINS
         LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
         REAL(realk), INTENT(in) :: w(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
-        REAL(realk), INTENT(in) :: dtrki
+        REAL(realk), INTENT(in) :: dtEffective
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol
@@ -471,32 +474,32 @@ CONTAINS
                     IF ( w(k,j,i) > tol ) THEN
                         IF ( isInterface(k,j,i) ) THEN
                             ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                            eulerianFluxWidth = abs( w(k,j,i) ) * dtrki
+                            eulerianFluxWidth = abs( w(k,j,i) ) * dtEffective
                             eulerianFluxAlpha = alpha(k,j,i) - normz(k,j,i) * ( ddz(k) - eulerianFluxWidth )
 
                             ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
                             CALL compute_vffFluxVol(vffFluxVol, eulerianFluxAlpha, vff(k,j,i), ddx(i), ddy(j), eulerianFluxWidth, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
 
                             ! Calculate flux for multiphase cell
-                            vffFlux = vffFluxVol * ( abs( w(k,j,i) ) * dtrki / ddz(k) )
+                            vffFlux = vffFluxVol * ( abs( w(k,j,i) ) * dtEffective / ddz(k) )
                         ELSE
                             ! Calculate flux for singlephase cell
-                            vffFlux = vff(k,j,i) * ( abs( w(k,j,i) ) * dtrki / ddz(k) )
+                            vffFlux = vff(k,j,i) * ( abs( w(k,j,i) ) * dtEffective / ddz(k) )
                         END IF
                     ELSE IF ( w(k,j,i) < -tol ) THEN
                         IF ( isInterface(k,j,i) ) THEN
                             ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                            eulerianFluxWidth = abs( w(k,j,i) ) * dtrki
+                            eulerianFluxWidth = abs( w(k,j,i) ) * dtEffective
                             eulerianFluxAlpha = alpha(k+1,j,i)
 
                             ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
                             CALL compute_vffFluxVol(vffFluxVol, eulerianFluxAlpha, vff(k+1,j,i), ddx(i), ddy(j), eulerianFluxWidth, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
 
                             ! Calculate flux for multiphase cell
-                            vffFlux = vffFluxVol * ( abs( w(k,j,i) ) * dtrki / ddz(k+1) )
+                            vffFlux = vffFluxVol * ( abs( w(k,j,i) ) * dtEffective / ddz(k+1) )
                         ELSE
                             ! Calculate flux for singlephase cell
-                            vffFlux = vff(k+1,j,i) * ( abs( w(k,j,i) ) * dtrki / ddz(k+1) )
+                            vffFlux = vff(k+1,j,i) * ( abs( w(k,j,i) ) * dtEffective / ddz(k+1) )
                         END IF
                     ELSE
                         vffFlux = 0.0
@@ -511,7 +514,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE update_volume_fraction_field(kk, jj, ii, vff, fluxx, fluxy, fluxz, uDivergence, vDivergence, wDivergence, & 
-            adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
+            adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtEffective, nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine performs the summation of fluxes, updating the
@@ -538,7 +541,7 @@ CONTAINS
         LOGICAL, INTENT(inout) :: adv_x, adv_y, adv_z
         REAL(realk), INTENT(in) :: tol
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(in) :: dtrki
+        REAL(realk), INTENT(in) :: dtEffective
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
         ! Local variables
@@ -571,7 +574,8 @@ CONTAINS
             DO i = 3-nfu, ii-3+nbu
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        vff(k,j,i) = ( vff(k,j,i) + dtrki * ( fluxx(k,j,i-1) - fluxx(k,j,i) ) ) / ( 1 - dtrki * uDivergence(k,j,i) )
+                        vff(k,j,i) = ( vff(k,j,i) + dtEffective * ( fluxx(k,j,i-1) - fluxx(k,j,i) + uDivergence(k,j,i) ) ) 
+                        ! vff(k,j,i) = ( vff(k,j,i) + dtEffective * ( fluxx(k,j,i-1) - fluxx(k,j,i) ) ) / ( 1 - dtEffective * uDivergence(k,j,i) )
                     END DO 
                 END DO 
             END DO
@@ -586,7 +590,8 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3-nrv, jj-3+nlv
                     DO k = 3, kk-2
-                        vff(k,j,i) = ( vff(k,j,i) + dtrki * ( fluxy(k,j-1,i) - fluxy(k,j,i) ) ) / ( 1 - dtrki * vDivergence(k,j,i) )
+                        vff(k,j,i) = ( vff(k,j,i) + dtEffective * ( fluxy(k,j-1,i) - fluxy(k,j,i) + vDivergence(k,j,i) ) )
+                        ! vff(k,j,i) = ( vff(k,j,i) + dtEffective * ( fluxy(k,j-1,i) - fluxy(k,j,i) ) ) / ( 1 - dtEffective * vDivergence(k,j,i) )
                     END DO 
                 END DO 
             END DO
@@ -601,7 +606,8 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3-nbw, kk-3+ntw
-                        vff(k,j,i) = ( vff(k,j,i) + dtrki * ( fluxz(k-1,j,i) - fluxz(k,j,i) ) ) / ( 1 - dtrki * wDivergence(k,j,i) )
+                        vff(k,j,i) = ( vff(k,j,i) + dtEffective * ( fluxz(k-1,j,i) - fluxz(k,j,i) + wDivergence(k,j,i) ) )
+                        ! vff(k,j,i) = ( vff(k,j,i) + dtEffective * ( fluxz(k-1,j,i) - fluxz(k,j,i) ) ) / ( 1 - dtEffective * wDivergence(k,j,i) )
                     END DO 
                 END DO 
             END DO

@@ -84,9 +84,9 @@ CONTAINS
     !   normal components. The gradient in each cell is calculated
     !   by taking into account its eight surrounding cells weighted
     !   with the three-dimensional sobel operator:
-    !           1  2  1
-    !   sobel = 2  4  2
-    !           1  2  1
+    !            / 1  2  1 \
+    !   sobel =  | 2  4  2 |
+    !            \ 1  2  1 /
     !   The gradient is approximated by a central-difference scheme:
     !   norm(.) = (upwind sum - downwind sum) / 2 * dd(.) * sobel sum
     !----------------------------------------------------------------
@@ -133,7 +133,11 @@ CONTAINS
                     IF ( normLength > tol ) THEN
                         normx(k,j,i) = - normx(k,j,i) / normLength
                         normy(k,j,i) = - normy(k,j,i) / normLength
-                        normz(k,j,i) = - normz(k,j,i) / normLength     
+                        normz(k,j,i) = - normz(k,j,i) / normLength
+                    ELSE
+                        normx(k,j,i) = 0.0
+                        normy(k,j,i) = 0.0
+                        normz(k,j,i) = 0.0
                     END IF
 
                 END DO
