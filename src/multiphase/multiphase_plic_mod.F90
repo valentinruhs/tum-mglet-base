@@ -20,7 +20,7 @@ MODULE multiphase_plic_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: track_interface, compute_normal_vector, compute_alpha, compute_cFluxVol
+    PUBLIC :: track_interface, compute_normal_vector, compute_alpha, compute_vffFluxVol
 
 CONTAINS
 
@@ -227,7 +227,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_cFluxVol(cFluxVol, alpha, vff, ddx, ddy, ddz, normx, normy, normz, tol)
+    SUBROUTINE compute_vffFluxVol(vffFluxVol, alpha, vff, ddx, ddy, ddz, normx, normy, normz, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine calculates the value of the volume fraction 
@@ -241,7 +241,7 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        REAL(realk), INTENT(out) :: cFluxVol
+        REAL(realk), INTENT(out) :: vffFluxVol
         REAL(realk), INTENT(in) :: alpha
         REAL(realk), INTENT(in) :: vff
         REAL(realk), INTENT(in) :: ddx, ddy, ddz
@@ -272,9 +272,9 @@ CONTAINS
 
         ! 3. If necessary, transform alpha to its conjugate alphaMax - alpha
         ! 4. Solve the standart case for vol
-        CALL solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, cFluxVol, tol)
+        CALL solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, vffFluxVol, tol)
 
-    END SUBROUTINE compute_cFluxVol
+    END SUBROUTINE compute_vffFluxVol
 
     !================================================================
 

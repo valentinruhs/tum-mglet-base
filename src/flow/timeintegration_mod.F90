@@ -104,7 +104,7 @@ CONTAINS
         CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
         CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
 
-        CALL multiphase_vof_transport(vff, u, v, w, dt*fu, itstep)
+        CALL multiphase_vof_transport(vff, u, v, w, rkscheme, irk, itstep)
 
         IF (ib%type == "GHOSTCELL") THEN
             ! Equivalent to old "cop3dzero"
