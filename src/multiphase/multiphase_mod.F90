@@ -21,6 +21,8 @@
 MODULE multiphase_mod
 
     USE multiphasecore_mod, ONLY: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase
+    USE multiphase_vof_transport_mod, ONLY: init_multiphase_vof_transport, finish_multiphase_vof_transport
+    USE multiphase_plic_mod, ONLY: init_multiphase_plic, finish_multiphase_plic
     USE multiphase_io_mod, ONLY: read_vff
     USE fields_mod, ONLY: get_field
     USE field_mod, ONLY: field_t
@@ -41,6 +43,8 @@ CONTAINS
         
 
         CALL init_multiphasecore()
+        CALL init_multiphase_vof_transport()
+        CALL init_multiphase_plic()
         IF(.NOT. has_multiphase) RETURN
 
         CALL init_vff()
@@ -57,6 +61,8 @@ CONTAINS
 
         IF(.NOT. has_multiphase) RETURN
 
+        CALL finish_multiphase_plic()
+        CALL finish_multiphase_vof_transport()
         CALL finish_multiphasecore()
 
     END SUBROUTINE finish_multiphase

@@ -20,25 +20,21 @@ MODULE multiphase_plic_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: track_interface, compute_normal_vector, compute_alpha, compute_vffFluxVol
+    PUBLIC :: init_multiphase_plic, finish_multiphase_plic, track_interface, compute_normal_vector, compute_alpha, compute_vffFluxVol
 
 CONTAINS
 
-    ! SUBROUTINE init_multiphase_plic()
+    SUBROUTINE init_multiphase_plic()
+        continue
+    END SUBROUTINE init_multiphase_plic
 
-    !     continue
+    !================================================================
 
-    ! END SUBROUTINE init_multiphase_plic
+    SUBROUTINE finish_multiphase_plic()
+        continue
+    END SUBROUTINE finish_multiphase_plic
 
-    ! !================================================================
-
-    ! SUBROUTINE finish_multiphase_plic()
-
-    !     continue
-
-    ! END SUBROUTINE finish_multiphase_plic
-
-    ! !================================================================
+    !================================================================
 
     SUBROUTINE track_interface(isInterface, kk, jj, ii, vff, tol)
     !----------------------------------------------------------------

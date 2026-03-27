@@ -24,25 +24,21 @@ MODULE multiphase_vof_transport_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: multiphase_vof_transport
+    PUBLIC :: init_multiphase_vof_transport, finish_multiphase_vof_transport, multiphase_vof_transport
 
 CONTAINS
 
-    ! SUBROUTINE init_multiphase_vof_transport()
+    SUBROUTINE init_multiphase_vof_transport()
+        continue
+    END SUBROUTINE init_multiphase_vof_transport
 
-    !     continue
+    !================================================================
 
-    ! END SUBROUTINE init_multiphase_vof_transport
+    SUBROUTINE finish_multiphase_vof_transport()
+        continue
+    END SUBROUTINE finish_multiphase_vof_transport
 
-    ! !================================================================
-
-    ! SUBROUTINE finish_multiphase_vof_transport()
-
-    !     continue
-
-    ! END SUBROUTINE finish_multiphase_vof_transport
-
-    ! !================================================================
+    !================================================================
 
     SUBROUTINE multiphase_vof_transport(vff_f, u_f, v_f, w_f, rkscheme, irk, dt, itstep)
     !----------------------------------------------------------------
@@ -207,15 +203,15 @@ CONTAINS
 
         ! Local variables
         INTEGER(intk) :: k, j, i
-        REAL(realk) :: considerDivergence(kk, jj, ii)
+        REAL(realk) :: heavisideFunction(kk, jj, ii)
 
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
                     IF ( vff(k,j,i) >= 0.5 ) THEN
-                        considerDivergence(k,j,i) = 1.0
+                        heavisideFunction(k,j,i) = 1.0
                     ELSE
-                        considerDivergence(k,j,i) = 0.0
+                        heavisideFunction(k,j,i) = 0.0
                     END IF
                 END DO
             END DO
@@ -224,9 +220,9 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    uDivergence(k,j,i) = considerDivergence(k,j,i) * ( u(k,j,i) - u(k,j,i-1) ) / ddx(i)
-                    vDivergence(k,j,i) = considerDivergence(k,j,i) * ( v(k,j,i) - v(k,j-1,i) ) / ddy(j)
-                    wDivergence(k,j,i) = considerDivergence(k,j,i) * ( w(k,j,i) - w(k-1,j,i) ) / ddz(k)
+                    uDivergence(k,j,i) = heavisideFunction(k,j,i) * ( u(k,j,i) - u(k,j,i-1) ) / ddx(i)
+                    vDivergence(k,j,i) = heavisideFunction(k,j,i) * ( v(k,j,i) - v(k,j-1,i) ) / ddy(j)
+                    wDivergence(k,j,i) = heavisideFunction(k,j,i) * ( w(k,j,i) - w(k-1,j,i) ) / ddz(k)
                 END DO
             END DO
         END DO
@@ -575,7 +571,6 @@ CONTAINS
                 DO j = 3, jj-2
                     DO k = 3, kk-2
                         vff(k,j,i) = ( vff(k,j,i) + dtEffective * ( fluxx(k,j,i-1) - fluxx(k,j,i) + uDivergence(k,j,i) ) ) 
-                        ! vff(k,j,i) = ( vff(k,j,i) + dtEffective * ( fluxx(k,j,i-1) - fluxx(k,j,i) ) ) / ( 1 - dtEffective * uDivergence(k,j,i) )
                     END DO 
                 END DO 
             END DO
@@ -591,7 +586,6 @@ CONTAINS
                 DO j = 3-nrv, jj-3+nlv
                     DO k = 3, kk-2
                         vff(k,j,i) = ( vff(k,j,i) + dtEffective * ( fluxy(k,j-1,i) - fluxy(k,j,i) + vDivergence(k,j,i) ) )
-                        ! vff(k,j,i) = ( vff(k,j,i) + dtEffective * ( fluxy(k,j-1,i) - fluxy(k,j,i) ) ) / ( 1 - dtEffective * vDivergence(k,j,i) )
                     END DO 
                 END DO 
             END DO
@@ -607,7 +601,6 @@ CONTAINS
                 DO j = 3, jj-2
                     DO k = 3-nbw, kk-3+ntw
                         vff(k,j,i) = ( vff(k,j,i) + dtEffective * ( fluxz(k-1,j,i) - fluxz(k,j,i) + wDivergence(k,j,i) ) )
-                        ! vff(k,j,i) = ( vff(k,j,i) + dtEffective * ( fluxz(k-1,j,i) - fluxz(k,j,i) ) ) / ( 1 - dtEffective * wDivergence(k,j,i) )
                     END DO 
                 END DO 
             END DO
