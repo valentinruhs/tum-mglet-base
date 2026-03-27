@@ -133,6 +133,10 @@ FetchContent_Declare(exprtk
 )
 FetchContent_MakeAvailable(exprtk)
 
+if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    add_compile_options("$<$<COMPILE_LANGUAGE:Fortran>:-finit-real=zero;-ffpe-trap=invalid,zero,overflow>")
+endif()
+
 # Perform various compiler checks
 add_subdirectory("cmake")
 add_subdirectory("src")
