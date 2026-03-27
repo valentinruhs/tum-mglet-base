@@ -149,6 +149,8 @@ CONTAINS
                 adv_z = .TRUE.
         END SELECT
 
+        WRITE(*,*) maxval(abs(u)), maxval(abs(v)), maxval(abs(w))
+
         ! Divergence of velocity field components
         CALL compute_divergence(kk, jj, ii, uDivergence, vDivergence, wDivergence, vff, u, v, w, ddx, ddy, ddz)
 
@@ -289,7 +291,7 @@ CONTAINS
 
                             ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
                             CALL compute_vffFluxVol(vffFluxVol, eulerianFluxAlpha, vff(k,j,i), eulerianFluxWidth, ddy(j), ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
-
+                            
                             ! Calculate flux for multiphase cell
                             vffFlux = vffFluxVol * ( abs( u(k,j,i) ) * dtEffective / ddx(i) )
                         ELSE
@@ -610,6 +612,8 @@ CONTAINS
             adv_z = .false.
 
         END IF
+
+        ! WRITE(*,*) maxval(abs(fluxx)), maxval(abs(fluxy)), maxval(abs(fluxz))
 
         ! ! DEBUG
         ! IF ( minval(vff) < -tol .OR. maxval(vff) > 1+tol ) THEN

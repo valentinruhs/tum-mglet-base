@@ -527,13 +527,29 @@ CONTAINS
                 ! One-dimensional case
                 alphaMax = mc3
                 alphaStd = min(alphaLoc, alphaMax - alphaLoc)
-                vol = alphaStd * (c1*c2)
+
+                IF ( alphaStd <= 0.0 ) THEN
+                    IF ( alphaLoc >= alphaMax ) THEN
+                        vol = c1 * c2 * c3
+                    ELSE
+                        vol = 0.0
+                    END IF 
+                ELSE
+                    vol = alphaStd * (c1*c2)
+                END IF
             ELSE
                 ! Two-dimensional cases
                 alphaMax = mc2 + mc3
                 alphaStd = min(alphaLoc, alphaMax - alphaLoc)
-                
-                IF ( alphaStd < mc2 ) THEN
+
+                IF ( alphaStd <= 0.0 ) THEN
+                    IF ( alphaLoc >= alphaMax ) THEN
+                        vol = c1 * c2 * c3
+                    ELSE
+                        vol = 0.0
+                    END IF
+                ! Calculate vol dependent on mc2 and mc3
+                ELSEIF ( alphaStd < mc2 ) THEN
                     baseArea = 1.0/2.0 * alphaStd**2 / ( m2 * m3 )
                     vol = baseArea * c1
                 ELSE
@@ -548,16 +564,25 @@ CONTAINS
             alphaStd = min(alphaLoc, alphaMax - alphaLoc)
 
             V1 = mc1**2 * c1 / ( max(6.0 * m2 * m3, tol) )
-            
+
+            IF ( alphaStd <= 0.0 ) THEN
+                IF ( alphaLoc >= alphaMax ) THEN
+                    vol = c1 * c2 * c3
+                ELSE
+                    vol = 0.0
+                END IF
             ! Calculate vol dependent on mc1, mc2 and mc3
-            IF ( alphaStd < mc1 ) THEN
+            ELSEIF ( alphaStd < mc1 ) THEN
                 vol = alphaStd**3 / ( 6.0 * m1 * m2 * m3 )
             ELSE IF ( alphaStd < mc2 ) THEN
                 vol = ( alphaStd * c1 * ( alphaStd - mc1 ) ) / ( 2.0 * m2 * m3 ) + V1
             ELSE IF ( alphaStd < min(mc1 + mc2, mc3) ) THEN
                 vol = ( alphaStd**2 * ( 3.0 * ( mc1 + mc2 ) - alphaStd ) + mc1**2 * ( mc1 - 3.0 * alphaStd ) + mc2**2 * ( mc2 - 3.0 * alphaStd ) ) / ( 6.0 * m1 * m2 * m3 )
             ELSE IF ( alphaStd >= min(mc1 + mc2, mc3) .AND. mc3 <= mc1 + mc2 ) THEN
-                vol = ( alphaStd**2 * ( 3.0 - 2.0 * alphaStd ) + mc1**2 * ( mc1 - 3.0 * alphaStd ) + mc2**2 * ( mc2 - 3.0 * alphaStd ) + mc3**2 * ( mc3 - 3.0 * alphaStd ) ) / ( 6.0 * m1 * m2 * m3 )
+                vol = ( alphaStd**2 * ( 3.0 * ( mc1 + mc2 + mc3 ) - 2.0 * alphaStd ) &
+                      + mc1**2 * ( mc1 - 3.0 * alphaStd ) &
+                      + mc2**2 * ( mc2 - 3.0 * alphaStd ) &
+                      + mc3**2 * ( mc3 - 3.0 * alphaStd ) ) / ( 6.0 * m1 * m2 * m3 )
             ELSE IF ( alphaStd >= min(mc1 + mc2, mc3) .AND. mc3 > mc1 + mc2 ) THEN
                 vol = ( c1 * c2 * ( 2.0 * alphaStd - ( mc1 + mc2 ) ) ) / ( 2.0 * m3 )
             END IF
