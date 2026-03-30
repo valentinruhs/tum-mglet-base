@@ -636,9 +636,19 @@ CONTAINS
         REAL(realk), INTENT(in) :: tol
 
         ! Local variables
-
-
-        continue
+        INTEGER(intk) :: k, j, i
+        
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    IF ( vff(k,j,i) < tol ) THEN
+                        vff(k,j,i) = 0.0
+                    ELSE IF ( vff(k,j,i) > 1 - tol ) THEN
+                        vff(k,j,i) = 1.0
+                    END IF
+                END DO
+            END DO
+        END DO
 
     END SUBROUTINE clip_volume_fraction_field
 
