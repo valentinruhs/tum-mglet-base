@@ -20,8 +20,9 @@ MODULE multiphasecore_mod
     USE fort7_mod, ONLY: fort7, dread, dwrite
     USE config_mod, ONLY: config_t
     USE fields_mod, ONLY: set_field
-    USE precision_mod, ONLY: intk
+    USE precision_mod, ONLY: intk, realk
     USE comms_mod, ONLY: myid
+    USE err_mod, ONLY: errr
     
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -30,8 +31,10 @@ MODULE multiphasecore_mod
     LOGICAL, PROTECTED :: has_multiphase, solve_multiphase
 
     ! Physical parameters
+    REAL(realk), PROTECTED :: rho1, rho2
+    REAL(realk), PROTECTED :: gmol1, gmol2
 
-    PUBLIC :: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase
+    PUBLIC :: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase, rho1, rho2, gmol1, gmol2
 
 CONTAINS
 
@@ -64,6 +67,22 @@ CONTAINS
         ! Read steering input
         CALL multiphaseconf%get_value("/solve", solve_multiphase, .TRUE.)
 
+        ! Read densities
+        CALL multiphaseconf%get_value("/rho1", rho1, 1.0)
+        CALL multiphaseconf%get_value("/rho2", rho2, 1.0)
+        IF (rho1 <= 0.0 .OR. rho2 <= 0.0) THEN
+            WRITE(*, *) "Densities must be positive. rho1 = ", rho1, ", rho2 = ", rho2
+            CALL errr(__FILE__, __LINE__)
+        END IF
+
+        ! Read viscosities
+        CALL multiphaseconf%get_value("/gmol1", gmol1)
+        CALL multiphaseconf%get_value("/gmol2", gmol2)
+        IF (gmol1 <= 0.0 .OR. gmol2 <= 0.0) THEN
+            WRITE(*, *) "Viscosities must be positive. gmol1 = ", gmol1, ", gmol2 = ", gmol2
+            CALL errr(__FILE__, __LINE__)
+        END IF
+
         ! Initialize multiphase fields
         CALL set_field("VFF", description=descriptionvff , units=unitsvff, &
             dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
@@ -75,6 +94,14 @@ CONTAINS
     !================================================================
 
     SUBROUTINE finish_multiphasecore
+
+        
+        ! Subroutine arguments
+        ! None
+
+        ! Local variables
+        ! None
+
         continue
     END SUBROUTINE  finish_multiphasecore
 

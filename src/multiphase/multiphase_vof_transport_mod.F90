@@ -29,12 +29,26 @@ MODULE multiphase_vof_transport_mod
 CONTAINS
 
     SUBROUTINE init_multiphase_vof_transport()
+
+        ! Subroutine arguments
+        ! None
+
+        ! Local variables
+        ! None
+
         continue
     END SUBROUTINE init_multiphase_vof_transport
 
     !================================================================
 
     SUBROUTINE finish_multiphase_vof_transport()
+
+        ! Subroutine arguments
+        ! None
+
+        ! Local variables
+        ! None
+        
         continue
     END SUBROUTINE finish_multiphase_vof_transport
 

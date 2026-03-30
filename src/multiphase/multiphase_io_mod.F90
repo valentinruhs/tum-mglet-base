@@ -18,25 +18,35 @@ MODULE multiphase_io_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: read_vff
+    PUBLIC :: init_multiphase_io, finish_multiphase_io, read_vff
 
 CONTAINS
 
-    ! SUBROUTINE init_multiphase_io()
+    SUBROUTINE init_multiphase_io()
 
-    !     continue
+        ! Subroutine arguments
+        ! None
 
-    ! END SUBROUTINE init_multiphase_io
+        ! Local variables
+        ! None
 
-    ! !================================================================
+        continue
+    END SUBROUTINE init_multiphase_io
 
-    ! SUBROUTINE finish_multiphase_io()
+    !================================================================
 
-    !     continue
+    SUBROUTINE finish_multiphase_io()
 
-    ! END SUBROUTINE finish_multiphase_io
+        ! Subroutine arguments
+        ! None
 
-    ! !================================================================
+        ! Local variables
+        ! None
+
+        continue
+    END SUBROUTINE finish_multiphase_io
+
+    !================================================================
 
     SUBROUTINE read_vff(vff)
     !----------------------------------------------------------------
