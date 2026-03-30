@@ -128,7 +128,7 @@ CONTAINS
         REAL(realk) :: fluxx(kk, jj, ii), fluxy(kk, jj, ii), fluxz(kk, jj, ii)
         REAL(realk), PARAMETER :: tol = 1.0E-15
         LOGICAL :: adv_x, adv_y, adv_z
-        INTEGER(intk) :: permutation_index
+        INTEGER(intk) :: i, permutation_index
 
         ! permutation_index only changes in a new time-step
         permutation_index = mod(itstep-1, 3)
@@ -149,40 +149,38 @@ CONTAINS
                 adv_z = .TRUE.
         END SELECT
 
-        WRITE(*,*) maxval(abs(u)), maxval(abs(v)), maxval(abs(w))
-
         ! Divergence of velocity field components
         CALL compute_divergence(kk, jj, ii, uDivergence, vDivergence, wDivergence, vff, u, v, w, ddx, ddy, ddz)
 
-        ! Move vff in x-direction
-        CALL track_interface(isInterface, kk, jj, ii, vff, tol)
-        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
-        CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        CALL compute_fluxx(fluxx, kk, jj, ii, vff, isInterface, u, alpha, dtEffective, normx, normy, normz, ddx, ddy, ddz, tol, & 
-            nfro, nbac, nrgt, nlft, nbot, ntop)
-        CALL update_volume_fraction_field(kk, jj, ii, vff, fluxx, fluxy, fluxz, uDivergence, vDivergence, wDivergence, & 
-            adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtEffective, nfro, nbac, nrgt, nlft, nbot, ntop)
-        CALL clip_volume_fraction_field(kk, ii, jj, vff, tol)
+        ! Advect interface in three spatial coordinates
+        DO i = 1, 3
 
-        ! Move vff in y-direction
-        CALL track_interface(isInterface, kk, jj, ii, vff, tol)
-        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
-        CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        CALL compute_fluxy(fluxy, kk, jj, ii, vff, isInterface, v, alpha, dtEffective, normx, normy, normz, ddx, ddy, ddz, tol, & 
-            nfro, nbac, nrgt, nlft, nbot, ntop)
-        CALL update_volume_fraction_field(kk, jj, ii, vff, fluxx, fluxy, fluxz, uDivergence, vDivergence, wDivergence, & 
-            adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtEffective, nfro, nbac, nrgt, nlft, nbot, ntop)
-        CALL clip_volume_fraction_field(kk, ii, jj, vff, tol)
+            ! Locate interface
+            CALL track_interface(isInterface, kk, jj, ii, vff, tol)
+            CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
+            CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
 
-        ! Move vff in z-direction
-        CALL track_interface(isInterface, kk, jj, ii, vff, tol)
-        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
-        CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        CALL compute_fluxz(fluxz, kk, jj, ii, vff, isInterface, w, alpha, dtEffective, normx, normy, normz, ddx, ddy, ddz, tol, & 
-            nfro, nbac, nrgt, nlft, nbot, ntop)
-        CALL update_volume_fraction_field(kk, jj, ii, vff, fluxx, fluxy, fluxz, uDivergence, vDivergence, wDivergence, & 
+            ! Decide over advection direction
+            IF ( adv_x ) THEN
+                ! Move in x direction
+                CALL compute_fluxx(fluxx, kk, jj, ii, vff, isInterface, u, alpha, dtEffective, normx, normy, normz, ddx, ddy, ddz, tol, & 
+                    nfro, nbac, nrgt, nlft, nbot, ntop)
+            ELSE IF ( adv_y ) THEN
+                ! Move in y direction
+                CALL compute_fluxy(fluxy, kk, jj, ii, vff, isInterface, v, alpha, dtEffective, normx, normy, normz, ddx, ddy, ddz, tol, & 
+                    nfro, nbac, nrgt, nlft, nbot, ntop)
+            ELSE IF ( adv_z ) THEN
+                ! Move in z direction
+                CALL compute_fluxz(fluxz, kk, jj, ii, vff, isInterface, w, alpha, dtEffective, normx, normy, normz, ddx, ddy, ddz, tol, & 
+                    nfro, nbac, nrgt, nlft, nbot, ntop)
+            END IF
+
+            ! Calculate new new volume fraction field
+            CALL update_volume_fraction_field(kk, jj, ii, vff, fluxx, fluxy, fluxz, uDivergence, vDivergence, wDivergence, & 
             adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dtEffective, nfro, nbac, nrgt, nlft, nbot, ntop)
-        CALL clip_volume_fraction_field(kk, ii, jj, vff, tol)
+            CALL clip_volume_fraction_field(kk, ii, jj, vff, tol)
+
+        END DO
 
     END SUBROUTINE multiphase_vof_transport_advection
 
