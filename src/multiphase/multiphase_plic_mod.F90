@@ -241,7 +241,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_cell_proportion(vffFluxVol, alpha, vff, ddx, ddy, ddz, normx, normy, normz, tol)
+    SUBROUTINE compute_cell_proportion(cellProportion, alpha, vff, ddx, ddy, ddz, normx, normy, normz, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine calculates the value of the volume fraction 
@@ -255,7 +255,7 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        REAL(realk), INTENT(out) :: vffFluxVol
+        REAL(realk), INTENT(out) :: cellProportion
         REAL(realk), INTENT(in) :: alpha
         REAL(realk), INTENT(in) :: vff
         REAL(realk), INTENT(in) :: ddx, ddy, ddz
@@ -286,7 +286,7 @@ CONTAINS
 
         ! 3. If necessary, transform alpha to its conjugate alphaMax - alpha
         ! 4. Solve the standart case for vol
-        CALL solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, vffFluxVol, tol)
+        CALL solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, cellProportion, tol)
 
     END SUBROUTINE compute_cell_proportion
 
@@ -518,7 +518,7 @@ CONTAINS
         ! Subroutine arguments
         REAL(realk), INTENT(in) :: m1, m2, m3, c1, c2, c3
         REAL(realk), INTENT(in) :: alphaLoc
-        REAL(realk), INTENT(out) :: vff
+        REAL(realk), INTENT(out) :: cellProportion
         REAL(realk), INTENT(in) :: tol
         
         ! Local variables
@@ -602,10 +602,10 @@ CONTAINS
             END IF
         END IF
 
-        vff = vol / ( c1 * c2 * c3 )
+        cellProportion = vol / ( c1 * c2 * c3 )
 
         IF ( alphaLoc > 0.5 * alphaMax .AND. alphaLoc < alphaMax ) THEN
-            vff = 1 - vff
+            cellProportion = 1 - cellProportion
         END IF
 
     END SUBROUTINE solve_vol_standart_cases

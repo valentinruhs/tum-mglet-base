@@ -14,8 +14,8 @@
 
 MODULE multiphase_material_mod
 
-    USE multiphasecore_mod, ONLY: rho1, rho2, gmol1, gmol2
-    
+    USE precision_mod, ONLY: intk, realk
+
     IMPLICIT NONE
     PRIVATE
 
@@ -48,5 +48,32 @@ CONTAINS
     END SUBROUTINE finish_multiphase_material
 
     !================================================================
+
+    SUBROUTINE get_material_property_field(kk, jj, ii, propertyField, vff, propertyFluid1, propertyFluid2, dx, dy, dz)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   This subroutine computes the weighted material property for
+    !   all cells.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(out) :: propertyField(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: propertyFluid1, propertyFluid2
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+
+        DO i = 1, ii
+            DO j = 1, jj
+                DO k = 1, kk
+                    propertyField(k,j,i) = propertyFluid1 * vff(k,j,i) + propertyFluid2 * ( 1 - vff(k,j,i) )
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE get_material_property_field
 
 END MODULE multiphase_material_mod
