@@ -20,7 +20,10 @@ MODULE multiphase_plic_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: init_multiphase_plic, finish_multiphase_plic, track_interface, compute_normal_vector, compute_alpha, compute_cell_proportion
+    PUBLIC :: init_multiphase_plic, finish_multiphase_plic, &
+              track_interface, compute_normal_vector, &
+              compute_alpha, compute_cell_proportion, &
+              compute_iStag_vff, compute_jStag_vff, compute_kStag_vff
 
 CONTAINS
 
@@ -292,6 +295,138 @@ CONTAINS
 
     !================================================================
 
+    SUBROUTINE compute_iStag_vff(kk, jj, ii, vffiStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(out) :: vffiStag(kk, jj, ii)
+        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
+        REAL(realk), INTENT(in) :: tol
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: alphaLeft, alphaRight, halfFractionLeft, halfFractionRight
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2 
+                DO k = 3, kk-2 
+                    IF ( isInterface(k,j,i) .AND. isInterface(k,j,i+1) ) THEN
+                        alphaLeft  = alpha(k,j,i) - normx(k,j,i) * ddx(i) / 2.0
+                        alphaRight = alpha(k,j,i+1)
+                        CALL compute_cell_proportion(halfFractionLeft,  alphaLeft,  vff(k,j,i),   ddx(i) / 2.0,   ddy(j), ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
+                        CALL compute_cell_proportion(halfFractionRight, alphaRight, vff(k,j,i+1), ddx(i+1) / 2.0, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
+                        vffiStag(k,j,i) = ( halfFractionLeft * ddx(i) + halfFractionRight * ddx(i+1) ) / ( ddx(i) + ddx(i+1) ) 
+                    ELSE IF ( isInterface(k,j,i) .AND. .NOT. isInterface(k,j,i+1) ) THEN
+                        alphaLeft  = alpha(k,j,i) - normx(k,j,i) * ddx(i) / 2.0
+                        CALL compute_cell_proportion(halfFractionLeft,  alphaLeft,  vff(k,j,i),   ddx(i) / 2.0,   ddy(j), ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
+                        vffiStag(k,j,i) = ( halfFractionLeft * ddx(i) + vff(k,j,i+1) * ddx(i+1) ) / ( ddx(i) + ddx(i+1) )
+                    ELSE IF ( .NOT. isInterface(k,j,i) .AND. isInterface(k,j,i+1) ) THEN
+                        alphaRight = alpha(k,j,i+1)
+                        CALL compute_cell_proportion(halfFractionRight, alphaRight, vff(k,j,i+1), ddx(i+1) / 2.0, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
+                        vffiStag(k,j,i) = ( vff(k,j,i) * ddx(i) + halfFractionRight * ddx(i+1) ) / ( ddx(i) + ddx(i+1) )
+                    ELSE
+                        vffiStag(k,j,i) = ( vff(k,j,i) * ddx(i) + vff(k,j,i+1) * ddx(i+1) ) / ( ddx(i) + ddx(i+1) )
+                    END IF
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE compute_iStag_vff
+
+    !================================================================
+
+    SUBROUTINE compute_jStag_vff(kk, jj, ii, vffjStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(out) :: vffjStag(kk, jj, ii)
+        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
+        REAL(realk), INTENT(in) :: tol
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: alphaFront, alphaBack, halfFractionFront, halfFractionBack
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2 
+                DO k = 3, kk-2 
+                    IF ( isInterface(k,j,i) .AND. isInterface(k,j+1,i) ) THEN
+                        alphaFront = alpha(k,j,i) - normy(k,j,i) * ddy(j) / 2.0
+                        alphaBack  = alpha(k,j+1,i)
+                        CALL compute_cell_proportion(halfFractionFront,  alphaFront, vff(k,j,i),   ddx(i),   ddy(j) / 2.0,   ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
+                        CALL compute_cell_proportion(halfFractionBack,   alphaBack,  vff(k,j+1,i), ddx(i),   ddy(j+1) / 2.0, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
+                        vffjStag(k,j,i) = ( halfFractionFront * ddy(j) + halfFractionBack * ddy(j+1) ) / ( ddy(j) + ddy(j+1) ) 
+                    ELSE IF ( isInterface(k,j,i) .AND. .NOT. isInterface(k,j+1,i) ) THEN
+                        alphaFront = alpha(k,j,i) - normy(k,j,i) * ddy(j) / 2.0
+                        CALL compute_cell_proportion(halfFractionFront,  alphaFront, vff(k,j,i),   ddx(i),   ddy(j) / 2.0,   ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
+                        vffjStag(k,j,i) = ( halfFractionFront * ddy(j) + vff(k,j+1,i) * ddy(j+1) ) / ( ddy(j) + ddy(j+1) )
+                    ELSE IF ( .NOT. isInterface(k,j,i) .AND. isInterface(k,j+1,i) ) THEN
+                        alphaBack = alpha(k,j+1,i)
+                        CALL compute_cell_proportion(halfFractionBack,   alphaBack, vff(k,j+1,i),  ddx(i),   ddy(j+1) / 2.0, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
+                        vffjStag(k,j,i) = ( vff(k,j,i) * ddy(j) + halfFractionBack * ddy(j+1) ) / ( ddy(j) + ddy(j+1) )
+                    ELSE
+                        vffjStag(k,j,i) = ( vff(k,j,i) * ddy(j) + vff(k,j+1,i) * ddy(j+1) ) / ( ddy(j) + ddy(j+1) )
+                    END IF
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE compute_jStag_vff
+
+    !================================================================
+
+    SUBROUTINE compute_kStag_vff(kk, jj, ii, vffkStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(out) :: vffkStag(kk, jj, ii)
+        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
+        REAL(realk), INTENT(in) :: tol
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: alphaBottom, alphaTop, halfFractionBottom, halfFractionTop
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2 
+                DO k = 3, kk-2 
+                    IF ( isInterface(k,j,i) .AND. isInterface(k+1,j,i) ) THEN
+                        alphaBottom = alpha(k,j,i) - normz(k,j,i) * ddz(k) / 2.0
+                        alphaTop    = alpha(k+1,j,i)
+                        CALL compute_cell_proportion(halfFractionBottom, alphaBottom, vff(k,j,i),   ddx(i), ddy(j), ddz(k) / 2.0,   normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
+                        CALL compute_cell_proportion(halfFractionTop,    alphaTop,    vff(k+1,j,i), ddx(i), ddy(j), ddz(k+1) / 2.0, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
+                        vffkStag(k,j,i) = ( halfFractionBottom * ddz(k) + halfFractionTop * ddz(k+1) ) / ( ddz(k) + ddz(k+1) )
+                    ELSE IF ( isInterface(k,j,i) .AND. .NOT. isInterface(k+1,j,i) ) THEN
+                        alphaBottom = alpha(k,j,i) - normz(k,j,i) * ddz(k) / 2.0
+                        CALL compute_cell_proportion(halfFractionBottom, alphaBottom, vff(k,j,i),   ddx(i), ddy(j), ddz(k) / 2.0,   normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
+                        vffkStag(k,j,i) = ( halfFractionBottom * ddz(k) + vff(k+1,j,i) * ddz(k+1) ) / ( ddz(k) + ddz(k+1) )
+                    ELSE IF ( .NOT. isInterface(k,j,i) .AND. isInterface(k+1,j,i) ) THEN
+                        alphaTop    = alpha(k+1,j,i)
+                        CALL compute_cell_proportion(halfFractionTop,    alphaTop,    vff(k+1,j,i), ddx(i), ddy(j), ddz(k+1) / 2.0, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
+                        vffkStag(k,j,i) = ( vff(k,j,i) * ddz(k) + halfFractionTop * ddz(k+1) ) / ( ddz(k) + ddz(k+1) )
+                    ELSE
+                        vffkStag(k,j,i) = ( vff(k,j,i) * ddz(k) + vff(k+1,j,i) * ddz(k+1) ) / ( ddz(k) + ddz(k+1) )
+                    END IF
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE compute_kStag_vff
+
+    !================================================================
+
     PURE SUBROUTINE get_corner_crossing_order(m1, m2, m3, c1, c2, c3, normx, normy, normz, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
@@ -496,7 +631,7 @@ CONTAINS
 
     !================================================================
 
-    PURE SUBROUTINE solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, vff, tol)
+    PURE SUBROUTINE solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, cellProportion, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   This is a pure subroutine to enhance the performance by 
