@@ -19,7 +19,7 @@ MODULE multiphase_material_mod
     IMPLICIT NONE
     PRIVATE
 
-    PUBLIC :: init_multiphase_material, finish_multiphase_material
+    PUBLIC :: init_multiphase_material, finish_multiphase_material, get_material_property_field
 
 CONTAINS
 

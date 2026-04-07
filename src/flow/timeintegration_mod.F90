@@ -94,7 +94,7 @@ CONTAINS
         END IF
 
         ! TSTLE4 zeroize uo, vo, wo before use internally
-        CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g)
+        CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g, vff)
         CALL boussinesqterm(uo, vo, wo)
         CALL coriolisterm(uo, vo, wo)
 
