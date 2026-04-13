@@ -3,8 +3,9 @@ MODULE tstle4_mod
     USE flowcore_mod
     USE lesmodel_mod, ONLY: ilesmodel
     USE wernerwengle_mod, ONLY: tauwin
+    USE multiphasecore_mod, ONLY: gmol1, gmol2
+    USE multiphase_mod, ONLY: compute_shifted_volume_properties
     USE multiphase_material_mod, ONLY: get_material_property_field
-    USE multiphasecore_mod, ONLY: rho1, rho2, gmol1, gmol2
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -42,6 +43,7 @@ CONTAINS
         INTEGER(intk) :: i, igrid
         INTEGER(intk) :: kk, jj, ii
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        REAL(realk), ALLOCATABLE ::  densityFieldiStag(:,:,:), densityFieldjStag(:,:,:), densityFieldkStag(:,:,:)
 
         CALL start_timer(310)
 
@@ -76,7 +78,6 @@ CONTAINS
             CALL vo_f%get_ptr(vo, igrid)
             CALL wo_f%get_ptr(wo, igrid)
 
-            CALL vff_f%get_ptr(vff, igrid)
             CALL u_f%get_ptr(u, igrid)
             CALL v_f%get_ptr(v, igrid)
             CALL w_f%get_ptr(w, igrid)
@@ -87,6 +88,7 @@ CONTAINS
 
             CALL p_f%get_ptr(p, igrid)
             CALL g_f%get_ptr(g, igrid)
+            CALL vff_f%get_ptr(vff, igrid)
 
             CALL dx_f%get_ptr(dx, igrid)
             CALL dy_f%get_ptr(dy, igrid)
@@ -104,7 +106,13 @@ CONTAINS
             CALL rddy_f%get_ptr(rddy, igrid)
             CALL rddz_f%get_ptr(rddz, igrid)
 
-            CALL get_material_property_field(kk, jj, ii, g, vff, gmol1, gmol2, dx, dy ,dz)
+            CALL get_material_property_field(kk, jj, ii, g, vff, gmol1, gmol2)
+
+            IF ( .NOT. ALLOCATED(densityFieldiStag) .OR. .NOT. ALLOCATED(densityFieldjStag) .OR. .NOT. ALLOCATED(densityFieldkStag) ) THEN
+                ALLOCATE(densityFieldiStag(kk, jj, ii), densityFieldjStag(kk, jj, ii), densityFieldkStag(kk, jj, ii))
+            END IF
+
+            CALL compute_shifted_volume_properties(kk, jj, ii, vff, ddx, ddy, ddz, densityFieldiStag, densityFieldjStag, densityFieldkStag)
 
             ! CALL tstle4_kon(kk, jj, ii, uo, vo, wo, u, v, w, ut, vt, wt, &
             !     dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
@@ -112,7 +120,7 @@ CONTAINS
 
             CALL tstle4_diff(kk, jj, ii, uo, vo, wo, u, v, w, g, &
                 dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
-                nfro, nbac, nrgt, nlft, nbot, ntop)
+                nfro, nbac, nrgt, nlft, nbot, ntop, densityFieldiStag, densityFieldjStag, densityFieldkStag)
 
             ! CALL tstle4_gradp(kk, jj, ii, uo, vo, wo, p, dx, dy, dz, &
             !     nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
@@ -311,7 +319,7 @@ CONTAINS
 
     SUBROUTINE tstle4_diff(kk, jj, ii, uo, vo, wo, u, v, w, g, &
             dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
-            nfro, nbac, nrgt, nlft, nbot, ntop)
+            nfro, nbac, nrgt, nlft, nbot, ntop, densityFieldiStag, densityFieldjStag, densityFieldkStag)
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), &
@@ -323,15 +331,17 @@ CONTAINS
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
         REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        REAL(realk), INTENT(in) :: densityFieldiStag(kk, jj, ii), densityFieldjStag(kk, jj, ii), densityFieldkStag(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
         INTEGER(intk) :: iles
-        REAL(realk) :: ax, ay, az
         REAL(realk) :: ge, gw, gn, gs, gt, gb
-        REAL(realk) :: qw, qe, qt, qb, qn, qs
-        REAL(realk) :: st, qc, fak
+        REAL(realk) :: tauxxe, tauxxw, tauyxn, tauyxs, tauzxt, tauzxb
+        REAL(realk) :: tauxye, tauxyw, tauyyn, tauyys, tauzyt, tauzyb
+        REAL(realk) :: tauxze, tauxzw, tauyzn, tauyzs, tauzzt, tauzzb
+        REAL(realk) :: duo, dvo, dwo
 
         nfu = 0
         nbu = 0
@@ -362,11 +372,6 @@ CONTAINS
         DO i = 3-nfu, ii-3+nbu
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    ! Face areas on u-momentum cell
-                    ax = ddy(j)*ddz(k)
-                    ay = dx(i)*ddz(k)
-                    az = dx(i)*ddy(j)
-
                     ! Face values of dynamic viscosity on u-momentum cell
                     ! Harmonic mean for a more physical treatment at interfaces
                     ge = g(k, j, i+1)
@@ -389,20 +394,20 @@ CONTAINS
                         / MAX(g(k-1, j, i+1) + g(k, j, i+1), MIN(gmol1,gmol2))
 
                     ! Normal stresses
-                    !             -------------inner derivatives-------------
-                    tauxxe = ge * 2 * (u(k, j, i+1) - u(k, j, i)) * rddx(i+1)
-                    tauxxw = gw * 2 * (u(k, j, i) - u(k, j, i-1)) * rddx(i)
+                    !             -----------inner derivatives-----------
+                    tauxxe = ge * 2 * (u(k,j,i+1) - u(k,j,i)) * rddx(i+1)
+                    tauxxw = gw * 2 * (u(k,j,i) - u(k,j,i-1)) * rddx(i)
 
                     ! Shear stresses
-                    !             --------------------------------inner derivatives--------------------------------
-                    tauxyn = gn * ( (u(k, j+1, i) - u(k, j, i)) * rdy(j)   + (v(k,j,i+1) - v(k,j,i))     * rdx(i) )
-                    tauxys = gs * ( (u(k, j, i) - u(k, j-1, i)) * rdy(j-1) + (v(k,j-1,i+1) - v(k,j-1,i)) * rdx(i) )
-                    tauxzt = gt * ( (u(k+1, j, i) - u(k, j, i)) * rdz(k)   + (w(k,j,i+1) - w(k,j,i))     * rdx(i) )
-                    tauxzb = gb * ( (u(k, j, i) - u(k-1, j, i)) * rdz(k-1) + (w(k-1,j,i+1) - w(k-1,j,i)) * rdx(i) )
+                    !             ------------------------------inner derivatives------------------------------
+                    tauyxn = gn * ( (u(k,j+1,i) - u(k,j,i)) * rdy(j)   + (v(k,j,i+1) - v(k,j,i))     * rdx(i) )
+                    tauyxs = gs * ( (u(k,j,i) - u(k,j-1,i)) * rdy(j-1) + (v(k,j-1,i+1) - v(k,j-1,i)) * rdx(i) )
+                    tauzxt = gt * ( (u(k+1,j,i) - u(k,j,i)) * rdz(k)   + (w(k,j,i+1) - w(k,j,i))     * rdx(i) )
+                    tauzxb = gb * ( (u(k,j,i) - u(k-1,j,i)) * rdz(k-1) + (w(k-1,j,i+1) - w(k-1,j,i)) * rdx(i) )
 
                     ! Change due to diffusion
-                    !               ---------------------------------------outer derivatives----------------------------------------
-                    duo = - 1/rho * ( ( tauxxe - tauxxw ) * rdx(i) + ( tauxyn - tauxys ) * rddy(j) + ( tauxzt - tauxzb ) * rddz(k) )
+                    !                                    ---------------------------------------outer derivatives----------------------------------------
+                    duo = - 1/densityFieldiStag(k,j,i) * ( ( tauxxe - tauxxw ) * rdx(i) + ( tauyxn - tauyxs ) * rddy(j) + ( tauzxt - tauzxb ) * rddz(k) )
 
                     ! Addition
                     uo(k, j, i) = uo(k, j, i) + duo
@@ -413,46 +418,48 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3-nrv, jj-3+nlv
                 DO k = 3, kk-2
-                    ax = dy(j)*ddz(k)
-                    ay = ddx(i)*ddz(k)
-                    az = ddx(i)*dy(j)
-
+                    ! Face values of dynamic viscosity on v-momentum cell
+                    ! Harmonic mean for a more physical treatment at interfaces
                     ge = g(k, j, i)*g(k, j, i+1) &
-                        /MAX(g(k, j, i) + g(k, j, i+1), gmol) &
+                        / MAX(g(k, j, i) + g(k, j, i+1), MIN(gmol1,gmol2)) &
                         + g(k, j+1, i)*g(k, j+1, i+1) &
-                        /MAX(g(k, j+1, i) + g(k, j+1, i+1), gmol)
+                        / MAX(g(k, j+1, i) + g(k, j+1, i+1), MIN(gmol1,gmol2))
                     gw = g(k, j, i-1)*g(k, j, i) &
-                        /MAX(g(k, j, i-1) + g(k, j, i), gmol) &
+                        / MAX(g(k, j, i-1) + g(k, j, i), MIN(gmol1,gmol2)) &
                         + g(k, j+1, i-1)*g(k, j+1, i) &
-                        /MAX(g(k, j+1, i-1) + g(k, j+1, i), gmol)
+                        / MAX(g(k, j+1, i-1) + g(k, j+1, i), MIN(gmol1,gmol2))
                     gn = g(k, j+1, i)
                     gs = g(k, j, i)
                     gt = g(k, j, i)*g(k+1, j, i) &
-                        /MAX(g(k, j, i) + g(k+1, j, i), gmol) &
+                        / MAX(g(k, j, i) + g(k+1, j, i), MIN(gmol1,gmol2)) &
                         + g(k, j+1, i)*g(k+1, j+1, i) &
-                        /MAX(g(k, j+1, i) + g(k+1, j+1, i), gmol)
+                        / MAX(g(k, j+1, i) + g(k+1, j+1, i), MIN(gmol1,gmol2))
                     gb = g(k-1, j, i)*g(k, j, i) &
-                        /MAX(g(k-1, j, i) + g(k, j, i), gmol) &
+                        / MAX(g(k-1, j, i) + g(k, j, i), MIN(gmol1,gmol2)) &
                         + g(k-1, j+1, i)*g(k, j+1, i) &
-                        /MAX(g(k-1, j+1, i) + g(k, j+1, i), gmol)
+                        / MAX(g(k-1, j+1, i) + g(k, j+1, i), MIN(gmol1,gmol2))
 
-                    qe = -ge*ax*rdx(i) * (v(k, j, i+1) - v(k, j, i))
-                    qw = -gw*ax*rdx(i-1) * (v(k, j, i) - v(k, j, i-1))
-                    qn = -gn*ay*rddy(j+1) * (v(k, j+1, i) - v(k, j, i))
-                    qs = -gs*ay*rddy(j) * (v(k, j, i) - v(k, j-1, i))
-                    qt = -gt*az*rdz(k) * (v(k+1, j, i) - v(k, j, i))
-                    qb = -gb*az*rdz(k-1) * (v(k, j, i) - v(k-1, j, i))
+                    ! Shear stresses
+                    !             ------------------------------inner derivatives------------------------------
+                    tauxye = ge * ( (u(k,j+1,i) - u(k,j,i))     * rdy(j) + (v(k,j,i+1) - v(k,j,i)) * rdx(i)   )
+                    tauxyw = gw * ( (u(k,j+1,i-1) - u(k,j,i-1)) * rdy(j) + (v(k,j,i) - v(k,j,i-1)) * rdx(i-1) )
 
-                    st = ((ge*(u(k, j+1, i) - u(k, j, i))) &
-                        - (gw*(u(k, j+1, i-1) - u(k, j, i-1))))*ddz(k) &
-                        + ((gn*(v(k, j+1, i) - v(k, j, i))*rddy(j+1)) &
-                        - (gs*(v(k, j, i) - v(k, j-1, i))*rddy(j)))*ay &
-                        + ((gt*(w(k, j+1, i) - w(k, j, i))) &
-                        - (gb*(w(k-1, j+1, i)- w(k-1, j, i))))*ddx(i)
-                    qc = st * iles
+                    ! Normal stresses
+                    !             -----------inner derivatives-----------
+                    tauyyn = gn * 2 * (v(k,j+1,i) - v(k,j,i)) * rddy(j+1)
+                    tauyys = gs * 2 * (v(k,j,i) - v(k,j-1,i)) * rddy(j)
+                    
+                    ! Shear stresses
+                    !             ------------------------------inner derivatives------------------------------
+                    tauzyt = gt * ( (v(k+1,j,i) - v(k,j,i)) * rdz(k)   + (w(k,j+1,i) - w(k,j,i))     * rdy(j) )
+                    tauzyb = gb * ( (v(k,j,i) - v(k-1,j,i)) * rdz(k-1) + (w(k-1,j+1,i) - w(k-1,j,i)) * rdy(j) )
 
-                    fak = 1.0/rho*rddx(i)*rdy(j)*rddz(k)
-                    vo(k, j, i) = vo(k, j, i) - fak*(qe-qw+qn-qs+qt-qb-qc)
+                    ! Change due to diffusion
+                    !                                    ---------------------------------------outer derivatives----------------------------------------
+                    dvo = - 1/densityFieldjStag(k,j,i) * ( ( tauxye - tauxyw ) * rddx(i) + ( tauyyn - tauyys ) * rdy(j) + ( tauzyt - tauzyb ) * rddz(k) )
+
+                    ! Addition
+                    vo(k, j, i) = vo(k, j, i) + dvo
                 END DO
             END DO
         END DO
@@ -460,46 +467,45 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3-nbw, kk-3+ntw
-                    ax = ddy(j)*dz(k)
-                    ay = ddx(i)*dz(k)
-                    az = ddx(i)*ddy(j)
-
+                    ! Face values of dynamic viscosity on w-momentum cell
+                    ! Harmonic mean for a more physical treatment at interfaces
                     ge = g(k, j, i)*g(k, j, i+1) &
-                        /MAX(g(k, j, i) + g(k, j, i+1), gmol) &
+                        / MAX(g(k, j, i) + g(k, j, i+1), MIN(gmol1,gmol2)) &
                         + g(k+1, j, i)*g(k+1, j, i+1) &
-                        /MAX(g(k+1, j, i) + g(k+1, j, i+1), gmol)
+                        / MAX(g(k+1, j, i) + g(k+1, j, i+1), MIN(gmol1,gmol2))
                     gw = g(k, j, i-1)*g(k, j, i) &
-                        /MAX(g(k, j, i-1) + g(k, j, i), gmol) &
+                        / MAX(g(k, j, i-1) + g(k, j, i), MIN(gmol1,gmol2)) &
                         + g(k+1, j, i-1)*g(k+1, j, i) &
-                        /MAX(g(k+1, j, i-1) + g(k+1, j, i), gmol)
+                        / MAX(g(k+1, j, i-1) + g(k+1, j, i), MIN(gmol1,gmol2))
                     gn = g(k, j, i)*g(k, j+1, i) &
-                        /MAX(g(k, j, i) + g(k, j+1, i), gmol) &
+                        / MAX(g(k, j, i) + g(k, j+1, i), MIN(gmol1,gmol2)) &
                         + g(k+1, j, i)*g(k+1, j+1, i) &
-                        /MAX(g(k+1, j, i) + g(k+1, j+1, i), gmol)
+                        / MAX(g(k+1, j, i) + g(k+1, j+1, i), MIN(gmol1,gmol2))
                     gs = g(k, j-1, i)*g(k, j, i) &
-                        /MAX(g(k, j-1, i) + g(k, j, i), gmol) &
+                        / MAX(g(k, j-1, i) + g(k, j, i), MIN(gmol1,gmol2)) &
                         + g(k+1, j-1, i)*g(k+1, j, i) &
-                        /MAX(g(k+1, j-1, i) + g(k+1, j, i), gmol)
+                        / MAX(g(k+1, j-1, i) + g(k+1, j, i), MIN(gmol1,gmol2))
                     gt = g(k+1, j, i)
                     gb = g(k, j, i)
 
-                    qe = -ge*ax*rdx(i) * (w(k, j, i+1) - w(k, j, i))
-                    qw = -gw*ax*rdx(i-1) * (w(k, j, i) - w(k, j, i-1))
-                    qn = -gn*ay*rdy(j) * (w(k, j+1, i) - w(k, j, i))
-                    qs = -gs*ay*rdy(j-1) * (w(k, j, i) - w(k, j-1, i))
-                    qt = -gt*az*rddz(k+1)* (w(k+1, j, i) - w(k, j, i))
-                    qb = -gb*az*rddz(k) * (w(k, j, i) - w(k-1, j, i))
+                    ! Shear stresses
+                    !             ------------------------------inner derivatives------------------------------
+                    tauxze = ge * ( (u(k+1,j,i) - u(k,j,i))     * rdz(k) + (w(k,j,i+1) - w(k,j,i)) * rdx(i)   )
+                    tauxzw = gw * ( (u(k+1,j,i-1) - u(k,j,i-1)) * rdz(k) + (w(k,j,i) - w(k,j,i-1)) * rdx(i-1) )
+                    tauyzn = gn * ( (v(k+1,j,i) - v(k,j,i))     * rdz(k) + (w(k,j+1,i) - w(k,j,i)) * rdy(j)   )
+                    tauyzs = gs * ( (v(k+1,j-1,i) - v(k,j-1,i)) * rdz(k) + (w(k,j,i) - w(k,j-1,i)) * rdy(j-1) )
+                    
+                    ! Normal stresses
+                    !             -----------inner derivatives-----------
+                    tauzzt = gt * 2 * (w(k+1,j,i) - w(k,j,i)) * rddz(k+1)
+                    tauzzb = gb * 2 * (w(k,j,i) - w(k-1,j,i)) * rddz(k)
 
-                    st = ((ge*(u(k+1, j, i) - u(k, j, i))) &
-                        - (gw*(u(k+1, j, i-1) - u(k, j, i-1))))*ddy(j) &
-                        + ((gn*(v(k+1, j, i) - v(k, j, i))) &
-                        - (gs*(v(k+1, j-1, i) - v(k, j-1, i))))*ddx(i) &
-                        + ((gt*(w(k+1, j, i) - w(k, j, i))*rddz(k+1)) &
-                        - (gb*(w(k, j, i) - w(k-1, j, i))*rddz(k)))*az
-                    qc = st * iles
+                    ! Change due to diffusion
+                    !                                    ---------------------------------------outer derivatives----------------------------------------
+                    dwo = - 1/densityFieldkStag(k,j,i) * ( ( tauxze - tauxzw ) * rddx(i) + ( tauyzn - tauyzs ) * rddy(j) + ( tauzzt - tauzzb ) * rdz(k) )
 
-                    fak = 1.0/rho*rddx(i)*rddy(j)*rdz(k)
-                    wo(k, j, i) = wo(k, j, i) - fak*(qe-qw+qn-qs+qt-qb-qc)
+                    ! Addition
+                    wo(k, j, i) = wo(k, j, i) + dwo
                 END DO
             END DO
         END DO

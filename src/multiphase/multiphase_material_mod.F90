@@ -49,7 +49,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE get_material_property_field(kk, jj, ii, propertyField, vff, propertyFluid1, propertyFluid2, dx, dy, dz)
+    SUBROUTINE get_material_property_field(kk, jj, ii, propertyField, vff, propertyFluid1, propertyFluid2)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine computes the weighted material property for
@@ -61,7 +61,6 @@ CONTAINS
         REAL(realk), INTENT(out) :: propertyField(kk, jj, ii)
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: propertyFluid1, propertyFluid2
-        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
