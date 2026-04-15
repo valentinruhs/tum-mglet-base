@@ -87,6 +87,49 @@ CONTAINS
     END SUBROUTINE track_interface
 
     !================================================================
+    
+    SUBROUTINE track_near_interface_region(isNearInterface, kk, jj, ii, isInterface, tol)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Creates the isNearInterface logical array, which stores TRUE
+    !   when a cell is considered "near" an interface cell. Since
+    !   indices with (.)-2 and (.)+2 are used in the momentum
+    !   advection a 5x5x5 volume is considered to be "near" to an 
+    !   interface cell. 
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        LOGICAL, INTENT(out) :: isNearInterface(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
+        REAL(realk), INTENT(in) :: tol
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+
+        isNearInterface = .FALSE.
+
+        ! Find cells with interface
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    ! If there is an interface, set the 5x5x5 neighbouring cells to near interface
+                    IF ( isInterface(k,j,i) ) THEN
+                        DO di = -2, 2
+                            DO dj = -2, 2
+                                DO dk = -2, 2
+                                    isNearInterface(k+dk,j+dj,i+di) = .TRUE.
+                                END DO
+                            END DO
+                        END DO
+                    END IF
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE track_near_interface_region
+
+    !================================================================
 
     SUBROUTINE compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
     !----------------------------------------------------------------

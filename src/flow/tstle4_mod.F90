@@ -263,18 +263,26 @@ CONTAINS
                     !            --------indicator-function-------   --------------QUICK 3^rd order interpolation-------------
                     uAdvectedE = 0.5 * ( 1 + SIGN(1,uAdvectingE) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i+1) - 0.125 * u(k,j,i-1) + &
                                  0.5 * ( 1 - SIGN(1,uAdvectingE) ) * 0.75 * u(k,j,i+1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i+2)
-                    uAdvectedW = 0.5 * ( 1 + SIGN(1,uAdvectingW) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i+1) - 0.125 * u(k,j,i-1) + &
-                                 0.5 * ( 1 - SIGN(1,uAdvectingW) ) * 0.75 * u(k,j,i+1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i+2)
-                    uAdvectedN = 0.5 * ( 1 + SIGN(1,vAdvectingN) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i+1) - 0.125 * u(k,j,i-1) + &
-                                 0.5 * ( 1 - SIGN(1,vAdvectingN) ) * 0.75 * u(k,j,i+1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i+2)
-                    uAdvectedS = 0.5 * ( 1 + SIGN(1,vAdvectingS) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i+1) - 0.125 * u(k,j,i-1) + &
-                                 0.5 * ( 1 - SIGN(1,vAdvectingS) ) * 0.75 * u(k,j,i+1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i+2)
-                    uAdvectedT = 0.5 * ( 1 + SIGN(1,wAdvectingT) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i+1) - 0.125 * u(k,j,i-1) + &
-                                 0.5 * ( 1 - SIGN(1,wAdvectingT) ) * 0.75 * u(k,j,i+1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i+2)
-                    uAdvectedB = 0.5 * ( 1 + SIGN(1,wAdvectingB) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i+1) - 0.125 * u(k,j,i-1) + &
-                                 0.5 * ( 1 - SIGN(1,wAdvectingB) ) * 0.75 * u(k,j,i+1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i+2)
-
-                    duo = - ( ( uAdvectedE - uAdvectedW ) * rdx(i) + ( uAdvectedN - uAdvectedS ) * rddy(j) + ( uAdvectedT - uAdvectedB ) * rddz(k) )
+                    uAdvectedW = 0.5 * ( 1 + SIGN(1,uAdvectingW) ) * 0.75 * u(k,j,i-1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i-2) + &
+                                 0.5 * ( 1 - SIGN(1,uAdvectingW) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i-1) - 0.125 * u(k,j,i+1)
+                    uAdvectedN = 0.5 * ( 1 + SIGN(1,vAdvectingN) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j+1,i) - 0.125 * u(k,j-1,i) + &
+                                 0.5 * ( 1 - SIGN(1,vAdvectingN) ) * 0.75 * u(k,j+1,i) + 0.375 * u(k,j,i) - 0.125 * u(k,j+2,i)
+                    uAdvectedS = 0.5 * ( 1 + SIGN(1,vAdvectingS) ) * 0.75 * u(k,j-1,i) + 0.375 * u(k,j,i) - 0.125 * u(k,j-2,i) + &
+                                 0.5 * ( 1 - SIGN(1,vAdvectingS) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j-1,i) - 0.125 * u(k,j+1,i)
+                    uAdvectedT = 0.5 * ( 1 + SIGN(1,wAdvectingT) ) * 0.75 * u(k,j,i) + 0.375 * u(k+1,j,i) - 0.125 * u(k-1,j,i) + &
+                                 0.5 * ( 1 - SIGN(1,wAdvectingT) ) * 0.75 * u(k+1,j,i) + 0.375 * u(k,j,i) - 0.125 * u(k+2,j,i)
+                    uAdvectedB = 0.5 * ( 1 + SIGN(1,wAdvectingB) ) * 0.75 * u(k-1,j,i) + 0.375 * u(k,j,i) - 0.125 * u(k-2,j,i) + &
+                                 0.5 * ( 1 - SIGN(1,wAdvectingB) ) * 0.75 * u(k,j,i) + 0.375 * u(k-1,j,i) - 0.125 * u(k+1,j,i)
+                    
+                    IF ( isNearInterface ) THEN
+                        duo = - 1/densityFieldiStag(k,j,i) * ( ( uAdvectedE * densityFluxx(k,j,i) - uAdvectedW * densityFluxx(k,j,i-1) ) * rdx(i) + &
+                                                               ( uAdvectedN * densityFluxy(k,j,i) - uAdvectedS * densityFluxy(k,j-1,i) ) * rddy(j) + &
+                                                               ( uAdvectedT * densityFluxz(k,j,i) - uAdvectedB * densityFluxz(k-1,j,i) ) * rddz(k) )
+                    ELSE
+                        duo = - ( ( uAdvectedE * uAdvectingE - uAdvectedW * uAdvectingW ) * rdx(i) + &
+                                  ( uAdvectedN * vAdvectingN - uAdvectedS * vAdvectingS ) * rddy(j) + &
+                                  ( uAdvectedT * wAdvectingT - uAdvectedB * wAdvectingB ) * rddz(k) )
+                    END IF
 
                     uo(k,j,i) = uo(k,j,i) + dou
                 END DO
