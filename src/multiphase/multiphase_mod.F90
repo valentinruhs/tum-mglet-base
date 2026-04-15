@@ -34,7 +34,7 @@ MODULE multiphase_mod
     IMPLICIT NONE(type, external)
     PRIVATE
 
-    PUBLIC :: init_multiphase, finish_multiphase, init_vff, compute_shifted_volume_properties
+    PUBLIC :: init_multiphase, finish_multiphase, init_vff
 
 CONTAINS
 
@@ -83,36 +83,21 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_shifted_volume_properties(kk, jj, ii, vff, ddx, ddy, ddz, denistyFieldiStag, densityFieldjStag, densityFieldkStag)
+    SUBROUTINE multiphase_momentum_advection(kk, jj, ii, uo, vo, wo, u, v, w, g, &
+        dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
+        nfro, nbac, nrgt, nlft, nbot, ntop)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(out) :: denistyFieldiStag(kk, jj, ii), densityFieldjStag(kk, jj, ii), densityFieldkStag(kk, jj, ii)
+        
 
         ! Local variables
-        LOGICAL :: isInterface(kk, jj, ii)
-        REAL(realk) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
-        REAL(realk) :: alpha(kk, jj, ii)
-        REAL(realk) :: vffiStag(kk, jj, ii), vffjStag(kk, jj, ii), vffkStag(kk, jj, ii)
-        REAL(realk), PARAMETER :: tol = 1.0E-15
+    
 
-        CALL track_interface(isInterface, kk, jj, ii, vff, tol)
-        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
-        CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-
-        CALL compute_iStag_vff(kk, jj, ii, vffiStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        CALL compute_jStag_vff(kk, jj, ii, vffjStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        CALL compute_kStag_vff(kk, jj, ii, vffkStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-
-        CALL get_material_property_field(kk, jj, ii, denistyFieldiStag, vffiStag, rho1, rho2)
-        CALL get_material_property_field(kk, jj, ii, densityFieldjStag, vffjStag, rho1, rho2)
-        CALL get_material_property_field(kk, jj, ii, densityFieldkStag, vffkStag, rho1, rho2)
-
-    END SUBROUTINE compute_shifted_volume_properties
-
-    !================================================================
+        
 
     SUBROUTINE init_vff()
     !----------------------------------------------------------------

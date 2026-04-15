@@ -4,7 +4,6 @@ MODULE tstle4_mod
     USE lesmodel_mod, ONLY: ilesmodel
     USE wernerwengle_mod, ONLY: tauwin
     USE multiphasecore_mod, ONLY: gmol1, gmol2
-    USE multiphase_mod, ONLY: compute_shifted_volume_properties
     USE multiphase_material_mod, ONLY: get_material_property_field
 
     IMPLICIT NONE(type, external)
@@ -14,7 +13,7 @@ MODULE tstle4_mod
 
 CONTAINS
     SUBROUTINE tstle4(uo_f, vo_f, wo_f, u_f, v_f, w_f, ut_f, vt_f, wt_f, &
-            p_f, g_f, vff_f)
+            p_f, g_f, vff_f, itstep)
         ! Subroutine arguments
         TYPE(field_t), INTENT(inout) :: uo_f
         TYPE(field_t), INTENT(inout) :: vo_f
@@ -28,6 +27,7 @@ CONTAINS
         TYPE(field_t), INTENT(in) :: p_f
         TYPE(field_t), INTENT(in) :: g_f
         TYPE(field_t), INTENT(in) :: vff_f
+        INTEGER(intk), INTENT(in) :: itstep
 
         ! Local variables
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
@@ -40,10 +40,12 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:)
         REAL(realk), POINTER, CONTIGUOUS :: rddx(:), rddy(:), rddz(:)
-        INTEGER(intk) :: i, igrid
+        INTEGER(intk) :: i, igrid, dim
         INTEGER(intk) :: kk, jj, ii
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
         REAL(realk), ALLOCATABLE ::  densityFieldiStag(:,:,:), densityFieldjStag(:,:,:), densityFieldkStag(:,:,:)
+        LOGICAL :: adv_x, adv_y, adv_z
+        INTEGER(intk) :: permutationIndex
 
         CALL start_timer(310)
 
@@ -106,17 +108,78 @@ CONTAINS
             CALL rddy_f%get_ptr(rddy, igrid)
             CALL rddz_f%get_ptr(rddz, igrid)
 
+            ! permutationIndex only changes in a new time-step
+            permutationIndex = mod(itstep-1, 3)
+
+            ! Select permutation of split advection
+            SELECT CASE (permutationIndex)
+                CASE (0)
+                    adv_x = .TRUE.
+                    adv_y = .FALSE.
+                    adv_z = .FALSE.
+                CASE (1)
+                    adv_x = .FALSE.
+                    adv_y = .TRUE.
+                    adv_z = .FALSE.
+                CASE (2)
+                    adv_x = .FALSE.
+                    adv_y = .FALSE.
+                    adv_z = .TRUE.
+            END SELECT
+
             CALL get_material_property_field(kk, jj, ii, g, vff, gmol1, gmol2)
 
             IF ( .NOT. ALLOCATED(densityFieldiStag) .OR. .NOT. ALLOCATED(densityFieldjStag) .OR. .NOT. ALLOCATED(densityFieldkStag) ) THEN
                 ALLOCATE(densityFieldiStag(kk, jj, ii), densityFieldjStag(kk, jj, ii), densityFieldkStag(kk, jj, ii))
             END IF
 
-            CALL compute_shifted_volume_properties(kk, jj, ii, vff, ddx, ddy, ddz, densityFieldiStag, densityFieldjStag, densityFieldkStag)
+            CALL compute_divergence(kk, jj, ii, uDivergence, vDivergence, wDivergence, vff, u, v, w, ddx, ddy, ddz)
+            CALL compute_non_directional_compression_coeffiecient(kk, jj, ii, nonDirectionalCompressionCoefficient, vff)
 
-            ! CALL tstle4_kon(kk, jj, ii, uo, vo, wo, u, v, w, ut, vt, wt, &
-            !     dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
-            !     nfro, nbac, nrgt, nlft, nbot, ntop)
+            DO dim = 1, 3
+                CALL track_interface(isInterface, kk, jj, ii, vff, tol)
+                CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
+                CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+
+                CALL compute_iStag_vff(kk, jj, ii, vffiStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+                CALL compute_jStag_vff(kk, jj, ii, vffjStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+                CALL compute_kStag_vff(kk, jj, ii, vffkStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+
+                CALL get_material_property_field(kk, jj, ii, denistyFieldiStag, vffiStag, rho1, rho2)
+                CALL get_material_property_field(kk, jj, ii, densityFieldjStag, vffjStag, rho1, rho2)
+                CALL get_material_property_field(kk, jj, ii, densityFieldkStag, vffkStag, rho1, rho2)
+
+                ! Density advection
+                IF ( adv_x ) THEN
+                    ! Move in x direction
+                    CALL compute_fluxx(densityFluxx, kk, jj, ii, densityFieldiStag, isInterface, u, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
+                        nfro, nbac, nrgt, nlft, nbot, ntop)
+                    uCompressionTerm = ( rho1 * nonDirectionalCompressionCoefficient + rho2 * ( 1 - nonDirectionalCompressionCoefficient ) ) * uDivergence
+                    CALL update_field(kk, jj, ii, densityFieldiStag, densityFluxx, fluxy, fluxz, uCompressionTerm, vDivergence, wDivergence, & 
+                    adv_x, adv_y, adv_z, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+                ELSE IF ( adv_y ) THEN
+                    ! Move in y direction
+                    CALL compute_fluxy(densityFluxy, kk, jj, ii, densityFieldjStag, isInterface, v, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
+                        nfro, nbac, nrgt, nlft, nbot, ntop)
+                    vCompressionTerm = ( rho1 * nonDirectionalCompressionCoefficient + rho2 * ( 1 - nonDirectionalCompressionCoefficient ) ) * vDivergence
+                    CALL update_field(kk, jj, ii, densityFieldjStag, fluxx, densityFluxy, fluxz, uDivergence, vCompressionTerm, wDivergence, & 
+                    adv_x, adv_y, adv_z, tol, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+                ELSE IF ( adv_z ) THEN
+                    ! Move in z direction
+                    CALL compute_fluxz(densityFluxz, kk, jj, ii, densityFieldkStag, isInterface, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
+                        nfro, nbac, nrgt, nlft, nbot, ntop)
+                    wCompressionTerm = ( rho1 * nonDirectionalCompressionCoefficient + rho2 * ( 1 - nonDirectionalCompressionCoefficient ) ) * wDivergence
+                    CALL update_field(kk, jj, ii, densityFieldkStag, fluxx, fluxy, densityFluxz, uDivergence, vDivergence, wCompressionTerm, & 
+                    adv_x, adv_y, adv_z, tol, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+                END IF
+
+                ! Momentum advection
+                CALL tstle4_kon(kk, jj, ii, uo, vo, wo, u, v, w, ut, vt, wt, &
+                    dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
+                    nfro, nbac, nrgt, nlft, nbot, ntop, itstep)
+                CALL update_field(kk, jj, ii, field, fluxx, fluxy, fluxz, uDivergence, vDivergence, wDivergence, & 
+                    adv_x, adv_y, adv_z, tol, ddx, ddy, ddz, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+            END DO
 
             CALL tstle4_diff(kk, jj, ii, uo, vo, wo, u, v, w, g, &
                 dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
@@ -150,171 +213,208 @@ CONTAINS
     ! [2] Verstappen et al., SYMMETRY-PRESERVING DISCRETIZATIONS OF THE
     !     INCOMPRESSIBLE NAVIER-STOKES EQUATIONS, European Conference on
     !     Computational Fluid Dynamics, ECCOMAS CFD 2006
-    ! SUBROUTINE tstle4_kon(kk, jj, ii, uo, vo, wo, u, v, w, ut, vt, wt, &
-    !         dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
-    !         nfro, nbac, nrgt, nlft, nbot, ntop, bu, bv, bw)
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
-    !     REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), &
-    !         wo(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: ut(kk, jj, ii), vt(kk, jj, ii), &
-    !         wt(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
-    !     REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-    !     REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
-    !     REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
-    !     INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
-    !     REAL(realk), INTENT(in), OPTIONAL :: bu(kk, jj, ii), bv(kk, jj, ii), &
-    !         bw(kk, jj, ii)
+    SUBROUTINE tstle4_kon(kk, jj, ii, uo, vo, wo, u, v, w, ut, vt, wt, &
+            dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
+            nfro, nbac, nrgt, nlft, nbot, ntop, bu, bv, bw, itstep)
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), &
+            wo(kk, jj, ii)
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ut(kk, jj, ii), vt(kk, jj, ii), &
+            wt(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
+        REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
+        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        REAL(realk), INTENT(in), OPTIONAL :: bu(kk, jj, ii), bv(kk, jj, ii), &
+            bw(kk, jj, ii)
+        INTEGER(intk), INTENT(in) :: itstep
 
-    !     ! Local variables
-    !     INTEGER(intk) :: k, j, i
-    !     INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
-    !     REAL(realk) :: ax, ay, az
-    !     REAL(realk) :: fw, fe, ft, fb, fn, fs
-    !     REAL(realk) :: qw, qe, qt, qb, qn, qs
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
+        REAL(realk) :: ax, ay, az
+        REAL(realk) :: fw, fe, ft, fb, fn, fs
+        REAL(realk) :: qw, qe, qt, qb, qn, qs
 
-    !     ! Sanity check
-    !     IF (PRESENT(bu) .NEQV. PRESENT(bv) .OR. &
-    !             PRESENT(bu) .NEQV. PRESENT(bw)) THEN
-    !         CALL errr(__FILE__, __LINE__)
-    !     END IF
+        ! Sanity check
+        IF (PRESENT(bu) .NEQV. PRESENT(bv) .OR. &
+                PRESENT(bu) .NEQV. PRESENT(bw)) THEN
+            CALL errr(__FILE__, __LINE__)
+        END IF
 
-    !     nfu = 0
-    !     nbu = 0
-    !     nrv = 0
-    !     nlv = 0
-    !     nbw = 0
-    !     ntw = 0
 
-    !     ! CON = 7
-    !     IF (nbac == 7) nbu = 1
-    !     IF (nlft == 7) nlv = 1
-    !     IF (ntop == 7) ntw = 1
+        DO i = 3-nfu, ii-3+nbu
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    ax = ddy(j)*ddz(k)
+                    ay = dx(i)*ddz(k)
+                    az = dx(i)*ddy(j)
 
-    !     ! OP1 = 3
-    !     IF (nfro == 3) nfu = 1
-    !     IF (nbac == 3) nbu = 1
-    !     IF (nrgt == 3) nrv = 1
-    !     IF (nlft == 3) nlv = 1
-    !     IF (nbot == 3) nbw = 1
-    !     IF (ntop == 3) ntw = 1
+                    uAdvectingE = 0.5 * ( u(k,j,i) + u(k,j,i+1) )
+                    uAdvectingW = 0.5 * ( u(k,j,i-1) + u(k,j,i) )
+                    vAdvectingN = 0.5 * ( v(k,j,i) + v(k,j,i+1) )
+                    vAdvectingS = 0.5 * ( v(k,j-1,i) + v(k,j-1,i+1) )
+                    wAdvectingT = 0.5 * ( w(k,j,i) + w(k,j,i+1) )
+                    wAdvectingB = 0.5 * ( w(k-1,j,i) + w(k-1,j,i+1) )
 
-    !     DO i = 3-nfu, ii-3+nbu
-    !         DO j = 3, jj-2
-    !             DO k = 3, kk-2
-    !                 ax = ddy(j)*ddz(k)
-    !                 ay = dx(i)*ddz(k)
-    !                 az = dx(i)*ddy(j)
+                    !            --------indicator-function-------   --------------QUICK 3^rd order interpolation-------------
+                    uAdvectedE = 0.5 * ( 1 + SIGN(1,uAdvectingE) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i+1) - 0.125 * u(k,j,i-1) + &
+                                 0.5 * ( 1 - SIGN(1,uAdvectingE) ) * 0.75 * u(k,j,i+1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i+2)
+                    uAdvectedW = 0.5 * ( 1 + SIGN(1,uAdvectingW) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i+1) - 0.125 * u(k,j,i-1) + &
+                                 0.5 * ( 1 - SIGN(1,uAdvectingW) ) * 0.75 * u(k,j,i+1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i+2)
+                    uAdvectedN = 0.5 * ( 1 + SIGN(1,vAdvectingN) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i+1) - 0.125 * u(k,j,i-1) + &
+                                 0.5 * ( 1 - SIGN(1,vAdvectingN) ) * 0.75 * u(k,j,i+1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i+2)
+                    uAdvectedS = 0.5 * ( 1 + SIGN(1,vAdvectingS) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i+1) - 0.125 * u(k,j,i-1) + &
+                                 0.5 * ( 1 - SIGN(1,vAdvectingS) ) * 0.75 * u(k,j,i+1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i+2)
+                    uAdvectedT = 0.5 * ( 1 + SIGN(1,wAdvectingT) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i+1) - 0.125 * u(k,j,i-1) + &
+                                 0.5 * ( 1 - SIGN(1,wAdvectingT) ) * 0.75 * u(k,j,i+1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i+2)
+                    uAdvectedB = 0.5 * ( 1 + SIGN(1,wAdvectingB) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i+1) - 0.125 * u(k,j,i-1) + &
+                                 0.5 * ( 1 - SIGN(1,wAdvectingB) ) * 0.75 * u(k,j,i+1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i+2)
 
-    !                 fe = ax*(ut(k, j, i) + (ut(k, j, i+1) - ut(k, j, i)) &
-    !                     * 0.5*dx(i)/ddx(i+1))
-    !                 fw = ax*(ut(k, j, i-1) + (ut(k, j, i) - ut(k, j, i-1)) &
-    !                     * 0.5*dx(i-1)/ddx(i))
-    !                 fn = ay*(vt(k, j, i) + vt(k, j, i+1))*0.5
-    !                 fs = ay*(vt(k, j-1, i) + vt(k, j-1, i+1))*0.5
-    !                 ft = az*(wt(k, j, i) + wt(k, j, i+1))*0.5
-    !                 fb = az*(wt(k-1, j, i) + wt(k-1, j, i+1))*0.5
+                    duo = - ( ( uAdvectedE - uAdvectedW ) * rdx(i) + ( uAdvectedN - uAdvectedS ) * rddy(j) + ( uAdvectedT - uAdvectedB ) * rddz(k) )
 
-    !                 qe = 0.5*fe*(u(k, j, i) + u(k, j, i+1))
-    !                 qw = 0.5*fw*(u(k, j, i-1) + u(k, j, i))
-    !                 qn = 0.5*fn*(u(k, j, i) + u(k, j+1, i))
-    !                 qs = 0.5*fs*(u(k, j-1, i) + u(k, j, i))
-    !                 qt = 0.5*ft*(u(k, j, i) + u(k+1, j, i))
-    !                 qb = 0.5*fb*(u(k-1, j, i) + u(k, j, i))
+                    uo(k,j,i) = uo(k,j,i) + dou
+                END DO
+            END DO
+        END DO
 
-    !                 uo(k, j, i) = -(qe-qw+qn-qs+qt-qb)
-    !             END DO
+        ! nfu = 0
+        ! nbu = 0
+        ! nrv = 0
+        ! nlv = 0
+        ! nbw = 0
+        ! ntw = 0
 
-    !             IF (PRESENT(bu)) THEN
-    !                 DO k = 3, kk-2
-    !                     uo(k, j, i) = bu(k, j, i)*uo(k, j, i)
-    !                 END DO
-    !             ELSE
-    !                 DO k = 3, kk-2
-    !                     uo(k, j, i) = rdx(i)*rddy(j)*rddz(k)*uo(k, j, i)
-    !                 END DO
-    !             END IF
-    !         END DO
-    !     END DO
+        ! ! CON = 7
+        ! IF (nbac == 7) nbu = 1
+        ! IF (nlft == 7) nlv = 1
+        ! IF (ntop == 7) ntw = 1
 
-    !     DO i = 3, ii-2
-    !         DO j = 3-nrv, jj-3+nlv
-    !             DO k = 3, kk-2
-    !                 ax = dy(j)*ddz(k)
-    !                 ay = ddx(i)*ddz(k)
-    !                 az = ddx(i)*dy(j)
+        ! ! OP1 = 3
+        ! IF (nfro == 3) nfu = 1
+        ! IF (nbac == 3) nbu = 1
+        ! IF (nrgt == 3) nrv = 1
+        ! IF (nlft == 3) nlv = 1
+        ! IF (nbot == 3) nbw = 1
+        ! IF (ntop == 3) ntw = 1
 
-    !                 fe = ax*(ut(k, j, i) + ut(k, j+1, i))*0.5
-    !                 fw = ax*(ut(k, j, i-1) + ut(k, j+1, i-1))*0.5
-    !                 fn = ay*(vt(k, j, i) + (vt(k, j+1, i) - vt(k, j, i)) &
-    !                     * 0.5*dy(j)/ddy(j+1))
-    !                 fs = ay*(vt(k, j-1, i) + (vt(k, j, i) -vt(k, j-1, i)) &
-    !                     * 0.5*dy(j-1)/ddy(j))
-    !                 ft = az*(wt(k, j, i) + wt(k, j+1, i))*0.5
-    !                 fb = az*(wt(k-1, j, i) + wt(k-1, j+1, i))*0.5
+        ! DO i = 3-nfu, ii-3+nbu
+        !     DO j = 3, jj-2
+        !         DO k = 3, kk-2
+        !             ax = ddy(j)*ddz(k)
+        !             ay = dx(i)*ddz(k)
+        !             az = dx(i)*ddy(j)
 
-    !                 qe = 0.5*fe*(v(k, j, i) + v(k, j, i+1))
-    !                 qw = 0.5*fw*(v(k, j, i-1) + v(k, j, i))
-    !                 qn = 0.5*fn*(v(k, j, i) + v(k, j+1, i))
-    !                 qs = 0.5*fs*(v(k, j-1, i) + v(k, j, i))
-    !                 qt = 0.5*ft*(v(k, j, i) + v(k+1, j, i))
-    !                 qb = 0.5*fb*(v(k-1, j, i) + v(k, j, i))
+        !             fe = ax*(ut(k, j, i) + (ut(k, j, i+1) - ut(k, j, i)) &
+        !                 * 0.5*dx(i)/ddx(i+1))
+        !             fw = ax*(ut(k, j, i-1) + (ut(k, j, i) - ut(k, j, i-1)) &
+        !                 * 0.5*dx(i-1)/ddx(i))
+        !             fn = ay*(vt(k, j, i) + vt(k, j, i+1))*0.5
+        !             fs = ay*(vt(k, j-1, i) + vt(k, j-1, i+1))*0.5
+        !             ft = az*(wt(k, j, i) + wt(k, j, i+1))*0.5
+        !             fb = az*(wt(k-1, j, i) + wt(k-1, j, i+1))*0.5
 
-    !                 vo(k, j, i) = -(qe-qw+qn-qs+qt-qb)
-    !             END DO
+        !             qe = 0.5*fe*(u(k, j, i) + u(k, j, i+1))
+        !             qw = 0.5*fw*(u(k, j, i-1) + u(k, j, i))
+        !             qn = 0.5*fn*(u(k, j, i) + u(k, j+1, i))
+        !             qs = 0.5*fs*(u(k, j-1, i) + u(k, j, i))
+        !             qt = 0.5*ft*(u(k, j, i) + u(k+1, j, i))
+        !             qb = 0.5*fb*(u(k-1, j, i) + u(k, j, i))
 
-    !             IF (PRESENT(bv)) THEN
-    !                 DO k = 3, kk-2
-    !                     vo(k, j, i) = bv(k, j, i)*vo(k, j, i)
-    !                 END DO
-    !             ELSE
-    !                 DO k = 3, kk-2
-    !                     vo(k, j, i) = rddx(i)*rdy(j)*rddz(k)*vo(k, j, i)
-    !                 END DO
-    !             END IF
-    !         END DO
-    !     END DO
+        !             uo(k, j, i) = -(qe-qw+qn-qs+qt-qb)
+        !         END DO
 
-    !     DO i = 3, ii-2
-    !         DO j = 3, jj-2
-    !             DO k = 3-nbw, kk-3+ntw
-    !                 ax = ddy(j)*dz(k)
-    !                 ay = ddx(i)*dz(k)
-    !                 az = ddx(i)*ddy(j)
+        !         IF (PRESENT(bu)) THEN
+        !             DO k = 3, kk-2
+        !                 uo(k, j, i) = bu(k, j, i)*uo(k, j, i)
+        !             END DO
+        !         ELSE
+        !             DO k = 3, kk-2
+        !                 uo(k, j, i) = rdx(i)*rddy(j)*rddz(k)*uo(k, j, i)
+        !             END DO
+        !         END IF
+        !     END DO
+        ! END DO
 
-    !                 fe = ax*(ut(k, j, i) + ut(k+1, j, i))*0.5
-    !                 fw = ax*(ut(k, j, i-1)+ ut(k+1, j, i-1))*0.5
-    !                 fn = ay*(vt(k, j, i) + vt(k+1, j, i))*0.5
-    !                 fs = ay*(vt(k, j-1, i)+ vt(k+1, j-1, i))*0.5
-    !                 ft = az*(wt(k, j, i) + (wt(k+1, j, i) - wt(k, j, i)) &
-    !                     * 0.5*dz(k)/ddz(k+1))
-    !                 fb = az*(wt(k-1, j, i) + (wt(k, j, i) - wt(k-1, j, i)) &
-    !                     * 0.5*dz(k-1)/ddz(k))
+        ! DO i = 3, ii-2
+        !     DO j = 3-nrv, jj-3+nlv
+        !         DO k = 3, kk-2
+        !             ax = dy(j)*ddz(k)
+        !             ay = ddx(i)*ddz(k)
+        !             az = ddx(i)*dy(j)
 
-    !                 qe = 0.5*fe*(w(k, j, i) + w(k, j, i+1))
-    !                 qw = 0.5*fw*(w(k, j, i-1) + w(k, j, i))
-    !                 qn = 0.5*fn*(w(k, j, i) + w(k, j+1, i))
-    !                 qs = 0.5*fs*(w(k, j-1, i) + w(k, j, i))
-    !                 qt = 0.5*ft*(w(k, j, i) + w(k+1, j, i))
-    !                 qb = 0.5*fb*(w(k-1, j, i) + w(k, j, i))
+        !             fe = ax*(ut(k, j, i) + ut(k, j+1, i))*0.5
+        !             fw = ax*(ut(k, j, i-1) + ut(k, j+1, i-1))*0.5
+        !             fn = ay*(vt(k, j, i) + (vt(k, j+1, i) - vt(k, j, i)) &
+        !                 * 0.5*dy(j)/ddy(j+1))
+        !             fs = ay*(vt(k, j-1, i) + (vt(k, j, i) -vt(k, j-1, i)) &
+        !                 * 0.5*dy(j-1)/ddy(j))
+        !             ft = az*(wt(k, j, i) + wt(k, j+1, i))*0.5
+        !             fb = az*(wt(k-1, j, i) + wt(k-1, j+1, i))*0.5
 
-    !                 wo(k, j, i) = -(qe-qw+qn-qs+qt-qb)
-    !             END DO
+        !             qe = 0.5*fe*(v(k, j, i) + v(k, j, i+1))
+        !             qw = 0.5*fw*(v(k, j, i-1) + v(k, j, i))
+        !             qn = 0.5*fn*(v(k, j, i) + v(k, j+1, i))
+        !             qs = 0.5*fs*(v(k, j-1, i) + v(k, j, i))
+        !             qt = 0.5*ft*(v(k, j, i) + v(k+1, j, i))
+        !             qb = 0.5*fb*(v(k-1, j, i) + v(k, j, i))
 
-    !             IF (PRESENT(bw)) THEN
-    !                 DO k = 3-nbw, kk-3+ntw
-    !                     wo(k, j, i) = bw(k, j, i)*wo(k, j, i)
-    !                 END DO
-    !             ELSE
-    !                 DO k = 3-nbw, kk-3+ntw
-    !                     wo(k, j, i) = rddx(i)*rddy(j)*rdz(k)*wo(k, j, i)
-    !                 END DO
-    !             END IF
-    !         END DO
-    !     END DO
-    ! END SUBROUTINE tstle4_kon
+        !             vo(k, j, i) = -(qe-qw+qn-qs+qt-qb)
+        !         END DO
+
+        !         IF (PRESENT(bv)) THEN
+        !             DO k = 3, kk-2
+        !                 vo(k, j, i) = bv(k, j, i)*vo(k, j, i)
+        !             END DO
+        !         ELSE
+        !             DO k = 3, kk-2
+        !                 vo(k, j, i) = rddx(i)*rdy(j)*rddz(k)*vo(k, j, i)
+        !             END DO
+        !         END IF
+        !     END DO
+        ! END DO
+
+        ! DO i = 3, ii-2
+        !     DO j = 3, jj-2
+        !         DO k = 3-nbw, kk-3+ntw
+        !             ax = ddy(j)*dz(k)
+        !             ay = ddx(i)*dz(k)
+        !             az = ddx(i)*ddy(j)
+
+        !             fe = ax*(ut(k, j, i) + ut(k+1, j, i))*0.5
+        !             fw = ax*(ut(k, j, i-1)+ ut(k+1, j, i-1))*0.5
+        !             fn = ay*(vt(k, j, i) + vt(k+1, j, i))*0.5
+        !             fs = ay*(vt(k, j-1, i)+ vt(k+1, j-1, i))*0.5
+        !             ft = az*(wt(k, j, i) + (wt(k+1, j, i) - wt(k, j, i)) &
+        !                 * 0.5*dz(k)/ddz(k+1))
+        !             fb = az*(wt(k-1, j, i) + (wt(k, j, i) - wt(k-1, j, i)) &
+        !                 * 0.5*dz(k-1)/ddz(k))
+
+        !             qe = 0.5*fe*(w(k, j, i) + w(k, j, i+1))
+        !             qw = 0.5*fw*(w(k, j, i-1) + w(k, j, i))
+        !             qn = 0.5*fn*(w(k, j, i) + w(k, j+1, i))
+        !             qs = 0.5*fs*(w(k, j-1, i) + w(k, j, i))
+        !             qt = 0.5*ft*(w(k, j, i) + w(k+1, j, i))
+        !             qb = 0.5*fb*(w(k-1, j, i) + w(k, j, i))
+
+        !             wo(k, j, i) = -(qe-qw+qn-qs+qt-qb)
+        !         END DO
+
+        !         IF (PRESENT(bw)) THEN
+        !             DO k = 3-nbw, kk-3+ntw
+        !                 wo(k, j, i) = bw(k, j, i)*wo(k, j, i)
+        !             END DO
+        !         ELSE
+        !             DO k = 3-nbw, kk-3+ntw
+        !                 wo(k, j, i) = rddx(i)*rddy(j)*rdz(k)*wo(k, j, i)
+        !             END DO
+        !         END IF
+        !     END DO
+        ! END DO
+    END SUBROUTINE tstle4_kon
 
 
     SUBROUTINE tstle4_diff(kk, jj, ii, uo, vo, wo, u, v, w, g, &
