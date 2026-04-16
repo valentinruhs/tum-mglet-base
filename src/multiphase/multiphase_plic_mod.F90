@@ -131,6 +131,38 @@ CONTAINS
 
     !================================================================
 
+    SUBROUTINE interface_reconstruction_wrapper(kk, jj, ii, vff, deltaX, deltaY, deltaZ, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   The subroutine is just a wrapper for the subroutines, which
+    !   are used to reconstrunct the interface in cells.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: deltaX(ii), deltaY(jj), deltaZ(kk)
+        REAL(realk), INTENT(in) :: tol
+        REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
+        REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
+        LOGICAL, INTENT(out) :: isInterface(kk, jj, ii)
+        LOGICAL, INTENT(out), OPTIONAL :: isNearInterface(kk, jj, ii)
+
+        ! Local variables
+        ! None
+
+        CALL track_interface(isInterface, kk, jj, ii, vff, tol)
+        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
+        CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+
+        IF ( PRESENT(isNearInterface) ) THEN
+            CALL track_near_interface_region(isNearInterface, kk, jj, ii, isInterface, tol)
+        END IF
+
+    END SUBROUTINE interface_reconstruction_wrapper
+
+    !================================================================
+
     SUBROUTINE compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
     !----------------------------------------------------------------
     !   What it does:

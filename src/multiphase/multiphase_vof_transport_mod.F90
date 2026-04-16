@@ -535,7 +535,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE update_field(kk, jj, ii, field, fluxx, fluxy, fluxz, uDivergence, vDivergence, wDivergence, & 
+    SUBROUTINE update_field(kk, jj, ii, field, fluxx, fluxy, fluxz, uCompressionTerm, vCompressionTerm, wCompressionTerm, & 
             adv_x, adv_y, adv_z, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
@@ -667,5 +667,32 @@ CONTAINS
         END DO
 
     END SUBROUTINE clip_volume_fraction_field
+
+    !================================================================
+
+    SUBROUTINE get_density_flux(kk, jj, ii, flux, fluxComp, rho1, rho2, densityFlux)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: flux(kk, jj, ii), fluxComp(kk, jj, ii)
+        REAL(realk), INTENT(in) :: rho1, rho2
+        REAL(realk), INTENT(out) :: densityFlux(kk, jj, ii)
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        
+        DO i = 1, ii
+            DO j = 1, jj
+                DO k = 1, kk
+                    densityFlux(k,j,i) = rho1 * flux(k,j,i) + rho2 * fluxComp(k,j,i)
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE get_density_flux
 
 END MODULE multiphase_vof_transport_mod

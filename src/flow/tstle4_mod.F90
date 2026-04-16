@@ -3,7 +3,7 @@ MODULE tstle4_mod
     USE flowcore_mod
     USE lesmodel_mod, ONLY: ilesmodel
     USE wernerwengle_mod, ONLY: tauwin
-    USE multiphasecore_mod, ONLY: gmol1, gmol2
+    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
     USE multiphase_material_mod, ONLY: get_material_property_field
 
     IMPLICIT NONE(type, external)
@@ -133,44 +133,74 @@ CONTAINS
                 ALLOCATE(densityFieldiStag(kk, jj, ii), densityFieldjStag(kk, jj, ii), densityFieldkStag(kk, jj, ii))
             END IF
 
-            CALL compute_divergence(kk, jj, ii, uDivergence, vDivergence, wDivergence, vff, u, v, w, ddx, ddy, ddz)
+            CALL compute_normal_strain_rates(kk, jj, ii, strainRatex, strainRatey, strainRatez, vff, u, v, w, ddx, ddy, ddz)
             CALL compute_non_directional_compression_coeffiecient(kk, jj, ii, nonDirectionalCompressionCoefficient, vff)
+            uCompressionTerm = nonDirectionalCompressionCoefficient * strainRatex
+            vCompressionTerm = nonDirectionalCompressionCoefficient * strainRatey
+            zCompressionTerm = nonDirectionalCompressionCoefficient * strainRatez
+
+            xDensityCompressionTerm = ( nonDirectionalCompressionCoefficient * rho1 + ( 1 - nonDirectionalCompressionCoefficient ) * rho2 ) * strainRatex
+            yDensityCompressionTerm = ( nonDirectionalCompressionCoefficient * rho1 + ( 1 - nonDirectionalCompressionCoefficient ) * rho2 ) * strainRatey
+            zDensityCompressionTerm = ( nonDirectionalCompressionCoefficient * rho1 + ( 1 - nonDirectionalCompressionCoefficient ) * rho2 ) * strainRatez
 
             DO dim = 1, 3
-                CALL track_interface(isInterface, kk, jj, ii, vff, tol)
-                CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
-                CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+                CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
 
                 CALL compute_iStag_vff(kk, jj, ii, vffiStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
                 CALL compute_jStag_vff(kk, jj, ii, vffjStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
                 CALL compute_kStag_vff(kk, jj, ii, vffkStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
 
-                CALL get_material_property_field(kk, jj, ii, denistyFieldiStag, vffiStag, rho1, rho2)
-                CALL get_material_property_field(kk, jj, ii, densityFieldjStag, vffjStag, rho1, rho2)
-                CALL get_material_property_field(kk, jj, ii, densityFieldkStag, vffkStag, rho1, rho2)
+                ! Get the old density fields
+                CALL get_material_property_field(kk, jj, ii, densityFieldiStagOld, vffiStag, rho1, rho2)
+                CALL get_material_property_field(kk, jj, ii, densityFieldjStagOld, vffjStag, rho1, rho2)
+                CALL get_material_property_field(kk, jj, ii, densityFieldkStagOld, vffkStag, rho1, rho2)
 
-                ! Density advection
+                CALL interface_reconstruction_wrapper(kk, jj, ii, vffiStag, dx, ddy, ddz, tol, normxiStag, normyiStag, normziStag, alphaiStag, isInterfaceiStag, isNearInterfaceiStag)
+                CALL interface_reconstruction_wrapper(kk, jj, ii, vffjStag, dx, ddy, ddz, tol, normxjStag, normyjStag, normzjStag, alphajStag, isInterfacejStag, isNearInterfaceiStag)
+                CALL interface_reconstruction_wrapper(kk, jj, ii, vffkStag, dx, ddy, ddz, tol, normxkStag, normykStag, normzkStag, alphakStag, isInterfacekStag, isNearInterfaceiStag)
+
                 IF ( adv_x ) THEN
-                    ! Move in x direction
-                    CALL compute_fluxx(densityFluxx, kk, jj, ii, densityFieldiStag, isInterface, u, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
-                        nfro, nbac, nrgt, nlft, nbot, ntop)
-                    uCompressionTerm = ( rho1 * nonDirectionalCompressionCoefficient + rho2 * ( 1 - nonDirectionalCompressionCoefficient ) ) * uDivergence
-                    CALL update_field(kk, jj, ii, densityFieldiStag, densityFluxx, fluxy, fluxz, uCompressionTerm, vDivergence, wDivergence, & 
-                    adv_x, adv_y, adv_z, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+                    ! Compute fluxes of volume fraction field
+                    CALL compute_fluxx(vffFluxXiStag, kk, jj, ii, vffiStag, isInterfaceiStag, u, alphaiStag, dt, normxiStag, normyiStag, normziStag, dx, ddy, ddz, tol, & 
+                                       nfro, nbac, nrgt, nlft, nbot, ntop)
+                    CALL compute_fluxx(vffFluxXjStag, kk, jj, ii, vffjStag, isInterfacejStag, u, alphajStag, dt, normxjStag, normyjStag, normzjStag, dx, ddy, ddz, tol, & 
+                                       nfro, nbac, nrgt, nlft, nbot, ntop)
+                    CALL compute_fluxx(vffFluxXkStag, kk, jj, ii, vffkStag, isInterfacekStag, u, alphakStag, dt, normxkStag, normykStag, normzkStag, dx, ddy, ddz, tol, & 
+                                       nfro, nbac, nrgt, nlft, nbot, ntop)
+                    
+                    ! Compute fluxes of complementary volume fraction field
+                    vffCompiStag = 1 - vffiStag
+                    vffCompjStag = 1 - vffjStag
+                    vffCompkStag = 1 - vffkStag
+                    CALL compute_fluxx(vffCompFluxXiStag, kk, jj, ii, vffCompiStag, isInterfaceiStag, u, alphaiStag, dt, normxiStag, normyiStag, normziStag, dx, ddy, ddz, tol, & 
+                                       nfro, nbac, nrgt, nlft, nbot, ntop)
+                    CALL compute_fluxx(vffCompFluxXjStag, kk, jj, ii, vffCompjStag, isInterfacejStag, u, alphajStag, dt, normxjStag, normyjStag, normzjStag, dx, ddy, ddz, tol, & 
+                                       nfro, nbac, nrgt, nlft, nbot, ntop)
+                    CALL compute_fluxx(vffCompFluxXkStag, kk, jj, ii, vffCompkStag, isInterfacekStag, u, alphakStag, dt, normxkStag, normykStag, normzkStag, dx, ddy, ddz, tol, & 
+                                       nfro, nbac, nrgt, nlft, nbot, ntop)
+
+                    ! Compute density fluxes from vff and vffComp fluxes
+                    CALL get_density_flux(kk, jj, ii, vffFluxXiStag, vffCompFluxXiStag, rho1, rho2, densityFluxiStag)
+                    CALL get_density_flux(kk, jj, ii, vffFluxXjStag, vffCompFluxXjStag, rho1, rho2, densityFluxjStag)
+                    CALL get_density_flux(kk, jj, ii, vffFluxXkStag, vffCompFluxXkStag, rho1, rho2, densityFluxkStag)
+
+                    ! Update vffs with fluxes
+                    CALL update_field(kk, jj, ii, vffiStag, vffFluxXiStag, fluxy, fluxz, uCompressionTerm, vCompressionTerm, wCompressionTerm, & 
+                                      adv_x, adv_y, adv_z, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+                    CALL update_field(kk, jj, ii, vffjStag, vffFluxXjStag, fluxy, fluxz, uCompressionTerm, vCompressionTerm, wCompressionTerm, & 
+                                      adv_x, adv_y, adv_z, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+                    CALL update_field(kk, jj, ii, vffkStag, vffFluxXkStag, fluxy, fluxz, uCompressionTerm, vCompressionTerm, wCompressionTerm, & 
+                                      adv_x, adv_y, adv_z, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+
+                    ! Get the updated density fields
+                    CALL get_material_property_field(kk, jj, ii, densityFieldiStag, vffiStag, rho1, rho2)
+                    CALL get_material_property_field(kk, jj, ii, densityFieldjStag, vffjStag, rho1, rho2)
+                    CALL get_material_property_field(kk, jj, ii, densityFieldkStag, vffkStag, rho1, rho2)
+                    
                 ELSE IF ( adv_y ) THEN
-                    ! Move in y direction
-                    CALL compute_fluxy(densityFluxy, kk, jj, ii, densityFieldjStag, isInterface, v, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
-                        nfro, nbac, nrgt, nlft, nbot, ntop)
-                    vCompressionTerm = ( rho1 * nonDirectionalCompressionCoefficient + rho2 * ( 1 - nonDirectionalCompressionCoefficient ) ) * vDivergence
-                    CALL update_field(kk, jj, ii, densityFieldjStag, fluxx, densityFluxy, fluxz, uDivergence, vCompressionTerm, wDivergence, & 
-                    adv_x, adv_y, adv_z, tol, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+                    
                 ELSE IF ( adv_z ) THEN
-                    ! Move in z direction
-                    CALL compute_fluxz(densityFluxz, kk, jj, ii, densityFieldkStag, isInterface, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
-                        nfro, nbac, nrgt, nlft, nbot, ntop)
-                    wCompressionTerm = ( rho1 * nonDirectionalCompressionCoefficient + rho2 * ( 1 - nonDirectionalCompressionCoefficient ) ) * wDivergence
-                    CALL update_field(kk, jj, ii, densityFieldkStag, fluxx, fluxy, densityFluxz, uDivergence, vDivergence, wCompressionTerm, & 
-                    adv_x, adv_y, adv_z, tol, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+                    
                 END IF
 
                 ! Momentum advection
@@ -274,17 +304,21 @@ CONTAINS
                     uAdvectedB = 0.5 * ( 1 + SIGN(1,wAdvectingB) ) * 0.75 * u(k-1,j,i) + 0.375 * u(k,j,i) - 0.125 * u(k-2,j,i) + &
                                  0.5 * ( 1 - SIGN(1,wAdvectingB) ) * 0.75 * u(k,j,i) + 0.375 * u(k-1,j,i) - 0.125 * u(k+1,j,i)
                     
-                    IF ( isNearInterface ) THEN
-                        duo = - 1/densityFieldiStag(k,j,i) * ( ( uAdvectedE * densityFluxx(k,j,i) - uAdvectedW * densityFluxx(k,j,i-1) ) * rdx(i) + &
-                                                               ( uAdvectedN * densityFluxy(k,j,i) - uAdvectedS * densityFluxy(k,j-1,i) ) * rddy(j) + &
-                                                               ( uAdvectedT * densityFluxz(k,j,i) - uAdvectedB * densityFluxz(k-1,j,i) ) * rddz(k) )
+                    IF ( isNearInterfaceiStag ) THEN
+                        duo = - ( uAdvectedE * densityFluxiStag(k,j,i) - uAdvectedW * densityFluxiStag(k,j,i-1) ) * rdx(i) + &
+                                ( uAdvectedN * densityFluxjStag(k,j,i) - uAdvectedS * densityFluxjStag(k,j-1,i) ) * rddy(j) + &
+                                ( uAdvectedT * densityFluxkStag(k,j,i) - uAdvectedB * densityFluxkStag(k-1,j,i) ) * rddz(k) + &
+                                u(k,j,i) * xDensityCompressionTerm(k,j,i)
+
+                        uo(k,j,i) = 1 / densityFieldiStag(k,j,i) * ( uo(k,j,i) * densityFieldiStagOld(k,j,i) + dou )
                     ELSE
                         duo = - ( ( uAdvectedE * uAdvectingE - uAdvectedW * uAdvectingW ) * rdx(i) + &
                                   ( uAdvectedN * vAdvectingN - uAdvectedS * vAdvectingS ) * rddy(j) + &
                                   ( uAdvectedT * wAdvectingT - uAdvectedB * wAdvectingB ) * rddz(k) )
+
+                        uo(k,j,i) = uo(k,j,i) + dou
                     END IF
 
-                    uo(k,j,i) = uo(k,j,i) + dou
                 END DO
             END DO
         END DO
