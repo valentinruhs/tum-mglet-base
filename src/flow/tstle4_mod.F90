@@ -231,7 +231,7 @@ CONTAINS
     ! First, the mass fluxes (transporting velocities) are interpolated to
     ! the faces of the momentum cell. This interpolation is performed in a
     ! way which ensures mass conservation at the momentum cell if the
-    ! velocity field is divergence-free on the adjacent pressure cells.
+    ! adveField field is divergence-free on the adjacent pressure cells.
     ! Second, the transported velocities are interpolated in a symmetry-
     ! preserving manner (the convective term has to be skew-symmetric in
     ! order to conserve energy).
@@ -290,19 +290,9 @@ CONTAINS
                     wAdvectingT = 0.5 * ( w(k,j,i) + w(k,j,i+1) )
                     wAdvectingB = 0.5 * ( w(k-1,j,i) + w(k-1,j,i+1) )
 
-                    !            --------indicator-function-------   --------------QUICK 3^rd order interpolation-------------
-                    uAdvectedE = 0.5 * ( 1 + SIGN(1,uAdvectingE) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i+1) - 0.125 * u(k,j,i-1) + &
-                                 0.5 * ( 1 - SIGN(1,uAdvectingE) ) * 0.75 * u(k,j,i+1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i+2)
-                    uAdvectedW = 0.5 * ( 1 + SIGN(1,uAdvectingW) ) * 0.75 * u(k,j,i-1) + 0.375 * u(k,j,i) - 0.125 * u(k,j,i-2) + &
-                                 0.5 * ( 1 - SIGN(1,uAdvectingW) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j,i-1) - 0.125 * u(k,j,i+1)
-                    uAdvectedN = 0.5 * ( 1 + SIGN(1,vAdvectingN) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j+1,i) - 0.125 * u(k,j-1,i) + &
-                                 0.5 * ( 1 - SIGN(1,vAdvectingN) ) * 0.75 * u(k,j+1,i) + 0.375 * u(k,j,i) - 0.125 * u(k,j+2,i)
-                    uAdvectedS = 0.5 * ( 1 + SIGN(1,vAdvectingS) ) * 0.75 * u(k,j-1,i) + 0.375 * u(k,j,i) - 0.125 * u(k,j-2,i) + &
-                                 0.5 * ( 1 - SIGN(1,vAdvectingS) ) * 0.75 * u(k,j,i) + 0.375 * u(k,j-1,i) - 0.125 * u(k,j+1,i)
-                    uAdvectedT = 0.5 * ( 1 + SIGN(1,wAdvectingT) ) * 0.75 * u(k,j,i) + 0.375 * u(k+1,j,i) - 0.125 * u(k-1,j,i) + &
-                                 0.5 * ( 1 - SIGN(1,wAdvectingT) ) * 0.75 * u(k+1,j,i) + 0.375 * u(k,j,i) - 0.125 * u(k+2,j,i)
-                    uAdvectedB = 0.5 * ( 1 + SIGN(1,wAdvectingB) ) * 0.75 * u(k-1,j,i) + 0.375 * u(k,j,i) - 0.125 * u(k-2,j,i) + &
-                                 0.5 * ( 1 - SIGN(1,wAdvectingB) ) * 0.75 * u(k,j,i) + 0.375 * u(k-1,j,i) - 0.125 * u(k+1,j,i)
+                    CALL quick_interpolation_scheme(kk, jj, ii, u, &
+                        uAdvectedE, uAdvectedW, uAdvectedN, uAdvectedS, uAdvectedT, uAdvectedB, &
+                        uAdvectingE, uAdvectingW, vAdvectingN, vAdvectingS, wAdvectingT, wAdvectingB)
                     
                     IF ( isNearInterfaceiStag ) THEN
                         duo = - ( uAdvectedE * densityFluxiStag(k,j,i) - uAdvectedW * densityFluxiStag(k,j,i-1) ) * rdx(i) + &
@@ -2024,13 +2014,48 @@ CONTAINS
         END IF
     END SUBROUTINE swcle3d
 
+    PURE SUBROUTINE quick_interpolation_scheme(kk, jj, ii, adveField, &
+        adveE, adveW, adveN, adveS, adveT, adveB, &
+        advrE, advrW, advrN, advrS, advrT, advrB)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   The subroutine performes a QUICK interpolation for the 
+    !   advected components of the momentum calculation.
+    !   adve = advected component (advectee)
+    !   advr = advecting component (advector)
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: adveField(kk, jj, ii)
+        REAL(realk), INTENT(out) :: adveE, adveW, adveN, adveS, adveT, adveB
+        REAL(realk), INTENT(in) :: advrE, advrW, advrN, advrS, advrT, advrB
+
+        ! Loval variables
+        ! None
+
+        !       -----indicator-function----   --------------------------QUICK 3^rd order interpolation-------------------------
+        adveE = 0.5 * ( 1 + SIGN(1,advrE) ) * 0.75 * adveField(k,j,i) + 0.375 * adveField(k,j,i+1) - 0.125 * adveField(k,j,i-1) + &
+                0.5 * ( 1 - SIGN(1,advrE) ) * 0.75 * adveField(k,j,i+1) + 0.375 * adveField(k,j,i) - 0.125 * adveField(k,j,i+2)
+        adveW = 0.5 * ( 1 + SIGN(1,advrW) ) * 0.75 * adveField(k,j,i-1) + 0.375 * adveField(k,j,i) - 0.125 * adveField(k,j,i-2) + &
+                0.5 * ( 1 - SIGN(1,advrW) ) * 0.75 * adveField(k,j,i) + 0.375 * adveField(k,j,i-1) - 0.125 * adveField(k,j,i+1)
+        adveN = 0.5 * ( 1 + SIGN(1,advrN) ) * 0.75 * adveField(k,j,i) + 0.375 * adveField(k,j+1,i) - 0.125 * adveField(k,j-1,i) + &
+                0.5 * ( 1 - SIGN(1,advrN) ) * 0.75 * adveField(k,j+1,i) + 0.375 * adveField(k,j,i) - 0.125 * adveField(k,j+2,i)
+        adveS = 0.5 * ( 1 + SIGN(1,advrS) ) * 0.75 * adveField(k,j-1,i) + 0.375 * adveField(k,j,i) - 0.125 * adveField(k,j-2,i) + &
+                0.5 * ( 1 - SIGN(1,advrS) ) * 0.75 * adveField(k,j,i) + 0.375 * adveField(k,j-1,i) - 0.125 * adveField(k,j+1,i)
+        adveT = 0.5 * ( 1 + SIGN(1,advrT) ) * 0.75 * adveField(k,j,i) + 0.375 * adveField(k+1,j,i) - 0.125 * adveField(k-1,j,i) + &
+                0.5 * ( 1 - SIGN(1,advrT) ) * 0.75 * adveField(k+1,j,i) + 0.375 * adveField(k,j,i) - 0.125 * adveField(k+2,j,i)
+        adveB = 0.5 * ( 1 + SIGN(1,advrB) ) * 0.75 * adveField(k-1,j,i) + 0.375 * adveField(k,j,i) - 0.125 * adveField(k-2,j,i) + &
+                0.5 * ( 1 - SIGN(1,advrB) ) * 0.75 * adveField(k,j,i) + 0.375 * adveField(k-1,j,i) - 0.125 * adveField(k+1,j,i)
+
+    END SUBROUTINE quick_interpolation_scheme
 
     PURE ELEMENTAL REAL(realk) FUNCTION swcle3d_one(ddz, u) RESULT(uo)
         !$omp declare simd(swcle3d_one)
 
         ! Function arguments
         REAL(realk), INTENT(in) :: ddz  ! wall normal
-        REAL(realk), INTENT(in) :: u    ! velocity
+        REAL(realk), INTENT(in) :: u    ! adveField
 
         ! Local variables
         ! none...
