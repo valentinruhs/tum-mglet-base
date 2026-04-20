@@ -94,7 +94,7 @@ CONTAINS
         END IF
 
         ! TSTLE4 zeroize uo, vo, wo before use internally
-        CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g, vff, itstep)
+        CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g)
         CALL boussinesqterm(uo, vo, wo)
         CALL coriolisterm(uo, vo, wo)
 
@@ -104,7 +104,7 @@ CONTAINS
         CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
         CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
 
-        CALL multiphase_vof_transport(vff, u, v, w, rkscheme, irk, dt, itstep)
+        CALL multiphase_vof_transport(vff, u, v, w, dtrki, itstep)
 
         IF (ib%type == "GHOSTCELL") THEN
             ! Equivalent to old "cop3dzero"

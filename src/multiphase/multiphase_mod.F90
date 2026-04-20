@@ -2,15 +2,10 @@
 !  Module: multiphase_mod
 !
 !  Responsibilities:
-!     - Acts as the high-level driver for the multiphase model
-!     - Couples multiphase physics to the flow solver
-!     - Advances the volume fraction field in time
-!     - Updates material properties (rho, mu) based on C
+!     - 
 !
 !  Coordinates:
-!     - multiphase_vof_transport_mod
-!     - multiphase_levelset_transport_mod
-!     - multiphase_material_mod
+!     - 
 !
 !  Author:      Valentin Ruhs
 !  Created:     2026-02
@@ -23,7 +18,7 @@ MODULE multiphase_mod
     USE multiphasecore_mod, ONLY: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase
     USE multiphase_vof_transport_mod, ONLY: init_multiphase_vof_transport, finish_multiphase_vof_transport
     USE multiphase_plic_mod, ONLY: init_multiphase_plic, finish_multiphase_plic, compute_iStag_vff, compute_jStag_vff, compute_kStag_vff, track_interface, compute_normal_vector, compute_alpha
-    USE multiphase_material_mod, ONLY: init_multiphase_material, finish_multiphase_material, get_material_property_field
+    USE multiphase_material_mod, ONLY: init_multiphase_material, finish_multiphase_material, compute_material_property_field
     USE multiphase_io_mod, ONLY: init_multiphase_io, finish_multiphase_io, read_vff
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
     USE precision_mod, ONLY: intk, realk
@@ -82,23 +77,7 @@ CONTAINS
     END SUBROUTINE finish_multiphase
 
     !================================================================
-
-    SUBROUTINE multiphase_momentum_advection(kk, jj, ii, uo, vo, wo, u, v, w, g, &
-        dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
-        nfro, nbac, nrgt, nlft, nbot, ntop)
-    !----------------------------------------------------------------
-    !   What it does:
-    !    
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
         
-
-        ! Local variables
-    
-
-        
-
     SUBROUTINE init_vff()
     !----------------------------------------------------------------
     !   What it does:

@@ -15,11 +15,16 @@
 MODULE multiphase_material_mod
 
     USE precision_mod, ONLY: intk, realk
+    USE grids_mod, ONLY: nmygrids, mygrids
+    USE field_mod, ONLY: field_t
+    USE fields_mod, ONLY: get_field
+    USE grids_mod, ONLY: get_mgdims, get_mgbasb
+    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
 
     IMPLICIT NONE
     PRIVATE
 
-    PUBLIC :: init_multiphase_material, finish_multiphase_material, get_material_property_field
+    PUBLIC :: init_multiphase_material, finish_multiphase_material, compute_material_property_field
 
 CONTAINS
 
@@ -29,9 +34,30 @@ CONTAINS
         ! None
 
         ! Local variables
-        ! None
+        TYPE(field_t), POINTER :: d_f
+        TYPE(field_t), POINTER :: g_f
+        TYPE(field_t), POINTER :: vff_f
+        INTEGER(intk) :: kk, jj, ii
+        INTEGER(intk) :: i, igrid
+        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: d, g, vff
 
-        continue
+        CALL get_field(d_f, "D")
+        CALL get_field(g_f, "G")
+        CALL get_field(vff_f, "VFF")
+
+        DO i = 1, nmygrids
+            igrid = mygrids(i)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL d_f%get_ptr(d, igrid)
+            CALL g_f%get_ptr(g, igrid)
+            CALL vff_f%get_ptr(vff, igrid)
+
+            CALL compute_material_property_field(kk, jj, ii, d, vff, rho1, rho2)
+            CALL compute_material_property_field(kk, jj, ii, g, vff, gmol1, gmol2)
+        END DO
+
     END SUBROUTINE init_multiphase_material
 
     !================================================================
@@ -49,7 +75,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE get_material_property_field(kk, jj, ii, propertyField, vff, propertyFluid1, propertyFluid2)
+    SUBROUTINE compute_material_property_field(kk, jj, ii, propertyField, vff, propertyFluid1, propertyFluid2)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine computes the weighted material property for
@@ -73,6 +99,6 @@ CONTAINS
             END DO
         END DO
 
-    END SUBROUTINE get_material_property_field
+    END SUBROUTINE compute_material_property_field
 
 END MODULE multiphase_material_mod

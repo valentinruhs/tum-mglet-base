@@ -18,7 +18,7 @@ MODULE multiphase_vof_transport_mod
     USE fields_mod, ONLY: get_field
     USE grids_mod, ONLY: get_mgdims, get_mgbasb
     USE err_mod, ONLY: errr
-    USE multiphase_plic_mod, ONLY: track_interface, compute_normal_vector, compute_alpha, compute_cell_proportion, compute_iStag_vff, compute_jStag_vff, compute_kStag_vff
+    USE multiphase_plic_mod, ONLY: track_interface, compute_normal_vector, compute_alpha, compute_cell_proportion, compute_iStag_vff, compute_jStag_vff, compute_kStag_vff, interface_reconstruction_wrapper
     USE rungekutta_mod, ONLY: rk_2n_t
     
     IMPLICIT NONE
@@ -128,12 +128,13 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: itstep
 
         ! Local variables
+        REAL(realk) :: strainRatex(kk, jj, ii), strainRatey(kk, jj, ii), strainRatez(kk, jj, ii)
+        REAL(realk) :: nonDirectionalCompressionCoefficient(kk, jj, ii)
         LOGICAL :: isInterface(kk, jj, ii)
-        REAL(realk) :: uDivergence(kk, jj, ii), vDivergence(kk, jj, ii), wDivergence(kk, jj, ii)
+        REAL(realk) :: xVelocityCompressionTerm(kk, jj, ii), yVelocityCompressionTerm(kk, jj, ii), zVelocityCompressionTerm(kk, jj, ii)
         REAL(realk) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk) :: alpha(kk, jj, ii)
         REAL(realk) :: vffFluxx(kk, jj, ii), vffFluxy(kk, jj, ii), vffFluxz(kk, jj, ii)
-        REAL(realk) :: vffiStag(kk, jj, ii), vffjStag(kk, jj, ii), vffkStag(kk, jj, ii)
         REAL(realk), PARAMETER :: tol = 1.0E-15
         LOGICAL :: adv_x, adv_y, adv_z
         INTEGER(intk) :: i, permutation_index
@@ -157,20 +158,18 @@ CONTAINS
                 adv_z = .TRUE.
         END SELECT
 
-        ! Divergence of velocity field components
-        CALL compute_normal_strain_rates(kk, jj, ii, uDivergence, vDivergence, wDivergence, nonDirectionalCompressionCoefficient, vff, u, v, w, ddx, ddy, ddz)
+        CALL compute_normal_strain_rates(kk, jj, ii, strainRatex, strainRatey, strainRatez, vff, u, v, w, ddx, ddy, ddz)
+        CALL compute_non_directional_compression_coeffiecient(kk, jj, ii, nonDirectionalCompressionCoefficient, vff)
+
+        xVelocityCompressionTerm = nonDirectionalCompressionCoefficient * strainRatex
+        yVelocityCompressionTerm = nonDirectionalCompressionCoefficient * strainRatey
+        zVelocityCompressionTerm = nonDirectionalCompressionCoefficient * strainRatez
 
         ! Advect interface in three spatial coordinates
         DO i = 1, 3
 
             ! Locate interface
-            CALL track_interface(isInterface, kk, jj, ii, vff, tol)
-            CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
-            CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-
-            CALL compute_iStag_vff(kk, jj, ii, vffiStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-            CALL compute_jStag_vff(kk, jj, ii, vffjStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-            CALL compute_kStag_vff(kk, jj, ii, vffkStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+            CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
 
             ! Decide over advection direction
             IF ( adv_x ) THEN
@@ -188,7 +187,7 @@ CONTAINS
             END IF
 
             ! Calculate new new volume fraction field
-            CALL update_field(kk, jj, ii, vff, vffFluxx, vffFluxy, vffFluxz, uDivergence, vDivergence, wDivergence, & 
+            CALL update_field(kk, jj, ii, vff, vffFluxx, vffFluxy, vffFluxz, xVelocityCompressionTerm, yVelocityCompressionTerm, zVelocityCompressionTerm, & 
             adv_x, adv_y, adv_z, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
             CALL clip_volume_fraction_field(kk, ii, jj, vff, tol)
 
@@ -535,7 +534,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE update_field(kk, jj, ii, field, fluxx, fluxy, fluxz, uCompressionTerm, vCompressionTerm, wCompressionTerm, & 
+    SUBROUTINE update_field(kk, jj, ii, field, fluxx, fluxy, fluxz, xCompressionTerm, yCompressionTerm, zCompressionTerm, & 
             adv_x, adv_y, adv_z, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
@@ -559,7 +558,7 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(inout) :: field(kk, jj, ii)
         REAL(realk), INTENT(in) :: fluxx(kk, jj, ii), fluxy(kk, jj, ii), fluxz(kk, jj, ii)
-        REAL(realk), INTENT(in) :: uCompressionTerm(kk, jj, ii), vCompressionTerm(kk, jj, ii), wCompressionTerm(kk, jj, ii)
+        REAL(realk), INTENT(in) :: xCompressionTerm(kk, jj, ii), yCompressionTerm(kk, jj, ii), zCompressionTerm(kk, jj, ii)
         LOGICAL, INTENT(inout) :: adv_x, adv_y, adv_z
         REAL(realk), INTENT(in) :: dt
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
@@ -594,7 +593,7 @@ CONTAINS
             DO i = 3-nfu, ii-3+nbu
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        field(k,j,i) = ( field(k,j,i) + dt * ( fluxx(k,j,i-1) - fluxx(k,j,i) + uCompressionTerm(k,j,i) ) ) 
+                        field(k,j,i) = ( field(k,j,i) + dt * ( fluxx(k,j,i-1) - fluxx(k,j,i) + xCompressionTerm(k,j,i) ) ) 
                     END DO 
                 END DO 
             END DO
@@ -609,7 +608,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3-nrv, jj-3+nlv
                     DO k = 3, kk-2
-                        field(k,j,i) = ( field(k,j,i) + dt * ( fluxy(k,j-1,i) - fluxy(k,j,i) + vCompressionTerm(k,j,i) ) )
+                        field(k,j,i) = ( field(k,j,i) + dt * ( fluxy(k,j-1,i) - fluxy(k,j,i) + yCompressionTerm(k,j,i) ) )
                     END DO 
                 END DO 
             END DO
@@ -624,7 +623,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3-nbw, kk-3+ntw
-                        field(k,j,i) = ( field(k,j,i) + dt * ( fluxz(k-1,j,i) - fluxz(k,j,i) + wCompressionTerm(k,j,i) ) )
+                        field(k,j,i) = ( field(k,j,i) + dt * ( fluxz(k-1,j,i) - fluxz(k,j,i) + zCompressionTerm(k,j,i) ) )
                     END DO 
                 END DO 
             END DO
@@ -670,29 +669,29 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE get_density_flux(kk, jj, ii, flux, fluxComp, rho1, rho2, densityFlux)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   
-    !----------------------------------------------------------------
+    ! SUBROUTINE get_density_flux(kk, jj, ii, flux, fluxComp, rho1, rho2, densityFlux)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !   
+    ! !----------------------------------------------------------------
 
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: flux(kk, jj, ii), fluxComp(kk, jj, ii)
-        REAL(realk), INTENT(in) :: rho1, rho2
-        REAL(realk), INTENT(out) :: densityFlux(kk, jj, ii)
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
+    !     REAL(realk), INTENT(in) :: flux(kk, jj, ii), fluxComp(kk, jj, ii)
+    !     REAL(realk), INTENT(in) :: rho1, rho2
+    !     REAL(realk), INTENT(out) :: densityFlux(kk, jj, ii)
 
-        ! Local variables
-        INTEGER(intk) :: k, j, i
+    !     ! Local variables
+    !     INTEGER(intk) :: k, j, i
         
-        DO i = 1, ii
-            DO j = 1, jj
-                DO k = 1, kk
-                    densityFlux(k,j,i) = rho1 * flux(k,j,i) + rho2 * fluxComp(k,j,i)
-                END DO
-            END DO
-        END DO
+    !     DO i = 1, ii
+    !         DO j = 1, jj
+    !             DO k = 1, kk
+    !                 densityFlux(k,j,i) = rho1 * flux(k,j,i) + rho2 * fluxComp(k,j,i)
+    !             END DO
+    !         END DO
+    !     END DO
 
-    END SUBROUTINE get_density_flux
+    ! END SUBROUTINE get_density_flux
 
 END MODULE multiphase_vof_transport_mod

@@ -21,8 +21,8 @@ MODULE multiphase_plic_mod
     PRIVATE 
 
     PUBLIC :: init_multiphase_plic, finish_multiphase_plic, &
-              track_interface, compute_normal_vector, &
-              compute_alpha, compute_cell_proportion, &
+              track_interface, track_near_interface_region, interface_reconstruction_wrapper, &
+              compute_normal_vector, compute_alpha, compute_cell_proportion, &
               compute_iStag_vff, compute_jStag_vff, compute_kStag_vff
 
 CONTAINS
@@ -105,7 +105,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: tol
 
         ! Local variables
-        INTEGER(intk) :: k, j, i
+        INTEGER(intk) :: k, j, i, di, dj, dk
 
         isNearInterface = .FALSE.
 
@@ -152,8 +152,8 @@ CONTAINS
         ! None
 
         CALL track_interface(isInterface, kk, jj, ii, vff, tol)
-        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
-        CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, deltaX, deltaY, deltaZ, tol)
+        CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, deltaX, deltaY, deltaZ, normx, normy, normz, tol)
 
         IF ( PRESENT(isNearInterface) ) THEN
             CALL track_near_interface_region(isNearInterface, kk, jj, ii, isInterface, tol)

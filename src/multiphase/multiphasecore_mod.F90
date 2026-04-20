@@ -45,8 +45,10 @@ CONTAINS
 
         ! Local variables
         TYPE(config_t) :: multiphaseconf
+        INTEGER(intk), PARAMETER :: unitsd(7) = [1, -3, 0, 0, 0, 0, 0]
         INTEGER(intk), PARAMETER :: unitsvff(7) = [0, 0, 0, 0, 0, 0, 0]
         INTEGER(intk), PARAMETER :: unitsphi(7) = [0, 1, 0, 0, 0, 0, 0]
+        CHARACTER(len=*), PARAMETER :: descriptiond = "Density"
         CHARACTER(len=*), PARAMETER :: descriptionvff = "Volume fraction field"
         CHARACTER(len=*), PARAMETER :: descriptionphi = "Level set function"
 
@@ -84,6 +86,8 @@ CONTAINS
         END IF
 
         ! Initialize multiphase fields
+        CALL set_field("D", description=descriptiond , units=unitsd, &
+            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("VFF", description=descriptionvff , units=unitsvff, &
             dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("PHI", description=descriptionphi , units=unitsphi, &
