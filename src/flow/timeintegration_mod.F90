@@ -13,6 +13,8 @@ MODULE timeintegration_mod
     USE boussinesqterm_mod, ONLY: boussinesqterm
     USE coriolisterm_mod, ONLY: coriolisterm
     USE multiphase_vof_transport_mod, ONLY: multiphase_vof_transport
+    USE multiphasecore_mod, ONLY: solve_multiphase
+    USE multiphase_tstle4_mod, ONLY: multiphase_tstle4
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -33,7 +35,7 @@ CONTAINS
         LOGICAL :: lastrk
         INTEGER(intk) :: ilevel
         REAL(realk) :: frhs, fu, dtrk, dtrki, timerk
-        TYPE(field_t), POINTER :: u, v, w, ut, vt, wt, pwu, pwv, pww, p, g, vff
+        TYPE(field_t), POINTER :: u, v, w, ut, vt, wt, pwu, pwv, pww, p, g, d, vff
         TYPE(field_t), POINTER :: du, dv, dw
         TYPE(field_t) :: uo, vo, wo
 
@@ -46,6 +48,7 @@ CONTAINS
         CALL get_field(w, "W")
         CALL get_field(p, "P")
         CALL get_field(g, "G")
+        CALL get_field(d, "D")
         CALL get_field(vff, "VFF")
 
         ! In all implemented RK schemes FRHS is 0.0 for IRK 1, this means
@@ -93,16 +96,21 @@ CONTAINS
             CALL setibvalues(u, v, w)
         END IF
 
-        ! TSTLE4 zeroize uo, vo, wo before use internally
-        CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g)
-        CALL boussinesqterm(uo, vo, wo)
-        CALL coriolisterm(uo, vo, wo)
+        IF ( solve_multiphase ) THEN
+            CALL multiphase_tstle4(uo, vo, wo, u, v, w, ut, vt, wt, &
+                vff, p, g, d)
+        ELSE 
+            ! TSTLE4 zeroize uo, vo, wo before use internally
+            CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g)
+            CALL boussinesqterm(uo, vo, wo)
+            CALL coriolisterm(uo, vo, wo)
 
-        ! dU_j = A_j*dU_(j-1) + dt*uo
-        ! U_j = U_(j-1) + B_j*dU_j
-        CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
-        CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
-        CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
+            ! dU_j = A_j*dU_(j-1) + dt*uo
+            ! U_j = U_(j-1) + B_j*dU_j
+            CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
+            CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
+            CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
+        END IF
 
         CALL multiphase_vof_transport(vff, u, v, w, dtrki, itstep)
 

@@ -16,6 +16,7 @@ MODULE multiphase_plic_mod
 
     USE precision_mod, ONLY: intk, realk
     USE err_mod, ONLY: errr
+    USE multiphase_material_mod, ONLY: compute_material_property_field
     
     IMPLICIT NONE
     PRIVATE 
@@ -23,7 +24,7 @@ MODULE multiphase_plic_mod
     PUBLIC :: init_multiphase_plic, finish_multiphase_plic, &
               track_interface, track_near_interface_region, interface_reconstruction_wrapper, &
               compute_normal_vector, compute_alpha, compute_cell_proportion, &
-              compute_iStag_vff, compute_jStag_vff, compute_kStag_vff
+              staggered_fractions_wrapper, compute_iStag_vff, compute_jStag_vff, compute_kStag_vff
 
 CONTAINS
 
@@ -367,6 +368,40 @@ CONTAINS
         CALL solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, cellProportion, tol)
 
     END SUBROUTINE compute_cell_proportion
+
+    !================================================================
+
+    SUBROUTINE staggered_fractions_wrapper(kk, jj, ii, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, propertyFluid1, propertyFluid2, &
+        vffiStag, vffjStag, vffkStag, propertyFieldiStag, propertyFieldjStag, propertyFieldkStag)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   The subroutine is just a wrapper for the subroutines, which
+    !   are used to compute the staggered volume fraction fields and
+    !   their material properties.
+    !----------------------------------------------------------------
+    
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: alpha(kk, jj, ii), vff(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
+        REAL(realk), INTENT(in) :: tol, propertyFluid1, propertyFluid2
+        REAL(realk), INTENT(out) :: vffiStag(kk, jj, ii), vffjStag(kk, jj, ii), vffkStag(kk, jj, ii)
+        REAL(realk), INTENT(out) :: propertyFieldiStag(kk, jj, ii), propertyFieldjStag(kk, jj, ii), propertyFieldkStag(kk, jj, ii)
+        
+        ! Local variables
+        ! None
+
+        CALL compute_iStag_vff(kk, jj, ii, vffiStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+        CALL compute_jStag_vff(kk, jj, ii, vffjStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+        CALL compute_kStag_vff(kk, jj, ii, vffkStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+
+        CALL compute_material_property_field(kk, jj, ii, propertyFieldiStag, vffiStag, propertyFluid1, propertyFluid2)
+        CALL compute_material_property_field(kk, jj, ii, propertyFieldjStag, vffjStag, propertyFluid1, propertyFluid2)
+        CALL compute_material_property_field(kk, jj, ii, propertyFieldkStag, vffkStag, propertyFluid1, propertyFluid2)
+
+    END SUBROUTINE staggered_fractions_wrapper
 
     !================================================================
 
