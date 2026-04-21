@@ -136,6 +136,45 @@ CONTAINS
             CALL rddy_f%get_ptr(rddy, igrid)
             CALL rddz_f%get_ptr(rddz, igrid)
 
+            IF (.NOT. ALLOCATED(normx)) ALLOCATE(normx(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normy)) ALLOCATE(normy(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normz)) ALLOCATE(normz(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(normxiStag)) ALLOCATE(normxiStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normyiStag)) ALLOCATE(normyiStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normziStag)) ALLOCATE(normziStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(normxjStag)) ALLOCATE(normxjStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normyjStag)) ALLOCATE(normyjStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normzjStag)) ALLOCATE(normzjStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(normxkStag)) ALLOCATE(normxkStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normykStag)) ALLOCATE(normykStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normzkStag)) ALLOCATE(normzkStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(alpha))      ALLOCATE(alpha(kk,jj,ii))
+            IF (.NOT. ALLOCATED(alphaiStag)) ALLOCATE(alphaiStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(alphajStag)) ALLOCATE(alphajStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(alphakStag)) ALLOCATE(alphakStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(isInterface))      ALLOCATE(isInterface(kk,jj,ii))
+            IF (.NOT. ALLOCATED(isInterfaceiStag)) ALLOCATE(isInterfaceiStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(isInterfacejStag)) ALLOCATE(isInterfacejStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(isInterfacekStag)) ALLOCATE(isInterfacekStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(isNearInterface))      ALLOCATE(isNearInterface(kk,jj,ii))
+            IF (.NOT. ALLOCATED(isNearInterfaceiStag)) ALLOCATE(isNearInterfaceiStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(isNearInterfacejStag)) ALLOCATE(isNearInterfacejStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(isNearInterfacekStag)) ALLOCATE(isNearInterfacekStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(vffiStag)) ALLOCATE(vffiStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(vffjStag)) ALLOCATE(vffjStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(vffkStag)) ALLOCATE(vffkStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(densityFieldiStag)) ALLOCATE(densityFieldiStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(densityFieldjStag)) ALLOCATE(densityFieldjStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(densityFieldkStag)) ALLOCATE(densityFieldkStag(kk,jj,ii))
+
             CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
 
             CALL staggered_fractions_wrapper(kk, jj, ii, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, rho1, rho2, &
@@ -271,8 +310,12 @@ CONTAINS
                     tauzxb = gb * ( (u(k,j,i) - u(k-1,j,i)) * rdz(k-1) + (w(k-1,j,i+1) - w(k-1,j,i)) * rdx(i) )
 
                     ! Change due to diffusion
-                    !                                    ---------------------------------------outer derivatives----------------------------------------
-                    duo = - 1/densityFieldiStag(k,j,i) * ( ( tauxxe - tauxxw ) * rdx(i) + ( tauyxn - tauyxs ) * rddy(j) + ( tauzxt - tauzxb ) * rddz(k) )
+                    !                                  ---------------------------------------outer derivatives----------------------------------------
+                    duo = 1/densityFieldiStag(k,j,i) * ( ( tauxxe - tauxxw ) * rdx(i) + ( tauyxn - tauyxs ) * rddy(j) + ( tauzxt - tauzxb ) * rddz(k) )
+
+                    IF ( duo > 0.0 ) THEN
+                        WRITE(*,*) duo
+                    END IF
 
                     ! Addition
                     uo(k, j, i) = uo(k, j, i) + duo
@@ -320,8 +363,8 @@ CONTAINS
                     tauzyb = gb * ( (v(k,j,i) - v(k-1,j,i)) * rdz(k-1) + (w(k-1,j+1,i) - w(k-1,j,i)) * rdy(j) )
 
                     ! Change due to diffusion
-                    !                                    ---------------------------------------outer derivatives----------------------------------------
-                    dvo = - 1/densityFieldjStag(k,j,i) * ( ( tauxye - tauxyw ) * rddx(i) + ( tauyyn - tauyys ) * rdy(j) + ( tauzyt - tauzyb ) * rddz(k) )
+                    !                                  ---------------------------------------outer derivatives----------------------------------------
+                    dvo = 1/densityFieldjStag(k,j,i) * ( ( tauxye - tauxyw ) * rddx(i) + ( tauyyn - tauyys ) * rdy(j) + ( tauzyt - tauzyb ) * rddz(k) )
 
                     ! Addition
                     vo(k, j, i) = vo(k, j, i) + dvo
@@ -366,8 +409,8 @@ CONTAINS
                     tauzzb = gb * 2 * (w(k,j,i) - w(k-1,j,i)) * rddz(k)
 
                     ! Change due to diffusion
-                    !                                    ---------------------------------------outer derivatives----------------------------------------
-                    dwo = - 1/densityFieldkStag(k,j,i) * ( ( tauxze - tauxzw ) * rddx(i) + ( tauyzn - tauyzs ) * rddy(j) + ( tauzzt - tauzzb ) * rdz(k) )
+                    !                                  ---------------------------------------outer derivatives----------------------------------------
+                    dwo = 1/densityFieldkStag(k,j,i) * ( ( tauxze - tauxzw ) * rddx(i) + ( tauyzn - tauyzs ) * rddy(j) + ( tauzzt - tauzzb ) * rdz(k) )
 
                     ! Addition
                     wo(k, j, i) = wo(k, j, i) + dwo

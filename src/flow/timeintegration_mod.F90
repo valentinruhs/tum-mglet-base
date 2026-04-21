@@ -15,6 +15,7 @@ MODULE timeintegration_mod
     USE multiphase_vof_transport_mod, ONLY: multiphase_vof_transport
     USE multiphasecore_mod, ONLY: solve_multiphase
     USE multiphase_tstle4_mod, ONLY: multiphase_tstle4
+    USE multiphase_io_mod, ONLY: initialize_velocity_in_fluid_1
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -97,6 +98,11 @@ CONTAINS
         END IF
 
         IF ( solve_multiphase ) THEN
+            IF ( itstep == 1 .AND. irk == 1 ) THEN
+                WRITE(*,*) "Init"
+                CALL initialize_velocity_in_fluid_1(u, v, w, vff)
+            END IF
+
             CALL multiphase_tstle4(uo, vo, wo, u, v, w, ut, vt, wt, &
                 vff, p, g, d)
         ELSE 
@@ -104,13 +110,13 @@ CONTAINS
             CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g)
             CALL boussinesqterm(uo, vo, wo)
             CALL coriolisterm(uo, vo, wo)
+        END IF
 
             ! dU_j = A_j*dU_(j-1) + dt*uo
             ! U_j = U_(j-1) + B_j*dU_j
             CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
             CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
             CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
-        END IF
 
         CALL multiphase_vof_transport(vff, u, v, w, dtrki, itstep)
 
