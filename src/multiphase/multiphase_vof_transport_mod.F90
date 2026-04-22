@@ -24,7 +24,7 @@ MODULE multiphase_vof_transport_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: init_multiphase_vof_transport, finish_multiphase_vof_transport, multiphase_vof_transport
+    PUBLIC :: init_multiphase_vof_transport, finish_multiphase_vof_transport, multiphase_vof_transport, field_flux_wrapper, get_density_flux, get_advection_direction, compression_term_wrapper
 
 CONTAINS
 
@@ -128,7 +128,7 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: itstep
 
         ! Local variables
-        REAL(realk) :: strainRatex(kk, jj, ii), strainRatey(kk, jj, ii), strainRatez(kk, jj, ii)
+        REAL(realk) :: strainRateX(kk, jj, ii), strainRateY(kk, jj, ii), strainRateZ(kk, jj, ii)
         REAL(realk) :: nonDirectionalCompressionCoefficient(kk, jj, ii)
         LOGICAL :: isInterface(kk, jj, ii)
         REAL(realk) :: xVelocityCompressionTerm(kk, jj, ii), yVelocityCompressionTerm(kk, jj, ii), zVelocityCompressionTerm(kk, jj, ii)
@@ -136,34 +136,34 @@ CONTAINS
         REAL(realk) :: alpha(kk, jj, ii)
         REAL(realk) :: vffFluxx(kk, jj, ii), vffFluxy(kk, jj, ii), vffFluxz(kk, jj, ii)
         REAL(realk), PARAMETER :: tol = 1.0E-15
-        LOGICAL :: adv_x, adv_y, adv_z
-        INTEGER(intk) :: i, permutation_index
+        LOGICAL :: advX, advY, advZ
+        INTEGER(intk) :: i, permutationIndex
 
-        ! permutation_index only changes in a new time-step
-        permutation_index = mod(itstep-1, 3)
+        ! permutationIndex only changes in a new time-step
+        permutationIndex = mod(itstep-1, 3)
 
         ! Select permutation of split advection
-        SELECT CASE (permutation_index)
+        SELECT CASE (permutationIndex)
             CASE (0)
-                adv_x = .TRUE.
-                adv_y = .FALSE.
-                adv_z = .FALSE.
+                advX = .TRUE.
+                advY = .FALSE.
+                advZ = .FALSE.
             CASE (1)
-                adv_x = .FALSE.
-                adv_y = .TRUE.
-                adv_z = .FALSE.
+                advX = .FALSE.
+                advY = .TRUE.
+                advZ = .FALSE.
             CASE (2)
-                adv_x = .FALSE.
-                adv_y = .FALSE.
-                adv_z = .TRUE.
+                advX = .FALSE.
+                advY = .FALSE.
+                advZ = .TRUE.
         END SELECT
 
-        CALL compute_normal_strain_rates(kk, jj, ii, strainRatex, strainRatey, strainRatez, vff, u, v, w, ddx, ddy, ddz)
+        CALL compute_normal_strain_rates(kk, jj, ii, strainRateX, strainRateY, strainRateZ, u, v, w, ddx, ddy, ddz)
         CALL compute_non_directional_compression_coeffiecient(kk, jj, ii, nonDirectionalCompressionCoefficient, vff)
 
-        xVelocityCompressionTerm = nonDirectionalCompressionCoefficient * strainRatex
-        yVelocityCompressionTerm = nonDirectionalCompressionCoefficient * strainRatey
-        zVelocityCompressionTerm = nonDirectionalCompressionCoefficient * strainRatez
+        xVelocityCompressionTerm = nonDirectionalCompressionCoefficient * strainRateX
+        yVelocityCompressionTerm = nonDirectionalCompressionCoefficient * strainRateY
+        zVelocityCompressionTerm = nonDirectionalCompressionCoefficient * strainRateZ
 
         ! Advect interface in three spatial coordinates
         DO i = 1, 3
@@ -172,15 +172,15 @@ CONTAINS
             CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
 
             ! Decide over advection direction
-            IF ( adv_x ) THEN
+            IF ( advX ) THEN
                 ! Move in x direction
                 CALL compute_fluxx(vffFluxx, kk, jj, ii, vff, isInterface, u, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
                     nfro, nbac, nrgt, nlft, nbot, ntop)
-            ELSE IF ( adv_y ) THEN
+            ELSE IF ( advY ) THEN
                 ! Move in y direction
                 CALL compute_fluxy(vffFluxy, kk, jj, ii, vff, isInterface, v, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
                     nfro, nbac, nrgt, nlft, nbot, ntop)
-            ELSE IF ( adv_z ) THEN
+            ELSE IF ( advZ ) THEN
                 ! Move in z direction
                 CALL compute_fluxz(vffFluxz, kk, jj, ii, vff, isInterface, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
                     nfro, nbac, nrgt, nlft, nbot, ntop)
@@ -188,7 +188,7 @@ CONTAINS
 
             ! Calculate new new volume fraction field
             CALL update_field(kk, jj, ii, vff, vffFluxx, vffFluxy, vffFluxz, xVelocityCompressionTerm, yVelocityCompressionTerm, zVelocityCompressionTerm, & 
-            adv_x, adv_y, adv_z, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+            advX, advY, advZ, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
             CALL clip_volume_fraction_field(kk, ii, jj, vff, tol)
 
         END DO
@@ -197,7 +197,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_normal_strain_rates(kk, jj, ii, strainRatex, strainRatey, strainRatez, vff, u, v, w, ddx, ddy, ddz)
+    SUBROUTINE compute_normal_strain_rates(kk, jj, ii, strainRateX, strainRateY, strainRateZ, u, v, w, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine computes the normal strain rates of the 
@@ -206,8 +206,8 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(out) :: strainRatex(kk, jj, ii), strainRatey(kk, jj, ii), strainRatez(kk, jj, ii)
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii), u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(out) :: strainRateX(kk, jj, ii), strainRateY(kk, jj, ii), strainRateZ(kk, jj, ii)
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
 
         ! Local variables
@@ -216,14 +216,56 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    strainRatex(k,j,i) = ( u(k,j,i) - u(k,j,i-1) ) / ddx(i)
-                    strainRatey(k,j,i) = ( v(k,j,i) - v(k,j-1,i) ) / ddy(j)
-                    strainRatez(k,j,i) = ( w(k,j,i) - w(k-1,j,i) ) / ddz(k)
+                    strainRateX(k,j,i) = ( u(k,j,i) - u(k,j,i-1) ) / ddx(i)
+                    strainRateY(k,j,i) = ( v(k,j,i) - v(k,j-1,i) ) / ddy(j)
+                    strainRateZ(k,j,i) = ( w(k,j,i) - w(k-1,j,i) ) / ddz(k)
                 END DO
             END DO
         END DO
 
     END SUBROUTINE compute_normal_strain_rates
+
+    !================================================================
+
+    SUBROUTINE compute_staggered_normal_strain_rates(kk, jj, ii, strainRateX, strainRateY, strainRateZ, u, v, w, dx, dy, dz, ddx, ddy, ddz, iStag, jStag, kStag)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   This subroutine computes the normal strain rates of the 
+    !   velocity field [u,v,w].
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(out) :: strainRateX(kk, jj, ii), strainRateY(kk, jj, ii), strainRateZ(kk, jj, ii)
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: iStag, jStag, kStag
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: uE, uW, vN, vS, wT, wB
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+
+                    uE = 0.5 * ( iStag * ( u(k,j,i) + u(k,j,i+1) ) + jStag * ( u(k,j,i) + u(k,j+1,i) ) + kStag * ( u(k,j,i) + u(k+1,j,i) ) ) 
+                    uW = 0.5 * ( iStag * ( u(k,j,i-1) + u(k,j,i) ) + jStag * ( u(k,j,i-1) + u(k,j+1,i-1) ) + kStag * ( u(k,j,i-1) + u(k+1,j,i-1) ) )
+                    vN = 0.5 * ( iStag * ( v(k,j,i) + v(k,j,i+1) ) + jStag * ( v(k,j,i) + v(k,j+1,i) ) + kStag * ( v(k,j,i) + v(k+1,j,i) ) )
+                    vS = 0.5 * ( iStag * ( v(k,j-1,i) + v(k,j-1,i+1) ) + jStag * ( v(k,j-1,i) + v(k,j,i) ) + kStag * ( v(k+1,j-1,i) + v(k,j-1,i) ) )
+                    wT = 0.5 * ( iStag * ( w(k,j,i) + w(k,j,i+1) ) + jStag * ( w(k,j,i) + w(k,j+1,i) ) + kStag * ( w(k,j,i) + w(k+1,j,i) ) ) 
+                    wB = 0.5 * ( iStag * ( w(k-1,j,i) + w(k-1,j,i+1) ) + jStag * ( w(k-1,j,i) + w(k-1,j+1,i) ) + kStag * ( w(k-1,j,i) + w(k,j,i) ) ) 
+
+                    strainRateX(k,j,i) = ( uE - uW ) / ( iStag * dx(i) + jStag * ddx(i) + kStag * ddx(i) )
+                    strainRateY(k,j,i) = ( vN - vS ) / ( iStag * ddy(j) + jStag * dy(j) + kStag * ddy(j) )
+                    strainRateZ(k,j,i) = ( wT - wB ) / ( iStag * ddz(k) + jStag * ddz(k) + kStag * dz(k) )
+
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE compute_staggered_normal_strain_rates
 
     !================================================================
 
@@ -535,7 +577,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE update_field(kk, jj, ii, field, fluxx, fluxy, fluxz, xCompressionTerm, yCompressionTerm, zCompressionTerm, & 
-            adv_x, adv_y, adv_z, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+            advX, advY, advZ, dt, nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine performs the summation of fluxes, updating a 
@@ -559,7 +601,7 @@ CONTAINS
         REAL(realk), INTENT(inout) :: field(kk, jj, ii)
         REAL(realk), INTENT(in) :: fluxx(kk, jj, ii), fluxy(kk, jj, ii), fluxz(kk, jj, ii)
         REAL(realk), INTENT(in) :: xCompressionTerm(kk, jj, ii), yCompressionTerm(kk, jj, ii), zCompressionTerm(kk, jj, ii)
-        LOGICAL, INTENT(inout) :: adv_x, adv_y, adv_z
+        LOGICAL, INTENT(inout) :: advX, advY, advZ
         REAL(realk), INTENT(in) :: dt
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
@@ -588,7 +630,7 @@ CONTAINS
         IF (ntop == 3) ntw = 1
         
         ! Update field with x fluxes
-        IF ( adv_x ) THEN 
+        IF ( advX ) THEN 
 
             DO i = 3-nfu, ii-3+nbu
                 DO j = 3, jj-2
@@ -598,12 +640,12 @@ CONTAINS
                 END DO 
             END DO
 
-            adv_x = .false.
-            adv_y = .true.
-            adv_z = .false.
+            advX = .false.
+            advY = .true.
+            advZ = .false.
 
         ! Update field with y fluxes
-        ELSEIF ( adv_y ) THEN
+        ELSEIF ( advY ) THEN
 
             DO i = 3, ii-2
                 DO j = 3-nrv, jj-3+nlv
@@ -613,12 +655,12 @@ CONTAINS
                 END DO 
             END DO
 
-            adv_x = .false.
-            adv_y = .false.
-            adv_z = .true.
+            advX = .false.
+            advY = .false.
+            advZ = .true.
 
         ! Update field with z fluxes
-        ELSEIF ( adv_z ) THEN
+        ELSEIF ( advZ ) THEN
 
             DO i = 3, ii-2
                 DO j = 3, jj-2
@@ -628,9 +670,9 @@ CONTAINS
                 END DO 
             END DO
 
-            adv_x = .true.
-            adv_y = .false.
-            adv_z = .false.
+            advX = .true.
+            advY = .false.
+            advZ = .false.
 
         END IF
 
@@ -669,29 +711,155 @@ CONTAINS
 
     !================================================================
 
-    ! SUBROUTINE get_density_flux(kk, jj, ii, flux, fluxComp, rho1, rho2, densityFlux)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !   
-    ! !----------------------------------------------------------------
+    SUBROUTINE field_flux_wrapper(kk, jj, ii, advX, advY, advZ, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, deltaX, deltaY, deltaZ, tol, nfro, nbac, nrgt, nlft, nbot, ntop, fieldFlux, complementFieldFlux)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   The subroutine is just a wrapper for the subroutines, which
+    !   are used to compute the flux of a volume fraction field and
+    !   its complement field in advection direction.
+    !----------------------------------------------------------------
 
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
-    !     REAL(realk), INTENT(in) :: flux(kk, jj, ii), fluxComp(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: rho1, rho2
-    !     REAL(realk), INTENT(out) :: densityFlux(kk, jj, ii)
-
-    !     ! Local variables
-    !     INTEGER(intk) :: k, j, i
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        LOGICAL, INTENT(in) :: advX, advY, advZ
+        REAL(realk), INTENT(in) :: field(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dt
+        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
+        REAL(realk), INTENT(in) :: deltaX(ii), deltaY(jj), deltaZ(kk)
+        REAL(realk), INTENT(in) :: tol
+        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        REAL(realk), INTENT(out) :: fieldFlux(kk, jj, ii)
+        REAL(realk), INTENT(out) :: complementFieldFlux(kk, jj, ii)
+ 
+        ! Local variables
+        REAL(realk) :: complementField(kk, jj, ii)
         
-    !     DO i = 1, ii
-    !         DO j = 1, jj
-    !             DO k = 1, kk
-    !                 densityFlux(k,j,i) = rho1 * flux(k,j,i) + rho2 * fluxComp(k,j,i)
-    !             END DO
-    !         END DO
-    !     END DO
+        IF ( advX ) THEN 
 
-    ! END SUBROUTINE get_density_flux
+            CALL compute_fluxx(fieldFLux, kk, jj, ii, field, isInterface, u, alpha, dt, normx, normy, normz, deltaX, deltaY, deltaZ, tol, & 
+                nfro, nbac, nrgt, nlft, nbot, ntop)
+            complementField = 1 - field
+            CALL compute_fluxx(complementFieldFlux, kk, jj, ii, complementField, isInterface, u, alpha, dt, normx, normy, normz, deltaX, deltaY, deltaZ, tol, & 
+                nfro, nbac, nrgt, nlft, nbot, ntop)
+
+        ELSE IF ( advY ) THEN
+
+            CALL compute_fluxy(fieldFLux, kk, jj, ii, field, isInterface, v, alpha, dt, normx, normy, normz, deltaX, deltaY, deltaZ, tol, & 
+                nfro, nbac, nrgt, nlft, nbot, ntop)
+            complementField = 1 - field
+            CALL compute_fluxy(complementFieldFlux, kk, jj, ii, complementField, isInterface, v, alpha, dt, normx, normy, normz, deltaX, deltaY, deltaZ, tol, & 
+                nfro, nbac, nrgt, nlft, nbot, ntop)
+
+        ELSE IF ( advZ ) THEN
+
+            CALL compute_fluxz(fieldFLux, kk, jj, ii, field, isInterface, w, alpha, dt, normx, normy, normz, deltaX, deltaY, deltaZ, tol, & 
+                nfro, nbac, nrgt, nlft, nbot, ntop)
+            complementField = 1 - field
+            CALL compute_fluxz(complementFieldFlux, kk, jj, ii, complementField, isInterface, w, alpha, dt, normx, normy, normz, deltaX, deltaY, deltaZ, tol, & 
+                nfro, nbac, nrgt, nlft, nbot, ntop)
+
+        END IF
+
+
+    END SUBROUTINE field_flux_wrapper
+
+    !================================================================
+
+    SUBROUTINE get_density_flux(kk, jj, ii, flux, fluxComp, rho1, rho2, densityFlux)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   The subroutine computes the density fluxes using the volume
+    !   fraction field fluxes and their complements.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: flux(kk, jj, ii), fluxComp(kk, jj, ii)
+        REAL(realk), INTENT(in) :: rho1, rho2
+        REAL(realk), INTENT(out) :: densityFlux(kk, jj, ii)
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        
+        DO i = 1, ii
+            DO j = 1, jj
+                DO k = 1, kk
+                    densityFlux(k,j,i) = rho1 * flux(k,j,i) + rho2 * fluxComp(k,j,i)
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE get_density_flux
+
+    !================================================================
+
+    SUBROUTINE get_advection_direction(iteration, advX, advY, advZ)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   The subroutine initializes the advection direction order for
+    !   each iteration. After three iterations the order starts over.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: iteration
+        LOGICAL, INTENT(inout) :: advX, advY, advZ
+
+        ! Local variables
+        INTEGER(intk) :: permutationIndex
+
+        ! permutationIndex only changes in a new time-step
+        permutationIndex = mod(iteration-1, 3)
+
+        ! Select permutation of split advection
+        SELECT CASE (permutationIndex)
+            CASE (0)
+                advX = .TRUE.
+                advY = .FALSE.
+                advZ = .FALSE.
+            CASE (1)
+                advX = .FALSE.
+                advY = .TRUE.
+                advZ = .FALSE.
+            CASE (2)
+                advX = .FALSE.
+                advY = .FALSE.
+                advZ = .TRUE.
+        END SELECT
+
+    END SUBROUTINE get_advection_direction
+
+    !================================================================
+
+    SUBROUTINE compression_term_wrapper(kk, jj, ii, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, iStag, jStag, kStag, propertyFluid1, propertyFluid2, densityCompressionTermX, densityCompressionTermY, densityCompressionTermZ)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii), vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: iStag, jStag, kStag
+        REAL(realk), INTENT(in) :: propertyFluid1, propertyFluid2
+        REAL(realk), INTENT(out) :: densityCompressionTermX(kk, jj, ii), densityCompressionTermY(kk, jj, ii), densityCompressionTermZ(kk, jj, ii)
+
+        ! Local variables
+        REAL(realk) :: strainRateX(kk, jj, ii), strainRateY(kk, jj, ii), strainRateZ(kk, jj, ii)
+        REAL(realk) :: nonDirectionalCompressionCoefficient(kk, jj, ii)
+
+
+        CALL compute_staggered_normal_strain_rates(kk, jj, ii, strainRateX, strainRateY, strainRateZ, u, v, w, dx, dy, dz, ddx, ddy, ddz, iStag, jStag, kStag)
+        CALL compute_non_directional_compression_coeffiecient(kk, jj, ii, nonDirectionalCompressionCoefficient, vff)
+
+        densityCompressionTermX = ( nonDirectionalCompressionCoefficient * propertyFluid1 + ( 1.0 - nonDirectionalCompressionCoefficient ) * propertyFluid2 ) * strainRateX
+        densityCompressionTermY = ( nonDirectionalCompressionCoefficient * propertyFluid1 + ( 1.0 - nonDirectionalCompressionCoefficient ) * propertyFluid2 ) * strainRateY
+        densityCompressionTermZ = ( nonDirectionalCompressionCoefficient * propertyFluid1 + ( 1.0 - nonDirectionalCompressionCoefficient ) * propertyFluid2 ) * strainRateZ
+
+    END SUBROUTINE compression_term_wrapper
 
 END MODULE multiphase_vof_transport_mod

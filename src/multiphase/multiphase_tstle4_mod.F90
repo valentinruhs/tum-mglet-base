@@ -21,6 +21,7 @@ MODULE multiphase_tstle4_mod
     USE lesmodel_mod, ONLY: ilesmodel
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
     USE multiphase_plic_mod, ONLY: interface_reconstruction_wrapper, staggered_fractions_wrapper
+    USE multiphase_vof_transport_mod, ONLY: field_flux_wrapper, get_density_flux, get_advection_direction, compression_term_wrapper
 
     IMPLICIT NONE
     PRIVATE
@@ -30,7 +31,7 @@ MODULE multiphase_tstle4_mod
 CONTAINS
     
     SUBROUTINE multiphase_tstle4(uo_f, vo_f, wo_f, u_f, v_f, w_f, ut_f, vt_f, wt_f, &
-        vff_f, p_f, g_f, d_f)
+        vff_f, p_f, g_f, d_f, dtrki, itstep)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -50,6 +51,8 @@ CONTAINS
         TYPE(field_t), INTENT(in) :: p_f
         TYPE(field_t), INTENT(in) :: g_f
         TYPE(field_t), INTENT(in) :: d_f
+        REAL(realk), INTENT(in) :: dtrki
+        INTEGER(intk), INTENT(in) :: itstep
 
         ! Local variables
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
@@ -62,10 +65,11 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:)
         REAL(realk), POINTER, CONTIGUOUS :: rddx(:), rddy(:), rddz(:)
-        INTEGER(intk) :: i, igrid
+        INTEGER(intk) :: i, igrid, advectionDirection
         INTEGER(intk) :: kk, jj, ii
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
         REAL(realk), PARAMETER :: tol = 1.0E-15
+        LOGICAL :: advX, advY, advZ
         REAL(realk), ALLOCATABLE :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
         REAL(realk), ALLOCATABLE :: normxiStag(:,:,:), normyiStag(:,:,:), normziStag(:,:,:)
         REAL(realk), ALLOCATABLE :: normxjStag(:,:,:), normyjStag(:,:,:), normzjStag(:,:,:)
@@ -75,6 +79,12 @@ CONTAINS
         LOGICAL, ALLOCATABLE :: isNearInterface(:,:,:), isNearInterfaceiStag(:,:,:), isNearInterfacejStag(:,:,:), isNearInterfacekStag(:,:,:)
         REAL(realk), ALLOCATABLE :: vffiStag(:,:,:), vffjStag(:,:,:), vffkStag(:,:,:)
         REAL(realk), ALLOCATABLE :: densityFieldiStag(:,:,:), densityFieldjStag(:,:,:), densityFieldkStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: vffiStagFlux(:,:,:), vffjStagFlux(:,:,:), vffkStagFlux(:,:,:)
+        REAL(realk), ALLOCATABLE :: complementvffiStagFlux(:,:,:), complementvffjStagFlux(:,:,:), complementvffkStagFlux(:,:,:)
+        REAL(realk), ALLOCATABLE :: densityFluxiStag(:,:,:), densityFluxjStag(:,:,:), densityFluxkStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: densityCompressionTermXiStag(:,:,:), densityCompressionTermXjStag(:,:,:), densityCompressionTermXkStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: densityCompressionTermYiStag(:,:,:), densityCompressionTermYjStag(:,:,:), densityCompressionTermYkStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: densityCompressionTermZiStag(:,:,:), densityCompressionTermZjStag(:,:,:), densityCompressionTermZkStag(:,:,:)
 
         ! Set all the output to zero everywhere before we start!
         uo_f = 0.0_realk
@@ -175,16 +185,60 @@ CONTAINS
             IF (.NOT. ALLOCATED(densityFieldjStag)) ALLOCATE(densityFieldjStag(kk,jj,ii))
             IF (.NOT. ALLOCATED(densityFieldkStag)) ALLOCATE(densityFieldkStag(kk,jj,ii))
 
-            CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+            IF (.NOT. ALLOCATED(vffiStagFlux)) ALLOCATE(vffiStagFlux(kk,jj,ii))
+            IF (.NOT. ALLOCATED(vffjStagFlux)) ALLOCATE(vffjStagFlux(kk,jj,ii))
+            IF (.NOT. ALLOCATED(vffkStagFlux)) ALLOCATE(vffkStagFlux(kk,jj,ii))
 
-            CALL staggered_fractions_wrapper(kk, jj, ii, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, rho1, rho2, &
-                vffiStag, vffjStag, vffkStag, densityFieldiStag, densityFieldjStag, densityFieldkStag)
+            IF (.NOT. ALLOCATED(complementvffiStagFlux)) ALLOCATE(complementvffiStagFlux(kk,jj,ii))
+            IF (.NOT. ALLOCATED(complementvffjStagFlux)) ALLOCATE(complementvffjStagFlux(kk,jj,ii))
+            IF (.NOT. ALLOCATED(complementvffkStagFlux)) ALLOCATE(complementvffkStagFlux(kk,jj,ii))
 
-            CALL interface_reconstruction_wrapper(kk, jj, ii, vffiStag, dx, ddy, ddz, tol, normxiStag, normyiStag, normziStag, alphaiStag, isInterfaceiStag, isNearInterfaceiStag)
-            CALL interface_reconstruction_wrapper(kk, jj, ii, vffjStag, ddx, dy, ddz, tol, normxjStag, normyjStag, normzjStag, alphajStag, isInterfacejStag, isNearInterfacejStag)
-            CALL interface_reconstruction_wrapper(kk, jj, ii, vffkStag, ddx, ddy, dz, tol, normxkStag, normykStag, normzkStag, alphakStag, isInterfacekStag, isNearInterfacekStag)
+            IF (.NOT. ALLOCATED(densityFluxiStag)) ALLOCATE(densityFluxiStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(densityFluxjStag)) ALLOCATE(densityFluxjStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(densityFluxkStag)) ALLOCATE(densityFluxkStag(kk,jj,ii))
 
-            CALL multiphase_tstle4_kon()
+            IF (.NOT. ALLOCATED(densityCompressionTermXiStag)) ALLOCATE(densityCompressionTermXiStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(densityCompressionTermXjStag)) ALLOCATE(densityCompressionTermXjStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(densityCompressionTermXkStag)) ALLOCATE(densityCompressionTermXkStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(densityCompressionTermYiStag)) ALLOCATE(densityCompressionTermYiStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(densityCompressionTermYjStag)) ALLOCATE(densityCompressionTermYjStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(densityCompressionTermYkStag)) ALLOCATE(densityCompressionTermYkStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(densityCompressionTermZiStag)) ALLOCATE(densityCompressionTermZiStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(densityCompressionTermZjStag)) ALLOCATE(densityCompressionTermZjStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(densityCompressionTermZkStag)) ALLOCATE(densityCompressionTermZkStag(kk,jj,ii))
+
+            CALL get_advection_direction(itstep, advX, advY, advZ)
+
+            DO advectionDirection = 2, 4
+
+                CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+
+                CALL staggered_fractions_wrapper(kk, jj, ii, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, rho1, rho2, &
+                    vffiStag, vffjStag, vffkStag, densityFieldiStag, densityFieldjStag, densityFieldkStag)
+
+                CALL interface_reconstruction_wrapper(kk, jj, ii, vffiStag, dx, ddy, ddz, tol, normxiStag, normyiStag, normziStag, alphaiStag, isInterfaceiStag, isNearInterfaceiStag)
+                CALL interface_reconstruction_wrapper(kk, jj, ii, vffjStag, ddx, dy, ddz, tol, normxjStag, normyjStag, normzjStag, alphajStag, isInterfacejStag, isNearInterfacejStag)
+                CALL interface_reconstruction_wrapper(kk, jj, ii, vffkStag, ddx, ddy, dz, tol, normxkStag, normykStag, normzkStag, alphakStag, isInterfacekStag, isNearInterfacekStag)
+
+                CALL field_flux_wrapper(kk, jj, ii, advX, advY, advZ, vffiStag, isInterfaceiStag, u, v, w, alphaiStag, dtrki, normxiStag, normyiStag, normziStag, dx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop, vffiStagFlux, complementvffiStagFlux)
+                CALL field_flux_wrapper(kk, jj, ii, advX, advY, advZ, vffjStag, isInterfacejStag, u, v, w, alphajStag, dtrki, normxjStag, normyjStag, normzjStag, dx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop, vffjStagFlux, complementvffjStagFlux)
+                CALL field_flux_wrapper(kk, jj, ii, advX, advY, advZ, vffkStag, isInterfacekStag, u, v, w, alphakStag, dtrki, normxkStag, normykStag, normzkStag, dx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop, vffkStagFlux, complementvffkStagFlux)
+
+                CALL get_density_flux(kk, jj, ii, vffiStagFlux, complementvffiStagFlux, rho1, rho2, densityFluxiStag)
+                CALL get_density_flux(kk, jj, ii, vffjStagFlux, complementvffjStagFlux, rho1, rho2, densityFluxjStag)
+                CALL get_density_flux(kk, jj, ii, vffkStagFlux, complementvffkStagFlux, rho1, rho2, densityFluxkStag)
+
+                CALL compression_term_wrapper(kk, jj, ii, u, v, w, vffiStag, dx, dy, dz, ddx, ddy, ddz, 1.0, 0.0, 0.0, rho1, rho2, densityCompressionTermXiStag, densityCompressionTermYiStag, densityCompressionTermZiStag)
+                CALL compression_term_wrapper(kk, jj, ii, u, v, w, vffjStag, dx, dy, dz, ddx, ddy, ddz, 0.0, 1.0, 0.0, rho1, rho2, densityCompressionTermXjStag, densityCompressionTermYjStag, densityCompressionTermZjStag)
+                CALL compression_term_wrapper(kk, jj, ii, u, v, w, vffjStag, dx, dy, dz, ddx, ddy, ddz, 0.0, 0.0, 1.0, rho1, rho2, densityCompressionTermXkStag, densityCompressionTermYkStag, densityCompressionTermZkStag)
+
+                CALL multiphase_tstle4_kon()
+
+                CALL get_advection_direction(advectionDirection, advX, advY, advZ)
+
+            END DO
 
             CALL multiphase_tstle4_diff(kk, jj, ii, uo, vo, wo, u, v, w, g, &
                 dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
@@ -476,5 +530,33 @@ CONTAINS
     !             0.5 * ( 1.0 - SIGN(1.0,advrB) ) * 0.75 * adveField(k,j,i) + 0.375 * adveField(k-1,j,i) - 0.125 * adveField(k+1,j,i)
 
     ! END SUBROUTINE quick_interpolation_scheme
+
+    !================================================================
+
+    ! PURE SUBROUTINE advecting_interpolation_scheme(kk, jj, ii, k, j, i, adveField, &
+    !     advrE, advrW, advrN, advrS, advrT, advrB)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !   
+    ! !----------------------------------------------------------------
+
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
+    !     INTEGER(intk), INTENT(in) :: k, j, i
+    !     REAL(realk), INTENT(in) :: adveField(kk, jj, ii)
+    !     REAL(realk), INTENT(out) :: advrE, advrW, advrN, advrS, advrT, advrB
+
+    !     ! Loval variables
+    !     ! None
+
+    !     advrE = 0.5 * ( u(k,j,i) + u(k,j,i+1) )
+    !     advrW = 0.5 * ( u(k,j,i-1) + u(k,j,i) )
+    !     advrN = 0.5 * ( v(k,j,i) + v(k,j,i+1) )
+    !     advrS = 0.5 * ( v(k,j-1,i) + v(k,j-1,i+1) )
+    !     advrT = 0.5 * ( w(k,j,i) + w(k,j,i+1) )
+    !     advrB = 0.5 * ( w(k-1,j,i) + w(k-1,j,i+1) )
+
+    ! END SUBROUTINE advecting_interpolation_scheme
+
 
 END MODULE multiphase_tstle4_mod
