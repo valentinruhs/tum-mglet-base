@@ -241,7 +241,7 @@ CONTAINS
                 CALL multiphase_tstle4_kon(kk, jj, ii, uo, vo, wo, u, v, w, densityFluxiStag, densityFluxjStag, densityFluxkStag, &
                     densityCompressionTermXiStag, densityCompressionTermYiStag, densityCompressionTermZiStag, densityFieldiStag, &
                     isNearInterfaceiStag,dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
-                    nfro, nbac, nrgt, nlft, nbot, ntop)
+                    nfro, nbac, nrgt, nlft, nbot, ntop, advX, advY, advZ)
 
                 CALL get_advection_direction(advectionDirection, advX, advY, advZ)
 
@@ -262,7 +262,7 @@ CONTAINS
     SUBROUTINE multiphase_tstle4_kon(kk, jj, ii, uo, vo, wo, u, v, w, densityFluxiStag, densityFluxjStag, densityFluxkStag, &
         densityCompressionTermXiStag, densityCompressionTermYiStag, densityCompressionTermZiStag, densityFieldiStag, &
         isNearInterfaceiStag,dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
-        nfro, nbac, nrgt, nlft, nbot, ntop)
+        nfro, nbac, nrgt, nlft, nbot, ntop, advX, advY, advZ)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -281,6 +281,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
         REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        LOGICAL :: advX, advY, advZ
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -299,21 +300,37 @@ CONTAINS
                     CALL quick_advected_interpolation_scheme(kk, jj, ii, k, j, i, u, &
                         uAdvectedE, uAdvectedW, uAdvectedN, uAdvectedS, uAdvectedT, uAdvectedB, &
                         uAdvectingE, uAdvectingW, vAdvectingN, vAdvectingS, wAdvectingT, wAdvectingB)
-                    
-                    IF ( isNearInterfaceiStag(k,j,i) ) THEN
-                        duo = - ( uAdvectedE * densityFluxiStag(k,j,i) - uAdvectedW * densityFluxiStag(k,j,i-1) ) + &
-                                ( uAdvectedN * densityFluxjStag(k,j,i) - uAdvectedS * densityFluxjStag(k,j-1,i) ) + &
-                                ( uAdvectedT * densityFluxkStag(k,j,i) - uAdvectedB * densityFluxkStag(k-1,j,i) ) + &
-                                u(k,j,i) * densityCompressionTermXiStag(k,j,i) + u(k,j,i) * densityCompressionTermYiStag(k,j,i) + u(k,j,i) * densityCompressionTermZiStag(k,j,i)
 
-                        uo(k,j,i) = uo(k,j,i) + 1 / densityFieldiStag(k,j,i) * duo
-                    ELSE
-                        duo = - ( ( uAdvectedE * uAdvectingE - uAdvectedW * uAdvectingW ) * rdx(i) + &
-                                    ( uAdvectedN * vAdvectingN - uAdvectedS * vAdvectingS ) * rddy(j) + &
-                                    ( uAdvectedT * wAdvectingT - uAdvectedB * wAdvectingB ) * rddz(k) )
-
-                        uo(k,j,i) = uo(k,j,i) + duo
+                    IF ( advX ) THEN
+                        IF ( isNearInterfaceiStag(k,j,i) ) THEN
+                            duo = - ( uAdvectedE * densityFluxiStag(k,j,i) - uAdvectedW * densityFluxiStag(k,j,i-1) ) + &
+                                    ( uAdvectedT * densityFluxkStag(k,j,i) - uAdvectedB * densityFluxkStag(k-1,j,i) ) + &
+                                    u(k,j,i) * densityCompressionTermXiStag(k,j,i) + u(k,j,i)
+                            uo(k,j,i) = uo(k,j,i) + 1 / densityFieldiStag(k,j,i) * duo
+                        ELSE
+                            duo = - ( ( uAdvectedE * uAdvectingE - uAdvectedW * uAdvectingW ) * rdx(i) )
+                            uo(k,j,i) = uo(k,j,i) + duo
+                        END IF
+                    ELSE IF ( advY ) THEN
+                        IF ( isNearInterfaceiStag(k,j,i) ) THEN
+                            duo = - ( uAdvectedN * densityFluxjStag(k,j,i) - uAdvectedS * densityFluxjStag(k,j-1,i) ) + &
+                                    u(k,j,i) * densityCompressionTermYiStag(k,j,i)
+                            uo(k,j,i) = uo(k,j,i) + 1 / densityFieldiStag(k,j,i) * duo
+                        ELSE
+                            duo = - ( ( uAdvectedN * vAdvectingN - uAdvectedS * vAdvectingS ) * rddy(j) )
+                            uo(k,j,i) = uo(k,j,i) + duo
+                        END IF
+                    ELSE IF (advZ) THEN
+                        IF ( isNearInterfaceiStag(k,j,i) ) THEN
+                            duo = - ( uAdvectedT * densityFluxkStag(k,j,i) - uAdvectedB * densityFluxkStag(k-1,j,i) ) + &
+                                    u(k,j,i) * densityCompressionTermZiStag(k,j,i)
+                            uo(k,j,i) = uo(k,j,i) + 1 / densityFieldiStag(k,j,i) * duo
+                        ELSE
+                            duo = - ( ( uAdvectedT * wAdvectingT - uAdvectedB * wAdvectingB ) * rddz(k) )
+                            uo(k,j,i) = uo(k,j,i) + duo
+                        END IF
                     END IF
+
                 END DO
             END DO
         END DO
@@ -418,10 +435,6 @@ CONTAINS
                     ! Change due to diffusion
                     !                                  ---------------------------------------outer derivatives----------------------------------------
                     duo = 1/densityFieldiStag(k,j,i) * ( ( tauxxe - tauxxw ) * rdx(i) + ( tauyxn - tauyxs ) * rddy(j) + ( tauzxt - tauzxb ) * rddz(k) )
-
-                    IF ( duo > 0.0 ) THEN
-                        WRITE(*,*) duo
-                    END IF
 
                     ! Addition
                     uo(k, j, i) = uo(k, j, i) + duo

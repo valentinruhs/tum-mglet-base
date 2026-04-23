@@ -131,8 +131,13 @@ CONTAINS
             DO i = 1, ii
                 DO j = 1, jj
                     DO k = 1, kk
-                        IF ( vff(k,j,i) >= 0.9 ) THEN
-                            u(k,j,:) = 0.0016
+                        IF ( vff(k,j,i) >= 0.001 ) THEN
+                            u(k,j,i) = 0
+                            u(k,j,i-1) = 0
+                            v(k,j,i) = 0
+                            v(k,j-1,i) = 0
+                            w(k,j,i) = 0
+                            w(k-1,j,i) = 0
                         END IF
                     END DO
                 END DO
