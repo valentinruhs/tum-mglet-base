@@ -21,7 +21,7 @@ MODULE multiphase_tstle4_mod
     USE lesmodel_mod, ONLY: ilesmodel
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
     USE multiphase_plic_mod, ONLY: interface_reconstruction_wrapper, staggered_fractions_wrapper
-    USE multiphase_vof_transport_mod, ONLY: field_flux_wrapper, get_density_flux, get_advection_direction, compression_term_wrapper
+    USE multiphase_vof_transport_mod, ONLY: field_flux_wrapper, get_density_flux, get_advection_direction, compression_term_wrapper, update_field
 
     IMPLICIT NONE
     PRIVATE
@@ -234,7 +234,14 @@ CONTAINS
                 CALL compression_term_wrapper(kk, jj, ii, u, v, w, vffjStag, dx, dy, dz, ddx, ddy, ddz, 0.0, 1.0, 0.0, rho1, rho2, densityCompressionTermXjStag, densityCompressionTermYjStag, densityCompressionTermZjStag)
                 CALL compression_term_wrapper(kk, jj, ii, u, v, w, vffjStag, dx, dy, dz, ddx, ddy, ddz, 0.0, 0.0, 1.0, rho1, rho2, densityCompressionTermXkStag, densityCompressionTermYkStag, densityCompressionTermZkStag)
 
-                CALL multiphase_tstle4_kon()
+                CALL update_field(kk, jj, ii, densityFieldiStag, densityFluxiStag, densityFluxiStag, densityFluxiStag, densityCompressionTermXiStag, densityCompressionTermYiStag, densityCompressionTermZiStag, advX, advY, advZ, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
+                CALL update_field(kk, jj, ii, densityFieldjStag, densityFluxjStag, densityFluxjStag, densityFluxjStag, densityCompressionTermXjStag, densityCompressionTermYjStag, densityCompressionTermZjStag, advX, advY, advZ, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
+                CALL update_field(kk, jj, ii, densityFieldkStag, densityFluxkStag, densityFluxkStag, densityFluxkStag, densityCompressionTermXkStag, densityCompressionTermYkStag, densityCompressionTermZkStag, advX, advY, advZ, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
+
+                CALL multiphase_tstle4_kon(kk, jj, ii, uo, vo, wo, u, v, w, densityFluxiStag, densityFluxjStag, densityFluxkStag, &
+                    densityCompressionTermXiStag, densityCompressionTermYiStag, densityCompressionTermZiStag, densityFieldiStag, &
+                    isNearInterfaceiStag,dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
+                    nfro, nbac, nrgt, nlft, nbot, ntop)
 
                 CALL get_advection_direction(advectionDirection, advX, advY, advZ)
 
@@ -252,19 +259,64 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE multiphase_tstle4_kon()
+    SUBROUTINE multiphase_tstle4_kon(kk, jj, ii, uo, vo, wo, u, v, w, densityFluxiStag, densityFluxjStag, densityFluxkStag, &
+        densityCompressionTermXiStag, densityCompressionTermYiStag, densityCompressionTermZiStag, densityFieldiStag, &
+        isNearInterfaceiStag,dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
+        nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
     !    
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: densityFluxiStag(kk, jj, ii), densityFluxjStag(kk, jj, ii), densityFluxkStag(kk, jj, ii)
+        REAL(realk), INTENT(in) :: densityCompressionTermXiStag(kk, jj, ii), densityCompressionTermYiStag(kk, jj, ii), densityCompressionTermZiStag(kk, jj, ii)
+        REAL(realk), INTENT(in) :: densityFieldiStag(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isNearInterfaceiStag(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
+        REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
+        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
         ! Local variables
+        INTEGER(intk) :: k, j, i
+        INTEGER(intk) :: nbu, nfu!, nrv, nbw, ntw, nlv
+        REAL(realk) :: uAdvectingE, uAdvectingW, vAdvectingN, vAdvectingS, wAdvectingT, wAdvectingB
+        REAL(realk) :: uAdvectedE, uAdvectedW, uAdvectedN, uAdvectedS, uAdvectedT, uAdvectedB
+        REAL(realk) :: duo
 
+        DO i = 3-nfu, ii-3+nbu
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    
+                    CALL advecting_interpolation_scheme(kk, jj, ii, k, j, i, u, v, w, &
+                        uAdvectingE, uAdvectingW, vAdvectingN, vAdvectingS, wAdvectingT, wAdvectingB, iStag=1.0, jStag=0.0, kStag=0.0)
 
-        
+                    CALL quick_advected_interpolation_scheme(kk, jj, ii, k, j, i, u, &
+                        uAdvectedE, uAdvectedW, uAdvectedN, uAdvectedS, uAdvectedT, uAdvectedB, &
+                        uAdvectingE, uAdvectingW, vAdvectingN, vAdvectingS, wAdvectingT, wAdvectingB)
+                    
+                    IF ( isNearInterfaceiStag(k,j,i) ) THEN
+                        duo = - ( uAdvectedE * densityFluxiStag(k,j,i) - uAdvectedW * densityFluxiStag(k,j,i-1) ) + &
+                                ( uAdvectedN * densityFluxjStag(k,j,i) - uAdvectedS * densityFluxjStag(k,j-1,i) ) + &
+                                ( uAdvectedT * densityFluxkStag(k,j,i) - uAdvectedB * densityFluxkStag(k-1,j,i) ) + &
+                                u(k,j,i) * densityCompressionTermXiStag(k,j,i) + u(k,j,i) * densityCompressionTermYiStag(k,j,i) + u(k,j,i) * densityCompressionTermZiStag(k,j,i)
+
+                        uo(k,j,i) = uo(k,j,i) + 1 / densityFieldiStag(k,j,i) * duo
+                    ELSE
+                        duo = - ( ( uAdvectedE * uAdvectingE - uAdvectedW * uAdvectingW ) * rdx(i) + &
+                                    ( uAdvectedN * vAdvectingN - uAdvectedS * vAdvectingS ) * rddy(j) + &
+                                    ( uAdvectedT * wAdvectingT - uAdvectedB * wAdvectingB ) * rddz(k) )
+
+                        uo(k,j,i) = uo(k,j,i) + duo
+                    END IF
+                END DO
+            END DO
+        END DO
 
     END SUBROUTINE multiphase_tstle4_kon
 
@@ -494,69 +546,71 @@ CONTAINS
 
     !================================================================
 
-    ! PURE SUBROUTINE quick_interpolation_scheme(kk, jj, ii, k, j, i, adveField, &
-    !     adveE, adveW, adveN, adveS, adveT, adveB, &
-    !     advrE, advrW, advrN, advrS, advrT, advrB)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !   The subroutine performes a QUICK interpolation for the 
-    ! !   advected components of the momentum calculation.
-    ! !   adve = advected component (advectee)
-    ! !   advr = advecting component (advector)
-    ! !----------------------------------------------------------------
+    PURE SUBROUTINE quick_advected_interpolation_scheme(kk, jj, ii, k, j, i, adveVelocity, &
+        adveE, adveW, adveN, adveS, adveT, adveB, &
+        advrE, advrW, advrN, advrS, advrT, advrB)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   The subroutine performes a QUICK interpolation for the 
+    !   advected components of the momentum calculation.
+    !   adve = advected component (advectee)
+    !   advr = advecting component (advector)
+    !----------------------------------------------------------------
 
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
-    !     INTEGER(intk), INTENT(in) :: k, j, i
-    !     REAL(realk), INTENT(in) :: adveField(kk, jj, ii)
-    !     REAL(realk), INTENT(out) :: adveE, adveW, adveN, adveS, adveT, adveB
-    !     REAL(realk), INTENT(in) :: advrE, advrW, advrN, advrS, advrT, advrB
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: k, j, i
+        REAL(realk), INTENT(in) :: adveVelocity(kk, jj, ii)
+        REAL(realk), INTENT(out) :: adveE, adveW, adveN, adveS, adveT, adveB
+        REAL(realk), INTENT(in) :: advrE, advrW, advrN, advrS, advrT, advrB
 
-    !     ! Loval variables
-    !     ! None
+        ! Loval variables
+        ! None
 
-    !     !       -----indicator-function----   --------------------------QUICK 3^rd order interpolation-------------------------
-    !     adveE = 0.5 * ( 1.0 + SIGN(1.0,advrE) ) * 0.75 * adveField(k,j,i) + 0.375 * adveField(k,j,i+1) - 0.125 * adveField(k,j,i-1) + &
-    !             0.5 * ( 1.0 - SIGN(1.0,advrE) ) * 0.75 * adveField(k,j,i+1) + 0.375 * adveField(k,j,i) - 0.125 * adveField(k,j,i+2)
-    !     adveW = 0.5 * ( 1.0 + SIGN(1.0,advrW) ) * 0.75 * adveField(k,j,i-1) + 0.375 * adveField(k,j,i) - 0.125 * adveField(k,j,i-2) + &
-    !             0.5 * ( 1.0 - SIGN(1.0,advrW) ) * 0.75 * adveField(k,j,i) + 0.375 * adveField(k,j,i-1) - 0.125 * adveField(k,j,i+1)
-    !     adveN = 0.5 * ( 1.0 + SIGN(1.0,advrN) ) * 0.75 * adveField(k,j,i) + 0.375 * adveField(k,j+1,i) - 0.125 * adveField(k,j-1,i) + &
-    !             0.5 * ( 1.0 - SIGN(1.0,advrN) ) * 0.75 * adveField(k,j+1,i) + 0.375 * adveField(k,j,i) - 0.125 * adveField(k,j+2,i)
-    !     adveS = 0.5 * ( 1.0 + SIGN(1.0,advrS) ) * 0.75 * adveField(k,j-1,i) + 0.375 * adveField(k,j,i) - 0.125 * adveField(k,j-2,i) + &
-    !             0.5 * ( 1.0 - SIGN(1.0,advrS) ) * 0.75 * adveField(k,j,i) + 0.375 * adveField(k,j-1,i) - 0.125 * adveField(k,j+1,i)
-    !     adveT = 0.5 * ( 1.0 + SIGN(1.0,advrT) ) * 0.75 * adveField(k,j,i) + 0.375 * adveField(k+1,j,i) - 0.125 * adveField(k-1,j,i) + &
-    !             0.5 * ( 1.0 - SIGN(1.0,advrT) ) * 0.75 * adveField(k+1,j,i) + 0.375 * adveField(k,j,i) - 0.125 * adveField(k+2,j,i)
-    !     adveB = 0.5 * ( 1.0 + SIGN(1.0,advrB) ) * 0.75 * adveField(k-1,j,i) + 0.375 * adveField(k,j,i) - 0.125 * adveField(k-2,j,i) + &
-    !             0.5 * ( 1.0 - SIGN(1.0,advrB) ) * 0.75 * adveField(k,j,i) + 0.375 * adveField(k-1,j,i) - 0.125 * adveField(k+1,j,i)
+        !       -------indicator-function------   ------------------------------QUICK 3^rd order interpolation------------------------------
+        adveE = 0.5 * ( 1.0 + SIGN(1.0,advrE) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k,j,i+1) - 0.125 * adveVelocity(k,j,i-1) + &
+                0.5 * ( 1.0 - SIGN(1.0,advrE) ) * 0.75 * adveVelocity(k,j,i+1) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k,j,i+2)
+        adveW = 0.5 * ( 1.0 + SIGN(1.0,advrW) ) * 0.75 * adveVelocity(k,j,i-1) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k,j,i-2) + &
+                0.5 * ( 1.0 - SIGN(1.0,advrW) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k,j,i-1) - 0.125 * adveVelocity(k,j,i+1)
+        adveN = 0.5 * ( 1.0 + SIGN(1.0,advrN) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k,j+1,i) - 0.125 * adveVelocity(k,j-1,i) + &
+                0.5 * ( 1.0 - SIGN(1.0,advrN) ) * 0.75 * adveVelocity(k,j+1,i) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k,j+2,i)
+        adveS = 0.5 * ( 1.0 + SIGN(1.0,advrS) ) * 0.75 * adveVelocity(k,j-1,i) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k,j-2,i) + &
+                0.5 * ( 1.0 - SIGN(1.0,advrS) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k,j-1,i) - 0.125 * adveVelocity(k,j+1,i)
+        adveT = 0.5 * ( 1.0 + SIGN(1.0,advrT) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k+1,j,i) - 0.125 * adveVelocity(k-1,j,i) + &
+                0.5 * ( 1.0 - SIGN(1.0,advrT) ) * 0.75 * adveVelocity(k+1,j,i) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k+2,j,i)
+        adveB = 0.5 * ( 1.0 + SIGN(1.0,advrB) ) * 0.75 * adveVelocity(k-1,j,i) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k-2,j,i) + &
+                0.5 * ( 1.0 - SIGN(1.0,advrB) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k-1,j,i) - 0.125 * adveVelocity(k+1,j,i)
 
-    ! END SUBROUTINE quick_interpolation_scheme
+    END SUBROUTINE quick_advected_interpolation_scheme
 
     !================================================================
 
-    ! PURE SUBROUTINE advecting_interpolation_scheme(kk, jj, ii, k, j, i, adveField, &
-    !     advrE, advrW, advrN, advrS, advrT, advrB)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !   
-    ! !----------------------------------------------------------------
+    PURE SUBROUTINE advecting_interpolation_scheme(kk, jj, ii, k, j, i, u, v, w, &
+        advrE, advrW, advrN, advrS, advrT, advrB, iStag, jStag, kStag)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   The subroutine performes the average interpolation for the 
+    !   advecting components of the momentum calculation.
+    !   advr = advecting component (advector)
+    !----------------------------------------------------------------
 
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
-    !     INTEGER(intk), INTENT(in) :: k, j, i
-    !     REAL(realk), INTENT(in) :: adveField(kk, jj, ii)
-    !     REAL(realk), INTENT(out) :: advrE, advrW, advrN, advrS, advrT, advrB
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: k, j, i
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(out) :: advrE, advrW, advrN, advrS, advrT, advrB
+        REAL(realk), INTENT(in), OPTIONAL :: iStag, jStag, kStag
 
-    !     ! Loval variables
-    !     ! None
+        ! Loval variables
+        ! None
 
-    !     advrE = 0.5 * ( u(k,j,i) + u(k,j,i+1) )
-    !     advrW = 0.5 * ( u(k,j,i-1) + u(k,j,i) )
-    !     advrN = 0.5 * ( v(k,j,i) + v(k,j,i+1) )
-    !     advrS = 0.5 * ( v(k,j-1,i) + v(k,j-1,i+1) )
-    !     advrT = 0.5 * ( w(k,j,i) + w(k,j,i+1) )
-    !     advrB = 0.5 * ( w(k-1,j,i) + w(k-1,j,i+1) )
+        advrE = 0.5 * ( iStag * ( u(k,j,i) + u(k,j,i+1) ) + jStag * ( u(k,j,i) + u(k,j+1,i) ) + kStag * ( u(k,j,i) + u(k+1,j,i) ) )
+        advrW = 0.5 * ( iStag * ( u(k,j,i-1) + u(k,j,i) ) + jStag * ( u(k,j,i-1) + u(k,j+1,i-1) ) + kStag * ( u(k,j,i-1) + u(k+1,j,i-1) ) )
+        advrN = 0.5 * ( iStag * ( v(k,j,i) + v(k,j,i+1) ) + jStag * ( v(k,j,i) + v(k,j+1,i) ) + kStag * ( v(k,j,i) + v(k+1,j,i) ) )
+        advrS = 0.5 * ( iStag * ( v(k,j-1,i) + v(k,j-1,i+1) ) + jStag * ( v(k,j-1,i) + v(k,j,i) ) + kStag * ( v(k,j-1,i) + v(k+1,j-1,i) ) )
+        advrT = 0.5 * ( iStag * ( w(k,j,i) + w(k,j,i+1) ) + jStag * ( w(k,j,i) + w(k,j+1,i) ) + kStag * ( w(k,j,i) + w(k+1,j,i) ) )
+        advrB = 0.5 * ( iStag * ( w(k-1,j,i) + w(k-1,j,i+1) ) + jStag * ( w(k-1,j,i) + w(k-1,j+1,i) ) + kStag * ( w(k-1,j,i) + w(k,j,i) ) )
 
-    ! END SUBROUTINE advecting_interpolation_scheme
-
+    END SUBROUTINE advecting_interpolation_scheme
 
 END MODULE multiphase_tstle4_mod

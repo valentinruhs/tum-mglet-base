@@ -24,7 +24,7 @@ MODULE multiphase_vof_transport_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: init_multiphase_vof_transport, finish_multiphase_vof_transport, multiphase_vof_transport, field_flux_wrapper, get_density_flux, get_advection_direction, compression_term_wrapper
+    PUBLIC :: init_multiphase_vof_transport, finish_multiphase_vof_transport, multiphase_vof_transport, field_flux_wrapper, get_density_flux, get_advection_direction, compression_term_wrapper, update_field
 
 CONTAINS
 
