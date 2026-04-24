@@ -1,0 +1,403 @@
+!====================================================================
+!  Module: multiphase_advection_mod
+!
+!  Responsibilities:
+!     - 
+!
+!  Author:      Valentin Ruhs
+!  Created:     2026-02
+!  Last update: 2026-02
+!
+!====================================================================
+
+MODULE multiphase_advection_mod
+
+    USE precision_mod, ONLY: intk, realk
+    USE grids_mod, ONLY: nmygrids, mygrids
+    USE field_mod, ONLY: field_t
+    USE fields_mod, ONLY: get_field
+    USE grids_mod, ONLY: get_mgdims, get_mgbasb
+    USE err_mod, ONLY: errr
+    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
+    USE multiphase_plic_mod, ONLY: interface_reconstruction_wrapper, staggered_fractions_wrapper
+    USE multiphase_vof_transport_mod, ONLY: field_flux_wrapper, get_density_flux, get_advection_sequence, compression_term_wrapper, update_field
+
+    IMPLICIT NONE
+    PRIVATE
+
+    PUBLIC :: multiphase_split_advection
+
+CONTAINS
+    
+    SUBROUTINE multiphase_split_advection(uo_f, vo_f, wo_f, u_f, v_f, w_f, ut_f, vt_f, wt_f, &
+        vff_f, p_f, g_f, d_f, dtrki, itstep)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        TYPE(field_t), INTENT(inout) :: uo_f
+        TYPE(field_t), INTENT(inout) :: vo_f
+        TYPE(field_t), INTENT(inout) :: wo_f
+        TYPE(field_t), INTENT(in) :: u_f
+        TYPE(field_t), INTENT(in) :: v_f
+        TYPE(field_t), INTENT(in) :: w_f
+        TYPE(field_t), INTENT(in) :: ut_f
+        TYPE(field_t), INTENT(in) :: vt_f
+        TYPE(field_t), INTENT(in) :: wt_f
+        TYPE(field_t), INTENT(in) :: vff_f
+        TYPE(field_t), INTENT(in) :: p_f
+        TYPE(field_t), INTENT(in) :: g_f
+        TYPE(field_t), INTENT(in) :: d_f
+        REAL(realk), INTENT(in) :: dtrki
+        INTEGER(intk), INTENT(in) :: itstep
+
+        ! Local variables
+        TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
+        TYPE(field_t), POINTER :: rdx_f, rdy_f, rdz_f, rddx_f, rddy_f, rddz_f
+        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: uo, vo, wo
+        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: u, v, w
+        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: ut, vt, wt
+        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: vff, p, g, d
+        REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: rddx(:), rddy(:), rddz(:)
+        INTEGER(intk) :: advSeq(3)
+        INTEGER(intk) :: i, igrid, s, grid, splitDir
+        INTEGER(intk) :: kk, jj, ii
+        INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        REAL(realk), PARAMETER :: tol = 1.0E-15
+        REAL(realk), ALLOCATABLE :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
+        REAL(realk), ALLOCATABLE :: normxStag(:,:,:), normyStag(:,:,:), normzStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: alpha(:,:,:), alphaStag(:,:,:)
+        LOGICAL, ALLOCATABLE :: isInterface(:,:,:), isInterfaceStag(:,:,:)
+        LOGICAL, ALLOCATABLE :: isNearInterface(:,:,:), isNearInterfaceStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: vffStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: densityFieldStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: vffFluxStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: complementvffFluxStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: densityFieldFluxStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: densityCompressionTermXStag(:,:,:), densityCompressionTermYStag(:,:,:), densityCompressionTermZStag(:,:,:)
+
+        ! Set all the output to zero everywhere before we start!
+        uo_f = 0.0_realk
+        vo_f = 0.0_realk
+        wo_f = 0.0_realk
+
+        CALL get_field(dx_f, "DX")
+        CALL get_field(dy_f, "DY")
+        CALL get_field(dz_f, "DZ")
+
+        CALL get_field(ddx_f, "DDX")
+        CALL get_field(ddy_f, "DDY")
+        CALL get_field(ddz_f, "DDZ")
+
+        CALL get_field(rdx_f, "RDX")
+        CALL get_field(rdy_f, "RDY")
+        CALL get_field(rdz_f, "RDZ")
+
+        CALL get_field(rddx_f, "RDDX")
+        CALL get_field(rddy_f, "RDDY")
+        CALL get_field(rddz_f, "RDDZ")
+
+        DO i = 1, nmygrids
+            igrid = mygrids(i)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+            CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
+
+            CALL uo_f%get_ptr(uo, igrid)
+            CALL vo_f%get_ptr(vo, igrid)
+            CALL wo_f%get_ptr(wo, igrid)
+
+            CALL u_f%get_ptr(u, igrid)
+            CALL v_f%get_ptr(v, igrid)
+            CALL w_f%get_ptr(w, igrid)
+
+            CALL ut_f%get_ptr(ut, igrid)
+            CALL vt_f%get_ptr(vt, igrid)
+            CALL wt_f%get_ptr(wt, igrid)
+
+            CALL vff_f%get_ptr(vff, igrid)
+            CALL p_f%get_ptr(p, igrid)
+            CALL g_f%get_ptr(g, igrid)
+            CALL d_f%get_ptr(d, igrid)
+
+            CALL dx_f%get_ptr(dx, igrid)
+            CALL dy_f%get_ptr(dy, igrid)
+            CALL dz_f%get_ptr(dz, igrid)
+
+            CALL ddx_f%get_ptr(ddx, igrid)
+            CALL ddy_f%get_ptr(ddy, igrid)
+            CALL ddz_f%get_ptr(ddz, igrid)
+
+            CALL rdx_f%get_ptr(rdx, igrid)
+            CALL rdy_f%get_ptr(rdy, igrid)
+            CALL rdz_f%get_ptr(rdz, igrid)
+
+            CALL rddx_f%get_ptr(rddx, igrid)
+            CALL rddy_f%get_ptr(rddy, igrid)
+            CALL rddz_f%get_ptr(rddz, igrid)
+
+            IF (.NOT. ALLOCATED(normx))     ALLOCATE(normx(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normy))     ALLOCATE(normy(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normz))     ALLOCATE(normz(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normxStag)) ALLOCATE(normxStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normyStag)) ALLOCATE(normyStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normzStag)) ALLOCATE(normzStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(alpha))     ALLOCATE(alpha(kk,jj,ii))
+            IF (.NOT. ALLOCATED(alphaStag)) ALLOCATE(alphaStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(isInterface))     ALLOCATE(isInterface(kk,jj,ii))
+            IF (.NOT. ALLOCATED(isInterfaceStag)) ALLOCATE(isInterfaceStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(isNearInterface))     ALLOCATE(isNearInterface(kk,jj,ii))
+            IF (.NOT. ALLOCATED(isNearInterfaceStag)) ALLOCATE(isNearInterfaceStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(vffStag)) ALLOCATE(vffStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(densityFieldStag)) ALLOCATE(densityFieldStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(vffFluxStag)) ALLOCATE(vffFluxStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(complementvffFluxStag)) ALLOCATE(complementvffFluxStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(densityFieldFluxStag)) ALLOCATE(densityFieldFluxStag(kk,jj,ii))
+
+            IF (.NOT. ALLOCATED(densityCompressionTermXStag)) ALLOCATE(densityCompressionTermXStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(densityCompressionTermYStag)) ALLOCATE(densityCompressionTermYStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(densityCompressionTermZStag)) ALLOCATE(densityCompressionTermZStag(kk,jj,ii))
+
+            CALL get_advection_sequence(itstep, advSeq)
+
+            splitAdvection: DO s = 1, 3
+                staggeredGrid: DO grid = 1, 3
+
+                    splitDir = advSeq(s)
+                    WRITE(*,*) "Advection: ", splitDir, "  Grid: ", grid
+
+                    CALL interface_reconstruction_wrapper(kk, jj, ii, splitDir, vff, dx, dy, dz, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+
+                    CALL staggered_fractions_wrapper(kk, jj, ii, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, rho1, rho2, &
+                        grid, vffStag, densityFieldStag)
+
+                    CALL interface_reconstruction_wrapper(kk, jj, ii, splitDir, vffStag, dx, dy, dz, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
+
+                    CALL field_flux_wrapper(kk, jj, ii, splitDir, vffStag, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop, vffFluxStag, complementvffFluxStag)
+                    
+                    CALL get_density_flux(kk, jj, ii, vffFluxStag, complementvffFluxStag, rho1, rho2, densityFieldFluxStag)
+                    
+                    CALL compression_term_wrapper(kk, jj, ii, grid, u, v, w, vffStag, dx, dy, dz, ddx, ddy, ddz, rho1, rho2, densityCompressionTermXStag, densityCompressionTermYStag, densityCompressionTermZStag)
+                    
+                    CALL update_field(kk, jj, ii, splitDir, densityFieldStag, densityFieldFluxStag, densityFieldFluxStag, densityFieldFluxStag, densityCompressionTermXStag, densityCompressionTermYStag, densityCompressionTermZStag, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
+                    
+                    CALL multiphase_advect(kk, jj, ii, splitDir, grid, u, v, w, densityFieldFluxStag, &
+                        densityCompressionTermXStag, densityCompressionTermYStag, densityCompressionTermZStag, densityFieldStag, &
+                        isNearInterfaceStag, dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
+                        nfro, nbac, nrgt, nlft, nbot, ntop)
+
+                END DO staggeredGrid
+            END DO splitAdvection
+
+        END DO
+
+    END SUBROUTINE multiphase_split_advection
+
+    !================================================================
+
+    SUBROUTINE multiphase_advect(kk, jj, ii, splitDir, grid, u, v, w, densityFieldFluxStag, &
+        densityCompressionTermXStag, densityCompressionTermYStag, densityCompressionTermZStag, densityFieldStag, &
+        isNearInterfaceStag, dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
+        nfro, nbac, nrgt, nlft, nbot, ntop)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: splitDir
+        INTEGER(intk), INTENT(in) :: grid
+        REAL(realk), INTENT(inout) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: densityFieldFluxStag(kk, jj, ii)
+        REAL(realk), INTENT(in) :: densityCompressionTermXStag(kk, jj, ii), densityCompressionTermYStag(kk, jj, ii), densityCompressionTermZStag(kk, jj, ii)
+        REAL(realk), INTENT(in) :: densityFieldStag(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isNearInterfaceStag(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
+        REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
+        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        INTEGER(intk) :: nbu, nfu!, nrv, nbw, ntw, nlv
+        REAL(realk) :: advrE, advrW, advrN, advrS, advrT, advrB
+        REAL(realk) :: adveE, adveW, adveN, adveS, adveT, adveB
+        REAL(realk) :: iStag, jStag, kStag
+        REAL(realk) :: velocity(kk, jj, ii)
+        REAL(realk) :: dVelocity
+
+        nfu = 0
+        nbu = 0
+        ! nrv = 0
+        ! nlv = 0
+        ! nbw = 0
+        ! ntw = 0
+
+        ! ! CON = 7
+        ! IF (nbac == 7) nbu = 1
+        ! IF (nlft == 7) nlv = 1
+        ! IF (ntop == 7) ntw = 1
+
+        ! OP1 = 3
+        IF (nfro == 3) nfu = 1
+        IF (nbac == 3) nbu = 1
+        ! IF (nrgt == 3) nrv = 1
+        ! IF (nlft == 3) nlv = 1
+        ! IF (nbot == 3) nbw = 1
+        ! IF (ntop == 3) ntw = 1
+
+        IF ( grid == 1 ) THEN
+            iStag = 1.0
+            jStag = 0.0
+            kStag = 0.0
+            velocity = u
+        ELSE IF ( grid == 2 ) THEN
+            iStag = 0.0
+            jStag = 1.0
+            kStag = 0.0
+            velocity = v
+        ELSE IF ( grid == 3 ) THEN
+            iStag = 0.0
+            jStag = 0.0
+            kStag = 1.0
+            velocity = w
+        END IF
+
+        IF ( splitDir == 1 ) THEN
+
+            DO i = 3-nfu, ii-3+nbu
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        
+                        CALL advecting_interpolation_scheme(kk, jj, ii, k, j, i, u, v, w, &
+                            advrE, advrW, advrN, advrS, advrT, advrB, iStag, jStag, kStag)
+
+                        CALL quick_advected_interpolation_scheme(kk, jj, ii, k, j, i, velocity, &
+                            adveE, adveW, adveN, adveS, adveT, adveB, &
+                            advrE, advrW, advrN, advrS, advrT, advrB)
+
+                        IF ( isNearInterfaceStag(k,j,i) ) THEN
+                            dVelocity = - ( adveE * densityFieldFluxStag(k,j,i) - adveW * densityFieldFluxStag(k,j,i-1) ) + velocity(k,j,i) * densityCompressionTermXStag(k,j,i)
+                            velocity(k,j,i) = velocity(k,j,i) + 1 / densityFieldStag(k,j,i) * dVelocity
+                        ELSE
+                            dVelocity = - ( ( adveE * advrE - adveW * advrW ) * rdx(i) )
+                            velocity(k,j,i) = velocity(k,j,i) + dVelocity
+                        END IF
+
+                        ! WRITE(*,*) dVelocity
+
+                    END DO
+                END DO
+            END DO
+
+        ELSE IF ( splitDir == 2 ) THEN
+
+                        ! IF ( isNearInterfaceiStag(k,j,i) ) THEN
+                        !     duo = - ( adveN * densityFluxiStag(k,j,i) - adveS * densityFluxiStag(k,j-1,i) ) + &
+                        !             u(k,j,i) * densityCompressionTermYiStag(k,j,i)
+                        !     uo(k,j,i) = uo(k,j,i) + 1 / densityFieldiStag(k,j,i) * duo
+                        ! ELSE
+                        !     duo = - ( ( adveN * advrN - adveS * advrS ) * rddy(j) )
+                        !     uo(k,j,i) = uo(k,j,i) + duo
+                        ! END IF
+
+                        ! IF ( isNearInterfaceiStag(k,j,i) ) THEN
+                        !     duo = - ( adveT * densityFluxiStag(k,j,i) - adveB * densityFluxiStag(k-1,j,i) ) + &
+                        !             u(k,j,i) * densityCompressionTermZiStag(k,j,i)
+                        !     uo(k,j,i) = uo(k,j,i) + 1 / densityFieldiStag(k,j,i) * duo
+                        ! ELSE
+                        !     duo = - ( ( adveT * advrT - adveB * advrB ) * rddz(k) )
+                        !     uo(k,j,i) = uo(k,j,i) + duo
+                        ! END IF
+
+        ELSE IF ( splitDir == 3 ) THEN
+
+        END IF
+
+    END SUBROUTINE multiphase_advect
+
+    !================================================================
+
+    PURE SUBROUTINE quick_advected_interpolation_scheme(kk, jj, ii, k, j, i, adveVelocity, &
+        adveE, adveW, adveN, adveS, adveT, adveB, &
+        advrE, advrW, advrN, advrS, advrT, advrB)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   The subroutine performes a QUICK interpolation for the 
+    !   advected components of the momentum calculation.
+    !   adve = advected component (advectee)
+    !   advr = advecting component (advector)
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: k, j, i
+        REAL(realk), INTENT(in) :: adveVelocity(kk, jj, ii)
+        REAL(realk), INTENT(out) :: adveE, adveW, adveN, adveS, adveT, adveB
+        REAL(realk), INTENT(in) :: advrE, advrW, advrN, advrS, advrT, advrB
+
+        ! Loval variables
+        ! None
+
+        !       -------indicator-function------   ------------------------------QUICK 3^rd order interpolation------------------------------
+        adveE = 0.5 * ( 1.0 + SIGN(1.0,advrE) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k,j,i+1) - 0.125 * adveVelocity(k,j,i-1) + &
+                0.5 * ( 1.0 - SIGN(1.0,advrE) ) * 0.75 * adveVelocity(k,j,i+1) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k,j,i+2)
+        adveW = 0.5 * ( 1.0 + SIGN(1.0,advrW) ) * 0.75 * adveVelocity(k,j,i-1) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k,j,i-2) + &
+                0.5 * ( 1.0 - SIGN(1.0,advrW) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k,j,i-1) - 0.125 * adveVelocity(k,j,i+1)
+        adveN = 0.5 * ( 1.0 + SIGN(1.0,advrN) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k,j+1,i) - 0.125 * adveVelocity(k,j-1,i) + &
+                0.5 * ( 1.0 - SIGN(1.0,advrN) ) * 0.75 * adveVelocity(k,j+1,i) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k,j+2,i)
+        adveS = 0.5 * ( 1.0 + SIGN(1.0,advrS) ) * 0.75 * adveVelocity(k,j-1,i) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k,j-2,i) + &
+                0.5 * ( 1.0 - SIGN(1.0,advrS) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k,j-1,i) - 0.125 * adveVelocity(k,j+1,i)
+        adveT = 0.5 * ( 1.0 + SIGN(1.0,advrT) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k+1,j,i) - 0.125 * adveVelocity(k-1,j,i) + &
+                0.5 * ( 1.0 - SIGN(1.0,advrT) ) * 0.75 * adveVelocity(k+1,j,i) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k+2,j,i)
+        adveB = 0.5 * ( 1.0 + SIGN(1.0,advrB) ) * 0.75 * adveVelocity(k-1,j,i) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k-2,j,i) + &
+                0.5 * ( 1.0 - SIGN(1.0,advrB) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k-1,j,i) - 0.125 * adveVelocity(k+1,j,i)
+
+    END SUBROUTINE quick_advected_interpolation_scheme
+
+    !================================================================
+
+    PURE SUBROUTINE advecting_interpolation_scheme(kk, jj, ii, k, j, i, u, v, w, &
+        advrE, advrW, advrN, advrS, advrT, advrB, iStag, jStag, kStag)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   The subroutine performes the average interpolation for the 
+    !   advecting components of the momentum calculation.
+    !   advr = advecting component (advector)
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: k, j, i
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(out) :: advrE, advrW, advrN, advrS, advrT, advrB
+        REAL(realk), INTENT(in) :: iStag, jStag, kStag
+
+        ! Loval variables
+        ! None
+
+        advrE = 0.5 * ( iStag * ( u(k,j,i) + u(k,j,i+1) ) + jStag * ( u(k,j,i) + u(k,j+1,i) ) + kStag * ( u(k,j,i) + u(k+1,j,i) ) )
+        advrW = 0.5 * ( iStag * ( u(k,j,i-1) + u(k,j,i) ) + jStag * ( u(k,j,i-1) + u(k,j+1,i-1) ) + kStag * ( u(k,j,i-1) + u(k+1,j,i-1) ) )
+        advrN = 0.5 * ( iStag * ( v(k,j,i) + v(k,j,i+1) ) + jStag * ( v(k,j,i) + v(k,j+1,i) ) + kStag * ( v(k,j,i) + v(k+1,j,i) ) )
+        advrS = 0.5 * ( iStag * ( v(k,j-1,i) + v(k,j-1,i+1) ) + jStag * ( v(k,j-1,i) + v(k,j,i) ) + kStag * ( v(k,j-1,i) + v(k+1,j-1,i) ) )
+        advrT = 0.5 * ( iStag * ( w(k,j,i) + w(k,j,i+1) ) + jStag * ( w(k,j,i) + w(k,j+1,i) ) + kStag * ( w(k,j,i) + w(k+1,j,i) ) )
+        advrB = 0.5 * ( iStag * ( w(k-1,j,i) + w(k-1,j,i+1) ) + jStag * ( w(k-1,j,i) + w(k-1,j+1,i) ) + kStag * ( w(k-1,j,i) + w(k,j,i) ) )
+
+    END SUBROUTINE advecting_interpolation_scheme
+
+END MODULE multiphase_advection_mod

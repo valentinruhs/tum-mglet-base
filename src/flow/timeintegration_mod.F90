@@ -12,9 +12,8 @@ MODULE timeintegration_mod
     USE setboundarybuffers_mod
     USE boussinesqterm_mod, ONLY: boussinesqterm
     USE coriolisterm_mod, ONLY: coriolisterm
-    USE multiphase_vof_transport_mod, ONLY: multiphase_vof_transport
+    USE multiphase_advection_mod, ONLY : multiphase_split_advection
     USE multiphasecore_mod, ONLY: solve_multiphase
-    USE multiphase_tstle4_mod, ONLY: multiphase_tstle4
     USE multiphase_io_mod, ONLY: initialize_velocity_in_fluid_1
 
     IMPLICIT NONE(type, external)
@@ -103,7 +102,7 @@ CONTAINS
                 CALL initialize_velocity_in_fluid_1(u, v, w, vff)
             END IF
 
-            CALL multiphase_tstle4(uo, vo, wo, u, v, w, ut, vt, wt, &
+            CALL multiphase_split_advection(uo, vo, wo, u, v, w, ut, vt, wt, &
                 vff, p, g, d, dtrki, itstep)
         ELSE 
             ! TSTLE4 zeroize uo, vo, wo before use internally
@@ -118,7 +117,7 @@ CONTAINS
             CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
             CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
 
-        CALL multiphase_vof_transport(vff, u, v, w, dtrki, itstep)
+        ! CALL multiphase_vof_transport(vff, u, v, w, dtrki, itstep)
 
         IF (ib%type == "GHOSTCELL") THEN
             ! Equivalent to old "cop3dzero"
@@ -144,7 +143,7 @@ CONTAINS
         END DO
 
         ! TODO: check dtrk
-        CALL mgpoisl(u, v, w, p, dtrk*dt, ittot, irk)
+        ! CALL mgpoisl(u, v, w, p, dtrk*dt, ittot, irk)
         CALL lesmodel(g)
 
         IF (ib%type == "GHOSTCELL") THEN

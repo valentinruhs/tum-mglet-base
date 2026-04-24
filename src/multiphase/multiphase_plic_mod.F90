@@ -132,7 +132,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE interface_reconstruction_wrapper(kk, jj, ii, vff, deltaX, deltaY, deltaZ, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+    SUBROUTINE interface_reconstruction_wrapper(kk, jj, ii, splitDir, vff, dx, dy, dz, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine is just a wrapper for the subroutines, which
@@ -141,8 +141,10 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: splitDir
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(in) :: deltaX(ii), deltaY(jj), deltaZ(kk)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
@@ -150,7 +152,21 @@ CONTAINS
         LOGICAL, INTENT(out), OPTIONAL :: isNearInterface(kk, jj, ii)
 
         ! Local variables
-        ! None
+        REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
+
+        IF ( splitDir == 1 ) THEN
+            deltaX = dx
+            deltaY = ddy
+            deltaZ = ddz
+        ELSE IF ( splitDir == 2 ) THEN
+            deltaX = ddx
+            deltaY = dy
+            deltaZ = ddz
+        ELSE IF ( splitDir == 3 ) THEN
+            deltaX = ddx
+            deltaY = ddy
+            deltaZ = dz
+        END IF
 
         CALL track_interface(isInterface, kk, jj, ii, vff, tol)
         CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, deltaX, deltaY, deltaZ, tol)
@@ -372,7 +388,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE staggered_fractions_wrapper(kk, jj, ii, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, propertyFluid1, propertyFluid2, &
-        vffiStag, vffjStag, vffkStag, propertyFieldiStag, propertyFieldjStag, propertyFieldkStag)
+        staggeredGrid, vffStag, propertyFieldStag)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine is just a wrapper for the subroutines, which
@@ -387,19 +403,22 @@ CONTAINS
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: tol, propertyFluid1, propertyFluid2
-        REAL(realk), INTENT(out) :: vffiStag(kk, jj, ii), vffjStag(kk, jj, ii), vffkStag(kk, jj, ii)
-        REAL(realk), INTENT(out) :: propertyFieldiStag(kk, jj, ii), propertyFieldjStag(kk, jj, ii), propertyFieldkStag(kk, jj, ii)
+        INTEGER(intk), INTENT(in) :: staggeredGrid
+        REAL(realk), INTENT(out) :: vffStag(kk, jj, ii)
+        REAL(realk), INTENT(out) :: propertyFieldStag(kk, jj, ii)
         
         ! Local variables
         ! None
 
-        CALL compute_iStag_vff(kk, jj, ii, vffiStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        CALL compute_jStag_vff(kk, jj, ii, vffjStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        CALL compute_kStag_vff(kk, jj, ii, vffkStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+        IF ( staggeredGrid == 1 ) THEN
+            CALL compute_iStag_vff(kk, jj, ii, vffStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+        ELSE IF ( staggeredGrid == 2 ) THEN
+            CALL compute_jStag_vff(kk, jj, ii, vffStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+        ELSE IF ( staggeredGrid == 3 ) THEN
+            CALL compute_kStag_vff(kk, jj, ii, vffStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+        END IF
 
-        CALL compute_material_property_field(kk, jj, ii, propertyFieldiStag, vffiStag, propertyFluid1, propertyFluid2)
-        CALL compute_material_property_field(kk, jj, ii, propertyFieldjStag, vffjStag, propertyFluid1, propertyFluid2)
-        CALL compute_material_property_field(kk, jj, ii, propertyFieldkStag, vffkStag, propertyFluid1, propertyFluid2)
+        CALL compute_material_property_field(kk, jj, ii, propertyFieldStag, vffStag, propertyFluid1, propertyFluid2)
 
     END SUBROUTINE staggered_fractions_wrapper
 

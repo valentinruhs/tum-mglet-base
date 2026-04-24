@@ -18,7 +18,6 @@ MODULE multiphase_tstle4_mod
     USE fields_mod, ONLY: get_field
     USE grids_mod, ONLY: get_mgdims, get_mgbasb
     USE err_mod, ONLY: errr
-    USE lesmodel_mod, ONLY: ilesmodel
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
     USE multiphase_plic_mod, ONLY: interface_reconstruction_wrapper, staggered_fractions_wrapper
     USE multiphase_vof_transport_mod, ONLY: field_flux_wrapper, get_density_flux, get_advection_direction, compression_term_wrapper, update_field
@@ -237,7 +236,7 @@ CONTAINS
                 CALL update_field(kk, jj, ii, densityFieldiStag, densityFluxiStag, densityFluxiStag, densityFluxiStag, densityCompressionTermXiStag, densityCompressionTermYiStag, densityCompressionTermZiStag, advX, advY, advZ, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
                 CALL update_field(kk, jj, ii, densityFieldjStag, densityFluxjStag, densityFluxjStag, densityFluxjStag, densityCompressionTermXjStag, densityCompressionTermYjStag, densityCompressionTermZjStag, advX, advY, advZ, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
                 CALL update_field(kk, jj, ii, densityFieldkStag, densityFluxkStag, densityFluxkStag, densityFluxkStag, densityCompressionTermXkStag, densityCompressionTermYkStag, densityCompressionTermZkStag, advX, advY, advZ, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
-
+                
                 CALL multiphase_tstle4_kon(kk, jj, ii, uo, vo, wo, u, v, w, densityFluxiStag, densityFluxjStag, densityFluxkStag, &
                     densityCompressionTermXiStag, densityCompressionTermYiStag, densityCompressionTermZiStag, densityFieldiStag, &
                     isNearInterfaceiStag,dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
@@ -246,6 +245,8 @@ CONTAINS
                 CALL get_advection_direction(advectionDirection, advX, advY, advZ)
 
             END DO
+
+            write(*,*) "vff: ", vff(5,4,5)
 
             CALL multiphase_tstle4_diff(kk, jj, ii, uo, vo, wo, u, v, w, g, &
                 dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
@@ -290,6 +291,26 @@ CONTAINS
         REAL(realk) :: uAdvectedE, uAdvectedW, uAdvectedN, uAdvectedS, uAdvectedT, uAdvectedB
         REAL(realk) :: duo
 
+        nfu = 0
+        nbu = 0
+        ! nrv = 0
+        ! nlv = 0
+        ! nbw = 0
+        ! ntw = 0
+
+        ! ! CON = 7
+        ! IF (nbac == 7) nbu = 1
+        ! IF (nlft == 7) nlv = 1
+        ! IF (ntop == 7) ntw = 1
+
+        ! OP1 = 3
+        IF (nfro == 3) nfu = 1
+        IF (nbac == 3) nbu = 1
+        ! IF (nrgt == 3) nrv = 1
+        ! IF (nlft == 3) nlv = 1
+        ! IF (nbot == 3) nbw = 1
+        ! IF (ntop == 3) ntw = 1
+
         DO i = 3-nfu, ii-3+nbu
             DO j = 3, jj-2
                 DO k = 3, kk-2
@@ -304,8 +325,7 @@ CONTAINS
                     IF ( advX ) THEN
                         IF ( isNearInterfaceiStag(k,j,i) ) THEN
                             duo = - ( uAdvectedE * densityFluxiStag(k,j,i) - uAdvectedW * densityFluxiStag(k,j,i-1) ) + &
-                                    ( uAdvectedT * densityFluxkStag(k,j,i) - uAdvectedB * densityFluxkStag(k-1,j,i) ) + &
-                                    u(k,j,i) * densityCompressionTermXiStag(k,j,i) + u(k,j,i)
+                                    u(k,j,i) * densityCompressionTermXiStag(k,j,i)
                             uo(k,j,i) = uo(k,j,i) + 1 / densityFieldiStag(k,j,i) * duo
                         ELSE
                             duo = - ( ( uAdvectedE * uAdvectingE - uAdvectedW * uAdvectingW ) * rdx(i) )
@@ -313,7 +333,7 @@ CONTAINS
                         END IF
                     ELSE IF ( advY ) THEN
                         IF ( isNearInterfaceiStag(k,j,i) ) THEN
-                            duo = - ( uAdvectedN * densityFluxjStag(k,j,i) - uAdvectedS * densityFluxjStag(k,j-1,i) ) + &
+                            duo = - ( uAdvectedN * densityFluxiStag(k,j,i) - uAdvectedS * densityFluxiStag(k,j-1,i) ) + &
                                     u(k,j,i) * densityCompressionTermYiStag(k,j,i)
                             uo(k,j,i) = uo(k,j,i) + 1 / densityFieldiStag(k,j,i) * duo
                         ELSE
@@ -322,7 +342,7 @@ CONTAINS
                         END IF
                     ELSE IF (advZ) THEN
                         IF ( isNearInterfaceiStag(k,j,i) ) THEN
-                            duo = - ( uAdvectedT * densityFluxkStag(k,j,i) - uAdvectedB * densityFluxkStag(k-1,j,i) ) + &
+                            duo = - ( uAdvectedT * densityFluxiStag(k,j,i) - uAdvectedB * densityFluxiStag(k-1,j,i) ) + &
                                     u(k,j,i) * densityCompressionTermZiStag(k,j,i)
                             uo(k,j,i) = uo(k,j,i) + 1 / densityFieldiStag(k,j,i) * duo
                         ELSE
@@ -334,6 +354,8 @@ CONTAINS
                 END DO
             END DO
         END DO
+
+        WRITE(*,*) uo(5,4,5)
 
     END SUBROUTINE multiphase_tstle4_kon
 
@@ -363,7 +385,6 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
-        INTEGER(intk) :: iles
         REAL(realk) :: ge, gw, gn, gs, gt, gb
         REAL(realk) :: tauxxe, tauxxw, tauyxn, tauyxs, tauzxt, tauzxb
         REAL(realk) :: tauxye, tauxyw, tauyyn, tauyys, tauzyt, tauzyb
@@ -389,9 +410,6 @@ CONTAINS
         IF (nlft == 3) nlv = 1
         IF (nbot == 3) nbw = 1
         IF (ntop == 3) ntw = 1
-
-        iles = 1
-        IF (ilesmodel == 0) iles = 0
 
         ! CALL swcle3d(kk, jj, ii, uo, vo, wo, u, v, w, &
         !     ddx, ddy, ddz, nfro, nbac, nrgt, nlft, nbot, ntop)
