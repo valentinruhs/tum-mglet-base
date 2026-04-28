@@ -102,6 +102,8 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         INTEGER(intk) :: kk, jj, ii
 
+        return
+
         CALL get_field(dx_f, "DX")
         CALL get_field(dy_f, "DY")
         CALL get_field(dz_f, "DZ")
@@ -132,12 +134,9 @@ CONTAINS
                 DO j = 1, jj
                     DO k = 1, kk
                         IF ( vff(k,j,i) >= 0.001 ) THEN
-                            u(k,j,i) = 0
-                            u(k,j,i-1) = 0
-                            v(k,j,i) = 0
-                            v(k,j-1,i) = 0
-                            w(k,j,i) = 0
-                            w(k-1,j,i) = 0
+                            u(k,j,i) = 0.016
+                            v(k,j,i) = 0.016
+                            w(k,j,i) = 0.016
                         END IF
                     END DO
                 END DO

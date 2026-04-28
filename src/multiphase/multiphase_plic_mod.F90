@@ -26,6 +26,12 @@ MODULE multiphase_plic_mod
               compute_normal_vector, compute_alpha, compute_cell_proportion, &
               staggered_fractions_wrapper, compute_iStag_vff, compute_jStag_vff, compute_kStag_vff
 
+
+    INTERFACE interface_reconstruction_wrapper
+        MODULE PROCEDURE interface_reconstruction_wrapper_pres
+        MODULE PROCEDURE interface_reconstruction_wrapper_stag
+    END INTERFACE
+
 CONTAINS
 
     SUBROUTINE init_multiphase_plic()
@@ -130,9 +136,10 @@ CONTAINS
 
     END SUBROUTINE track_near_interface_region
 
+    
     !================================================================
 
-    SUBROUTINE interface_reconstruction_wrapper(kk, jj, ii, splitDir, vff, dx, dy, dz, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+    SUBROUTINE interface_reconstruction_wrapper_pres(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine is just a wrapper for the subroutines, which
@@ -141,9 +148,7 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: splitDir
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
@@ -152,31 +157,65 @@ CONTAINS
         LOGICAL, INTENT(out), OPTIONAL :: isNearInterface(kk, jj, ii)
 
         ! Local variables
-        REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
-
-        IF ( splitDir == 1 ) THEN
-            deltaX = dx
-            deltaY = ddy
-            deltaZ = ddz
-        ELSE IF ( splitDir == 2 ) THEN
-            deltaX = ddx
-            deltaY = dy
-            deltaZ = ddz
-        ELSE IF ( splitDir == 3 ) THEN
-            deltaX = ddx
-            deltaY = ddy
-            deltaZ = dz
-        END IF
+        ! None
 
         CALL track_interface(isInterface, kk, jj, ii, vff, tol)
-        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, deltaX, deltaY, deltaZ, tol)
-        CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, deltaX, deltaY, deltaZ, normx, normy, normz, tol)
+        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
+        CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
 
         IF ( PRESENT(isNearInterface) ) THEN
             CALL track_near_interface_region(isNearInterface, kk, jj, ii, isInterface, tol)
         END IF
 
-    END SUBROUTINE interface_reconstruction_wrapper
+    END SUBROUTINE interface_reconstruction_wrapper_pres
+
+    !================================================================
+
+    SUBROUTINE interface_reconstruction_wrapper_stag(kk, jj, ii, component, vff, dx, dy, dz, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   The subroutine is just a wrapper for the subroutines, which
+    !   are used to reconstrunct the interface in cells.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: component
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: tol
+        REAL(realk), INTENT(out) :: normx(kk, jj, ii, 3), normy(kk, jj, ii, 3), normz(kk, jj, ii, 3)
+        REAL(realk), INTENT(out) :: alpha(kk, jj, ii, 3)
+        LOGICAL, INTENT(out) :: isInterface(kk, jj, ii, 3)
+        LOGICAL, INTENT(out), OPTIONAL :: isNearInterface(kk, jj, ii, 3)
+
+        ! Local variables
+        REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
+
+        IF ( component == 1 ) THEN
+            deltaX = dx
+            deltaY = ddy
+            deltaZ = ddz
+        ELSE IF ( component == 2 ) THEN
+            deltaX = ddx
+            deltaY = dy
+            deltaZ = ddz
+        ELSE IF ( component == 3 ) THEN
+            deltaX = ddx
+            deltaY = ddy
+            deltaZ = dz
+        END IF
+
+        CALL track_interface(isInterface(:,:,:,component), kk, jj, ii, vff(:,:,:,component), tol)
+        CALL compute_normal_vector(normx(:,:,:,component), normy(:,:,:,component), normz(:,:,:,component), kk, jj, ii, vff(:,:,:,component), deltaX, deltaY, deltaZ, tol)
+        CALL compute_alpha(alpha(:,:,:,component), kk, jj, ii, vff(:,:,:,component), isInterface(:,:,:,component), deltaX, deltaY, deltaZ, normx(:,:,:,component), normy(:,:,:,component), normz(:,:,:,component), tol)
+
+        IF ( PRESENT(isNearInterface) ) THEN
+            CALL track_near_interface_region(isNearInterface(:,:,:,component), kk, jj, ii, isInterface(:,:,:,component), tol)
+        END IF
+
+    END SUBROUTINE interface_reconstruction_wrapper_stag
 
     !================================================================
 
@@ -387,8 +426,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE staggered_fractions_wrapper(kk, jj, ii, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, propertyFluid1, propertyFluid2, &
-        staggeredGrid, vffStag, propertyFieldStag)
+    SUBROUTINE staggered_fractions_wrapper(kk, jj, ii, component, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine is just a wrapper for the subroutines, which
@@ -398,27 +436,24 @@ CONTAINS
     
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: component
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii), vff(kk, jj, ii)
         LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
-        REAL(realk), INTENT(in) :: tol, propertyFluid1, propertyFluid2
-        INTEGER(intk), INTENT(in) :: staggeredGrid
-        REAL(realk), INTENT(out) :: vffStag(kk, jj, ii)
-        REAL(realk), INTENT(out) :: propertyFieldStag(kk, jj, ii)
+        REAL(realk), INTENT(in) :: tol
+        REAL(realk), INTENT(out) :: vffStag(kk, jj, ii, 3)
         
         ! Local variables
         ! None
 
-        IF ( staggeredGrid == 1 ) THEN
-            CALL compute_iStag_vff(kk, jj, ii, vffStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        ELSE IF ( staggeredGrid == 2 ) THEN
-            CALL compute_jStag_vff(kk, jj, ii, vffStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
-        ELSE IF ( staggeredGrid == 3 ) THEN
-            CALL compute_kStag_vff(kk, jj, ii, vffStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+        IF ( component == 1 ) THEN
+            CALL compute_iStag_vff(kk, jj, ii, vffStag(:,:,:,1), alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+        ELSE IF ( component == 2 ) THEN
+            CALL compute_jStag_vff(kk, jj, ii, vffStag(:,:,:,2), alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+        ELSE IF ( component == 3 ) THEN
+            CALL compute_kStag_vff(kk, jj, ii, vffStag(:,:,:,3), alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
         END IF
-
-        CALL compute_material_property_field(kk, jj, ii, propertyFieldStag, vffStag, propertyFluid1, propertyFluid2)
 
     END SUBROUTINE staggered_fractions_wrapper
 

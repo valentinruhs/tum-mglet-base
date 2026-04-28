@@ -26,6 +26,11 @@ MODULE multiphase_material_mod
 
     PUBLIC :: init_multiphase_material, finish_multiphase_material, compute_material_property_field
 
+    INTERFACE compute_material_property_field
+        MODULE PROCEDURE compute_material_property_field_pres
+        MODULE PROCEDURE compute_material_property_field_stag
+    END INTERFACE
+
 CONTAINS
 
     SUBROUTINE init_multiphase_material()
@@ -75,7 +80,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_material_property_field(kk, jj, ii, propertyField, vff, propertyFluid1, propertyFluid2)
+    SUBROUTINE compute_material_property_field_pres(kk, jj, ii, propertyField, vff, propertyFluid1, propertyFluid2)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine computes the weighted material property for
@@ -99,6 +104,35 @@ CONTAINS
             END DO
         END DO
 
-    END SUBROUTINE compute_material_property_field
+    END SUBROUTINE compute_material_property_field_pres
+
+    !================================================================
+
+    SUBROUTINE compute_material_property_field_stag(kk, jj, ii, component, propertyField, vff, propertyFluid1, propertyFluid2)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   This subroutine computes the weighted material property for
+    !   all cells.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: component
+        REAL(realk), INTENT(out) :: propertyField(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: propertyFluid1, propertyFluid2
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+
+        DO i = 1, ii
+            DO j = 1, jj
+                DO k = 1, kk
+                    propertyField(k,j,i,component) = propertyFluid1 * vff(k,j,i,component) + propertyFluid2 * ( 1 - vff(k,j,i,component) )
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE compute_material_property_field_stag
 
 END MODULE multiphase_material_mod

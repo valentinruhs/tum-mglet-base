@@ -111,11 +111,11 @@ CONTAINS
             CALL coriolisterm(uo, vo, wo)
         END IF
 
-            ! dU_j = A_j*dU_(j-1) + dt*uo
-            ! U_j = U_(j-1) + B_j*dU_j
-            CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
-            CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
-            CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
+        ! dU_j = A_j*dU_(j-1) + dt*uo
+        ! U_j = U_(j-1) + B_j*dU_j
+        CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
+        CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
+        CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
 
         ! CALL multiphase_vof_transport(vff, u, v, w, dtrki, itstep)
 
