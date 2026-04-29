@@ -102,8 +102,6 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         INTEGER(intk) :: kk, jj, ii
 
-        return
-
         CALL get_field(dx_f, "DX")
         CALL get_field(dy_f, "DY")
         CALL get_field(dz_f, "DZ")
@@ -129,6 +127,8 @@ CONTAINS
             CALL ddx_f%get_ptr(ddx, igrid)
             CALL ddy_f%get_ptr(ddy, igrid)
             CALL ddz_f%get_ptr(ddz, igrid)
+
+            return
 
             DO i = 1, ii
                 DO j = 1, jj

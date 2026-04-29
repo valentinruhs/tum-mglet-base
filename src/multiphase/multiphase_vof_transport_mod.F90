@@ -31,9 +31,9 @@ MODULE multiphase_vof_transport_mod
         MODULE PROCEDURE field_flux_wrapper_stag
     END INTERFACE
 
-    INTERFACE compute_normal_strain_rates
-        MODULE PROCEDURE compute_normal_strain_rates_pres
-        MODULE PROCEDURE compute_normal_strain_rates_stag
+    INTERFACE compute_normal_strain_rate
+        MODULE PROCEDURE compute_normal_strain_rate_pres
+        MODULE PROCEDURE compute_normal_strain_rate_stag
     END INTERFACE
 
     INTERFACE compression_term_wrapper
@@ -44,6 +44,11 @@ MODULE multiphase_vof_transport_mod
     INTERFACE compute_non_directional_compression_coeffiecient
         MODULE PROCEDURE compute_non_directional_compression_coeffiecient_pres
         MODULE PROCEDURE compute_non_directional_compression_coeffiecient_stag
+    END INTERFACE
+
+    INTERFACE update_field
+        MODULE PROCEDURE update_field_pres
+        MODULE PROCEDURE update_field_stag
     END INTERFACE
 
 CONTAINS
@@ -74,7 +79,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_normal_strain_rates_pres(kk, jj, ii, strainRateX, strainRateY, strainRateZ, u, v, w, ddx, ddy, ddz)
+    SUBROUTINE compute_normal_strain_rate_pres(kk, jj, ii, splitDir, strainRate, u, v, w, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -82,28 +87,45 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(out) :: strainRateX(kk, jj, ii), strainRateY(kk, jj, ii), strainRateZ(kk, jj, ii)
+        INTEGER(intk), INTENT(in) :: splitDir
+        REAL(realk), INTENT(out) :: strainRate(kk, jj, ii)
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
 
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
-                    strainRateX(k,j,i) = ( u(k,j,i) - u(k,j,i-1) ) / ddx(i)
-                    strainRateY(k,j,i) = ( v(k,j,i) - v(k,j-1,i) ) / ddy(j)
-                    strainRateZ(k,j,i) = ( w(k,j,i) - w(k-1,j,i) ) / ddz(k)
+        IF ( splitDir == 1 ) THEN
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        strainRate(k,j,i) = ( u(k,j,i) - u(k,j,i-1) ) / ddx(i)
+                    END DO
                 END DO
             END DO
-        END DO
+        ELSE IF ( splitDir == 2 ) THEN
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        strainRate(k,j,i) = ( v(k,j,i) - v(k,j-1,i) ) / ddy(j)
+                    END DO
+                END DO
+            END DO
+        ELSE IF ( splitDir == 3 ) THEN 
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        strainRate(k,j,i) = ( w(k,j,i) - w(k-1,j,i) ) / ddz(k)
+                    END DO
+                END DO
+            END DO
+        END IF
 
-    END SUBROUTINE compute_normal_strain_rates_pres
+    END SUBROUTINE compute_normal_strain_rate_pres
 
     !================================================================
 
-    SUBROUTINE compute_normal_strain_rates_stag(kk, jj, ii, component, strainRateX, strainRateY, strainRateZ, u, v, w, dx, dy, dz, ddx, ddy, ddz)
+    SUBROUTINE compute_normal_strain_rate_stag(kk, jj, ii, component, splitDir, strainRate, u, v, w, dx, dy, dz, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -112,7 +134,8 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: component
-        REAL(realk), INTENT(out) :: strainRateX(kk, jj, ii, 3), strainRateY(kk, jj, ii, 3), strainRateZ(kk, jj, ii, 3)
+        INTEGER(intk), INTENT(in) :: splitDir
+        REAL(realk), INTENT(out) :: strainRate(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
@@ -136,26 +159,39 @@ CONTAINS
             kStag = 1.0
         END IF
 
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
-
-                    uE = 0.5 * ( iStag * ( u(k,j,i) + u(k,j,i+1) ) + jStag * ( u(k,j,i) + u(k,j+1,i) ) + kStag * ( u(k,j,i) + u(k+1,j,i) ) ) 
-                    uW = 0.5 * ( iStag * ( u(k,j,i-1) + u(k,j,i) ) + jStag * ( u(k,j,i-1) + u(k,j+1,i-1) ) + kStag * ( u(k,j,i-1) + u(k+1,j,i-1) ) )
-                    vN = 0.5 * ( iStag * ( v(k,j,i) + v(k,j,i+1) ) + jStag * ( v(k,j,i) + v(k,j+1,i) ) + kStag * ( v(k,j,i) + v(k+1,j,i) ) )
-                    vS = 0.5 * ( iStag * ( v(k,j-1,i) + v(k,j-1,i+1) ) + jStag * ( v(k,j-1,i) + v(k,j,i) ) + kStag * ( v(k+1,j-1,i) + v(k,j-1,i) ) )
-                    wT = 0.5 * ( iStag * ( w(k,j,i) + w(k,j,i+1) ) + jStag * ( w(k,j,i) + w(k,j+1,i) ) + kStag * ( w(k,j,i) + w(k+1,j,i) ) ) 
-                    wB = 0.5 * ( iStag * ( w(k-1,j,i) + w(k-1,j,i+1) ) + jStag * ( w(k-1,j,i) + w(k-1,j+1,i) ) + kStag * ( w(k-1,j,i) + w(k,j,i) ) ) 
-
-                    strainRateX(k,j,i,component) = ( uE - uW ) / ( iStag * dx(i) + jStag * ddx(i) + kStag * ddx(i) )
-                    strainRateY(k,j,i,component) = ( vN - vS ) / ( iStag * ddy(j) + jStag * dy(j) + kStag * ddy(j) )
-                    strainRateZ(k,j,i,component) = ( wT - wB ) / ( iStag * ddz(k) + jStag * ddz(k) + kStag * dz(k) )
-
+        IF ( splitDir == 1 ) THEN
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        uE = 0.5 * ( iStag * ( u(k,j,i) + u(k,j,i+1) ) + jStag * ( u(k,j,i) + u(k,j+1,i) ) + kStag * ( u(k,j,i) + u(k+1,j,i) ) ) 
+                        uW = 0.5 * ( iStag * ( u(k,j,i-1) + u(k,j,i) ) + jStag * ( u(k,j,i-1) + u(k,j+1,i-1) ) + kStag * ( u(k,j,i-1) + u(k+1,j,i-1) ) )
+                        strainRate(k,j,i,component) = ( uE - uW ) / ( iStag * dx(i) + jStag * ddx(i) + kStag * ddx(i) )
+                    END DO
                 END DO
             END DO
-        END DO
+        ELSE IF ( splitDir == 2 ) THEN
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        vN = 0.5 * ( iStag * ( v(k,j,i) + v(k,j,i+1) ) + jStag * ( v(k,j,i) + v(k,j+1,i) ) + kStag * ( v(k,j,i) + v(k+1,j,i) ) )
+                        vS = 0.5 * ( iStag * ( v(k,j-1,i) + v(k,j-1,i+1) ) + jStag * ( v(k,j-1,i) + v(k,j,i) ) + kStag * ( v(k+1,j-1,i) + v(k,j-1,i) ) )
+                        strainRate(k,j,i,component) = ( vN - vS ) / ( iStag * ddy(j) + jStag * dy(j) + kStag * ddy(j) )
+                    END DO
+                END DO
+            END DO
+        ELSE IF ( splitDir == 3 ) THEN 
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        wT = 0.5 * ( iStag * ( w(k,j,i) + w(k,j,i+1) ) + jStag * ( w(k,j,i) + w(k,j+1,i) ) + kStag * ( w(k,j,i) + w(k+1,j,i) ) ) 
+                        wB = 0.5 * ( iStag * ( w(k-1,j,i) + w(k-1,j,i+1) ) + jStag * ( w(k-1,j,i) + w(k-1,j+1,i) ) + kStag * ( w(k-1,j,i) + w(k,j,i) ) ) 
+                        strainRate(k,j,i,component) = ( wT - wB ) / ( iStag * ddz(k) + jStag * ddz(k) + kStag * dz(k) )                    
+                    END DO
+                END DO
+            END DO
+        END IF
 
-    END SUBROUTINE compute_normal_strain_rates_stag
+    END SUBROUTINE compute_normal_strain_rate_stag
     
     !================================================================
 
@@ -496,34 +532,22 @@ CONTAINS
 
     END SUBROUTINE compute_fluxz
 
+    
     !================================================================
 
-    SUBROUTINE update_field(kk, jj, ii, splitDir, field, fluxx, fluxy, fluxz, xCompressionTerm, yCompressionTerm, zCompressionTerm, & 
+    SUBROUTINE update_field_pres(kk, jj, ii, splitDir, field, flux, compressionTerm, & 
             dt, nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
-    !   The subroutine performs the summation of fluxes, updating a 
-    !   field. In each Runge-Kutta step the subroutine is called 
-    !   three times. Each time field is updated taking into account 
-    !   one spatial dimension. Each time-step the order of the 
-    !   dimensional splitting is permuted by the calling subroutine. 
-    !   The variables adv_(.) track, which dimension will be 
-    !   integrated. 
     !   
-    !   The time integration performed here is of 
-    !   "geometrical" nature. It consideres real volumes, which are
-    !   moved by the underlying velocity field and therefore is 
-    !   exact. There is no need of a Runge-Kutta like canceling of an
-    !   error term, hence previous Runge-Kutta stages are not 
-    !   considered.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: splitDir
         REAL(realk), INTENT(inout) :: field(kk, jj, ii)
-        REAL(realk), INTENT(in) :: fluxx(kk, jj, ii), fluxy(kk, jj, ii), fluxz(kk, jj, ii)
-        REAL(realk), INTENT(in) :: xCompressionTerm(kk, jj, ii), yCompressionTerm(kk, jj, ii), zCompressionTerm(kk, jj, ii)
+        REAL(realk), INTENT(in) :: flux(kk, jj, ii)
+        REAL(realk), INTENT(in) :: compressionTerm(kk, jj, ii)
         REAL(realk), INTENT(in) :: dt
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
@@ -551,42 +575,104 @@ CONTAINS
         IF (nbot == 3) nbw = 1
         IF (ntop == 3) ntw = 1
         
-        ! Update field with x fluxes
         IF ( splitDir == 1 ) THEN 
-
             DO i = 3-nfu, ii-3+nbu
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        field(k,j,i) = ( field(k,j,i) + dt * ( fluxx(k,j,i-1) - fluxx(k,j,i) + xCompressionTerm(k,j,i) ) ) 
+                        field(k,j,i) = ( field(k,j,i) + dt * ( flux(k,j,i-1) - flux(k,j,i) + compressionTerm(k,j,i) ) ) 
                     END DO 
                 END DO 
             END DO
-
-        ! Update field with y fluxes
         ELSEIF ( splitDir == 2 ) THEN
-
             DO i = 3, ii-2
                 DO j = 3-nrv, jj-3+nlv
                     DO k = 3, kk-2
-                        field(k,j,i) = ( field(k,j,i) + dt * ( fluxy(k,j-1,i) - fluxy(k,j,i) + yCompressionTerm(k,j,i) ) )
+                        field(k,j,i) = ( field(k,j,i) + dt * ( flux(k,j-1,i) - flux(k,j,i) + compressionTerm(k,j,i) ) )
                     END DO 
                 END DO 
             END DO
-
-        ! Update field with z fluxes
         ELSEIF ( splitDir == 3 ) THEN
-
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3-nbw, kk-3+ntw
-                        field(k,j,i) = ( field(k,j,i) + dt * ( fluxz(k-1,j,i) - fluxz(k,j,i) + zCompressionTerm(k,j,i) ) )
+                        field(k,j,i) = ( field(k,j,i) + dt * ( flux(k-1,j,i) - flux(k,j,i) + compressionTerm(k,j,i) ) )
                     END DO 
                 END DO 
             END DO
-
         END IF
 
-    END SUBROUTINE update_field
+    END SUBROUTINE update_field_pres
+
+    !================================================================
+
+    SUBROUTINE update_field_stag(kk, jj, ii, component, splitDir, field, flux, compressionTerm, & 
+            dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: component
+        INTEGER(intk), INTENT(in) :: splitDir
+        REAL(realk), INTENT(inout) :: field(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: flux(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: compressionTerm(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: dt
+        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
+
+        nfu = 0
+        nbu = 0
+        nrv = 0
+        nlv = 0
+        nbw = 0
+        ntw = 0
+
+        ! CON = 7
+        IF (nbac == 7) nbu = 1
+        IF (nlft == 7) nlv = 1
+        IF (ntop == 7) ntw = 1
+
+        ! OP1 = 3
+        IF (nfro == 3) nfu = 1
+        IF (nbac == 3) nbu = 1
+        IF (nrgt == 3) nrv = 1
+        IF (nlft == 3) nlv = 1
+        IF (nbot == 3) nbw = 1
+        IF (ntop == 3) ntw = 1
+        
+        IF ( splitDir == 1 ) THEN 
+            DO i = 3-nfu, ii-3+nbu
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        field(k,j,i,component) = ( field(k,j,i,component) + dt * ( flux(k,j,i-1,component) - flux(k,j,i,component) + compressionTerm(k,j,i,component) ) ) 
+                    END DO 
+                END DO 
+            END DO
+        ELSEIF ( splitDir == 2 ) THEN
+            DO i = 3, ii-2
+                DO j = 3-nrv, jj-3+nlv
+                    DO k = 3, kk-2
+                        field(k,j,i,component) = ( field(k,j,i,component) + dt * ( flux(k,j-1,i,component) - flux(k,j,i,component) + compressionTerm(k,j,i,component) ) )
+                    END DO 
+                END DO 
+            END DO
+        ELSEIF ( splitDir == 3 ) THEN
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3-nbw, kk-3+ntw
+                        field(k,j,i,component) = ( field(k,j,i,component) + dt * ( flux(k-1,j,i,component) - flux(k,j,i,component) + compressionTerm(k,j,i,component) ) )
+                    END DO 
+                END DO 
+            END DO
+        END IF
+
+    END SUBROUTINE update_field_stag
 
     !================================================================
 
@@ -808,7 +894,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compression_term_wrapper_pres(kk, jj, ii, u, v, w, vff, ddx, ddy, ddz, compressionTermX, compressionTermY, compressionTermZ, propertyFluid1, propertyFluid2)
+    SUBROUTINE compression_term_wrapper_pres(kk, jj, ii, splitDir, u, v, w, vff, ddx, ddy, ddz, compressionTerm, propertyFluid1, propertyFluid2)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -816,33 +902,30 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: splitDir
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii), vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(out) :: compressionTermX(kk, jj, ii), compressionTermY(kk, jj, ii), compressionTermZ(kk, jj, ii)
+        REAL(realk), INTENT(out) :: compressionTerm(kk, jj, ii)
         REAL(realk), INTENT(in), OPTIONAL :: propertyFluid1, propertyFluid2
 
         ! Local variables
-        REAL(realk) :: strainRateX(kk, jj, ii), strainRateY(kk, jj, ii), strainRateZ(kk, jj, ii)
+        REAL(realk) :: strainRate(kk, jj, ii)
         REAL(realk) :: nonDirectionalCompressionCoefficient(kk, jj, ii)
 
-        CALL compute_normal_strain_rates(kk, jj, ii, strainRateX, strainRateY, strainRateZ, u, v, w, ddx, ddy, ddz)
+        CALL compute_normal_strain_rate(kk, jj, ii, splitDir, strainRate, u, v, w, ddx, ddy, ddz)
         CALL compute_non_directional_compression_coeffiecient(kk, jj, ii, nonDirectionalCompressionCoefficient, vff)
 
         IF ( .NOT. PRESENT(propertyFluid1) .OR. .NOT. PRESENT(propertyFluid2) ) THEN
-            compressionTermX = nonDirectionalCompressionCoefficient * strainRateX
-            compressionTermY = nonDirectionalCompressionCoefficient * strainRateY
-            compressionTermZ = nonDirectionalCompressionCoefficient * strainRateZ
+            compressionTerm = nonDirectionalCompressionCoefficient * strainRate
         ELSE IF ( PRESENT(propertyFluid1) .AND. PRESENT(propertyFluid2) ) THEN
-            compressionTermX = ( nonDirectionalCompressionCoefficient * propertyFluid1 + ( 1.0 - nonDirectionalCompressionCoefficient ) * propertyFluid2 ) * strainRateX
-            compressionTermY = ( nonDirectionalCompressionCoefficient * propertyFluid1 + ( 1.0 - nonDirectionalCompressionCoefficient ) * propertyFluid2 ) * strainRateY
-            compressionTermZ = ( nonDirectionalCompressionCoefficient * propertyFluid1 + ( 1.0 - nonDirectionalCompressionCoefficient ) * propertyFluid2 ) * strainRateZ
+            compressionTerm = ( nonDirectionalCompressionCoefficient * propertyFluid1 + ( 1.0 - nonDirectionalCompressionCoefficient ) * propertyFluid2 ) * strainRate
         END IF
 
     END SUBROUTINE compression_term_wrapper_pres
 
     !================================================================
 
-    SUBROUTINE compression_term_wrapper_stag(kk, jj, ii, component, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, compressionTermX, compressionTermY, compressionTermZ, propertyFluid1, propertyFluid2)
+    SUBROUTINE compression_term_wrapper_stag(kk, jj, ii, component, splitDir, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, compressionTerm, propertyFluid1, propertyFluid2)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -851,27 +934,24 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: component
+        INTEGER(intk), INTENT(in) :: splitDir
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii), vff(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(out) :: compressionTermX(kk, jj, ii, 3), compressionTermY(kk, jj, ii, 3), compressionTermZ(kk, jj, ii, 3)
+        REAL(realk), INTENT(out) :: compressionTerm(kk, jj, ii, 3)
         REAL(realk), INTENT(in), OPTIONAL :: propertyFluid1, propertyFluid2
 
         ! Local variables
-        REAL(realk) :: strainRateX(kk, jj, ii, 3), strainRateY(kk, jj, ii, 3), strainRateZ(kk, jj, ii, 3)
+        REAL(realk) :: strainRate(kk, jj, ii, 3)
         REAL(realk) :: nonDirectionalCompressionCoefficient(kk, jj, ii, 3)
 
-        CALL compute_normal_strain_rates(kk, jj, ii, component, strainRateX, strainRateY, strainRateZ, u, v, w, dx, dy, dz, ddx, ddy, ddz)
+        CALL compute_normal_strain_rate(kk, jj, ii, component, splitDir, strainRate, u, v, w, dx, dy, dz, ddx, ddy, ddz)
         CALL compute_non_directional_compression_coeffiecient(kk, jj, ii, component, nonDirectionalCompressionCoefficient, vff)
 
         IF ( .NOT. PRESENT(propertyFluid1) .OR. .NOT. PRESENT(propertyFluid2) ) THEN
-            compressionTermX(:,:,:,component) = nonDirectionalCompressionCoefficient(:,:,:,component) * strainRateX(:,:,:,component)
-            compressionTermY(:,:,:,component) = nonDirectionalCompressionCoefficient(:,:,:,component) * strainRateY(:,:,:,component)
-            compressionTermZ(:,:,:,component) = nonDirectionalCompressionCoefficient(:,:,:,component) * strainRateZ(:,:,:,component)
+            compressionTerm(:,:,:,component) = nonDirectionalCompressionCoefficient(:,:,:,component) * strainRate(:,:,:,component)
         ELSE IF ( PRESENT(propertyFluid1) .AND. PRESENT(propertyFluid2) ) THEN
-            compressionTermX(:,:,:,component) = ( nonDirectionalCompressionCoefficient(:,:,:,component) * propertyFluid1 + ( 1.0 - nonDirectionalCompressionCoefficient(:,:,:,component) ) * propertyFluid2 ) * strainRateX(:,:,:,component)
-            compressionTermY(:,:,:,component) = ( nonDirectionalCompressionCoefficient(:,:,:,component) * propertyFluid1 + ( 1.0 - nonDirectionalCompressionCoefficient(:,:,:,component) ) * propertyFluid2 ) * strainRateY(:,:,:,component)
-            compressionTermZ(:,:,:,component) = ( nonDirectionalCompressionCoefficient(:,:,:,component) * propertyFluid1 + ( 1.0 - nonDirectionalCompressionCoefficient(:,:,:,component) ) * propertyFluid2 ) * strainRateZ(:,:,:,component)
+            compressionTerm(:,:,:,component) = ( nonDirectionalCompressionCoefficient(:,:,:,component) * propertyFluid1 + ( 1.0 - nonDirectionalCompressionCoefficient(:,:,:,component) ) * propertyFluid2 ) * strainRate(:,:,:,component)
         END IF
 
     END SUBROUTINE compression_term_wrapper_stag
