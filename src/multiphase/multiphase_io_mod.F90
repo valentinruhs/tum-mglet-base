@@ -128,15 +128,13 @@ CONTAINS
             CALL ddy_f%get_ptr(ddy, igrid)
             CALL ddz_f%get_ptr(ddz, igrid)
 
-            return
-
             DO i = 1, ii
                 DO j = 1, jj
                     DO k = 1, kk
                         IF ( vff(k,j,i) >= 0.001 ) THEN
                             u(k,j,i) = 0.016
                             v(k,j,i) = 0.016
-                            w(k,j,i) = 0.016
+                            w(k,j,i) = 0.0
                         END IF
                     END DO
                 END DO

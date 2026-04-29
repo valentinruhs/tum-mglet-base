@@ -24,12 +24,7 @@ MODULE multiphase_vof_transport_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: init_multiphase_vof_transport, finish_multiphase_vof_transport, field_flux_wrapper, compute_density_flux, get_advection_sequence, compression_term_wrapper, update_field, clip_volume_fraction_field
-
-    INTERFACE field_flux_wrapper
-        MODULE PROCEDURE field_flux_wrapper_pres
-        MODULE PROCEDURE field_flux_wrapper_stag
-    END INTERFACE
+    PUBLIC :: init_multiphase_vof_transport, finish_multiphase_vof_transport, compute_flux, compute_density_flux, get_advection_sequence, compression_term_wrapper, update_field, clip_volume_fraction_field
 
     INTERFACE compute_normal_strain_rate
         MODULE PROCEDURE compute_normal_strain_rate_pres
@@ -49,6 +44,11 @@ MODULE multiphase_vof_transport_mod
     INTERFACE update_field
         MODULE PROCEDURE update_field_pres
         MODULE PROCEDURE update_field_stag
+    END INTERFACE
+
+    INTERFACE compute_flux
+        MODULE PROCEDURE compute_flux_pres
+        MODULE PROCEDURE compute_flux_stag
     END INTERFACE
 
 CONTAINS
@@ -258,20 +258,20 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_fluxx(fluxx, kk, jj, ii, field, isInterface, u, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
+    SUBROUTINE compute_flux_pres(kk, jj, ii, splitDir, fieldFlux, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
-    !   This subroutine calculates the flux of a field in the x
-    !   direction.
+    !   
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(out) :: fluxx(kk, jj, ii)
+        INTEGER(intk), INTENT(in) :: splitDir
+        REAL(realk), INTENT(out) :: fieldFlux(kk, jj, ii)
         REAL(realk), INTENT(in) :: field(kk, jj, ii)
         LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
-        REAL(realk), INTENT(in) :: u(kk, jj, ii)
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
         REAL(realk), INTENT(in) :: dt
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
@@ -282,7 +282,7 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
-        REAL(realk) :: fieldFlux, fluxedProportion, eulerianFluxWidth, eulerianFluxAlpha
+        REAL(realk) :: flux, fluxedProportion, eulerianFluxWidth, eulerianFluxAlpha
 
         nfu = 0
         nbu = 0
@@ -304,77 +304,187 @@ CONTAINS
         IF (nbot == 3) nbw = 1
         IF (ntop == 3) ntw = 1
 
-        ! Calculate flux in x-direction
-        DO i = 3-nfu, ii-3+nbu
-            DO j = 3, jj-2
-                DO k = 3, kk-2
-                    IF ( u(k,j,i) > tol ) THEN
-                        IF ( isInterface(k,j,i) ) THEN
-                            ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                            eulerianFluxWidth = abs( u(k,j,i) ) * dt
-                            eulerianFluxAlpha = alpha(k,j,i) - normx(k,j,i) * ( ddx(i) - eulerianFluxWidth )
+        IF ( splitDir == 1 ) THEN 
+            DO i = 3-nfu, ii-3+nbu
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        IF ( u(k,j,i) > tol ) THEN
+                            IF ( isInterface(k,j,i) ) THEN
+                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
+                                eulerianFluxWidth = abs( u(k,j,i) ) * dt
+                                eulerianFluxAlpha = alpha(k,j,i) - normx(k,j,i) * ( ddx(i) - eulerianFluxWidth )
 
-                            ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
-                            CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i), eulerianFluxWidth, ddy(j), ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
-                            
-                            ! Calculate flux for multiphase cell
-                            fieldFlux = fluxedProportion  * ( abs( u(k,j,i) ) * dt / ddx(i) )
+                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
+                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i), eulerianFluxWidth, ddy(j), ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
+                                
+                                ! Calculate flux for multiphase cell
+                                flux = fluxedProportion  * ( abs( u(k,j,i) ) * dt / ddx(i) )
+                            ELSE
+                                ! Calculate flux for singlephase cell
+                                flux = field(k,j,i) * ( abs( u(k,j,i) ) * dt / ddx(i) )
+                            END IF
+                        ELSE IF ( u(k,j,i) < -tol ) THEN
+                            IF ( isInterface(k,j,i) ) THEN
+                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the eastern cell
+                                eulerianFluxWidth = abs( u(k,j,i) ) * dt
+                                eulerianFluxAlpha = alpha(k,j,i+1)
+
+                                ! Caluculate the volume fraction in the fluxed volume subcell of the eastern cell
+                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i+1), eulerianFluxWidth, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
+
+                                ! Calculate flux for multiphase cell
+                                flux = fluxedProportion * ( abs( u(k,j,i) ) * dt / ddx(i+1) )
+                            ELSE
+                                ! Calculate flux for singlephase cell
+                                flux = field(k,j,i+1) * ( abs( u(k,j,i) ) * dt / ddx(i+1) )
+                            END IF
                         ELSE
-                            ! Calculate flux for singlephase cell
-                            fieldFlux = field(k,j,i) * ( abs( u(k,j,i) ) * dt / ddx(i) )
+                            flux = 0.0
                         END IF
-                    ELSE IF ( u(k,j,i) < -tol ) THEN
-                        IF ( isInterface(k,j,i) ) THEN
-                            ! Calculate the width of the fluxed volume and the alpha value for this subcell of the eastern cell
-                            eulerianFluxWidth = abs( u(k,j,i) ) * dt
-                            eulerianFluxAlpha = alpha(k,j,i+1)
-
-                            ! Caluculate the volume fraction in the fluxed volume subcell of the eastern cell
-                            CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i+1), eulerianFluxWidth, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
-
-                            ! Calculate flux for multiphase cell
-                            fieldFlux = fluxedProportion * ( abs( u(k,j,i) ) * dt / ddx(i+1) )
-                        ELSE
-                            ! Calculate flux for singlephase cell
-                            fieldFlux = field(k,j,i+1) * ( abs( u(k,j,i) ) * dt / ddx(i+1) )
-                        END IF
-                    ELSE
-                        fieldFlux = 0.0
-                    END IF
-                    fluxx(k,j,i) = sign( 1.0, u(k,j,i) ) * fieldFlux / dt
+                        fieldFlux(k,j,i) = sign( 1.0, u(k,j,i) ) * flux / dt
+                    END DO
                 END DO
             END DO
-        END DO
+        ELSE IF ( splitDir == 2 ) THEN 
+            DO i = 3, ii-2
+                DO j = 3-nrv, jj-3+nlv
+                    DO k = 3, kk-2
+                        IF ( v(k,j,i) > tol ) THEN
+                            IF ( isInterface(k,j,i) ) THEN
+                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
+                                eulerianFluxWidth = abs( v(k,j,i) ) * dt
+                                eulerianFluxAlpha = alpha(k,j,i) - normy(k,j,i) * ( ddy(j) - eulerianFluxWidth )
 
-    END SUBROUTINE compute_fluxx
+                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
+                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i), ddx(i), eulerianFluxWidth, ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
+
+                                ! Calculate flux for multiphase cell
+                                flux = fluxedProportion * ( abs( v(k,j,i) ) * dt / ddy(j) )
+                            ELSE
+                                ! Calculate flux for singlephase cell
+                                flux = field(k,j,i) * ( abs( v(k,j,i) ) * dt / ddy(j) )
+                            END IF
+                        ELSE IF ( v(k,j,i) < -tol ) THEN
+                            IF ( isInterface(k,j,i) ) THEN
+                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the northern cell
+                                eulerianFluxWidth = abs( v(k,j,i) ) * dt
+                                eulerianFluxAlpha = alpha(k,j+1,i)
+
+                                ! Caluculate the volume fraction in the fluxed volume subcell of the northern cell 
+                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j+1,i), ddx(i), eulerianFluxWidth, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
+
+                                ! Calculate flux for multiphase cell
+                                flux = fluxedProportion * ( abs( v(k,j,i) ) * dt / ddy(j+1) )
+                            ELSE
+                                ! Calculate flux for singlephase cell
+                                flux = field(k,j+1,i) * ( abs( v(k,j,i) ) * dt / ddy(j+1) )
+                            END IF
+                        ELSE
+                            flux = 0.0
+                        END IF
+                        fieldFlux(k,j,i) = sign( 1.0, v(k,j,i) ) * flux / dt
+                    END DO
+                END DO
+            END DO
+        ELSE IF ( splitDir == 3 ) THEN
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3-nbw, kk-3+ntw
+                        IF ( w(k,j,i) > tol ) THEN
+                            IF ( isInterface(k,j,i) ) THEN
+                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
+                                eulerianFluxWidth = abs( w(k,j,i) ) * dt
+                                eulerianFluxAlpha = alpha(k,j,i) - normz(k,j,i) * ( ddz(k) - eulerianFluxWidth )
+
+                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
+                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i), ddx(i), ddy(j), eulerianFluxWidth, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
+
+                                ! Calculate flux for multiphase cell
+                                flux = fluxedProportion * ( abs( w(k,j,i) ) * dt / ddz(k) )
+                            ELSE
+                                ! Calculate flux for singlephase cell
+                                flux = field(k,j,i) * ( abs( w(k,j,i) ) * dt / ddz(k) )
+                            END IF
+                        ELSE IF ( w(k,j,i) < -tol ) THEN
+                            IF ( isInterface(k,j,i) ) THEN
+                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
+                                eulerianFluxWidth = abs( w(k,j,i) ) * dt
+                                eulerianFluxAlpha = alpha(k+1,j,i)
+
+                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
+                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k+1,j,i), ddx(i), ddy(j), eulerianFluxWidth, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
+
+                                ! Calculate flux for multiphase cell
+                                flux = fluxedProportion * ( abs( w(k,j,i) ) * dt / ddz(k+1) )
+                            ELSE
+                                ! Calculate flux for singlephase cell
+                                flux = field(k+1,j,i) * ( abs( w(k,j,i) ) * dt / ddz(k+1) )
+                            END IF
+                        ELSE
+                            flux = 0.0
+                        END IF
+                        fieldFlux(k,j,i) = sign( 1.0, w(k,j,i) ) * flux / dt
+                    END DO
+                END DO
+            END DO
+        END IF
+
+    END SUBROUTINE compute_flux_pres
 
     !================================================================
 
-    SUBROUTINE compute_fluxy(fluxy, kk, jj, ii, field, isInterface, v, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
+    SUBROUTINE compute_flux_stag(kk, jj, ii, component, splitDir, fieldFlux, complementFieldFlux, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, & 
         nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
-    !   This subroutine calculates the flux of a field in the y 
-    !   direction.
+    !   
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(out) :: fluxy(kk, jj, ii)
-        REAL(realk), INTENT(in) :: field(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
-        REAL(realk), INTENT(in) :: v(kk, jj, ii)
-        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
+        INTEGER(intk), INTENT(in) :: component
+        INTEGER(intk), INTENT(in) :: splitDir
+        REAL(realk), INTENT(out) :: fieldFlux(kk, jj, ii, 3), complementFieldFlux(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: field(kk, jj, ii, 3)
+        LOGICAL, INTENT(in) :: isInterface(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: alpha(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: dt
-        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
+        REAL(realk), INTENT(in) :: normx(kk, jj, ii, 3), normy(kk, jj, ii, 3), normz(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
         ! Local variables
+        REAL(realk) :: iStag, jStag, kStag
+        REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
-        REAL(realk) :: fieldFlux, fluxedProportion, eulerianFluxWidth, eulerianFluxAlpha
+        REAL(realk) :: flux, complementFlux, fluxedProportion, eulerianFluxWidth, eulerianFluxAlpha, uE, vN, wT
+
+        IF ( component == 1 ) THEN
+            iStag = 1.0
+            jStag = 0.0
+            kStag = 0.0
+            deltaX = dx
+            deltaY = ddy
+            deltaZ = ddz
+        ELSE IF ( component == 2 ) THEN
+            iStag = 0.0
+            jStag = 1.0
+            kStag = 0.0
+            deltaX = ddx
+            deltaY = dy
+            deltaZ = ddz
+        ELSE IF ( component == 3 ) THEN
+            iStag = 0.0
+            jStag = 0.0
+            kStag = 1.0
+            deltaX = ddx
+            deltaY = ddy
+            deltaZ = dz
+        END IF
 
         nfu = 0
         nbu = 0
@@ -396,143 +506,154 @@ CONTAINS
         IF (nbot == 3) nbw = 1
         IF (ntop == 3) ntw = 1
 
-        ! Calculate flux in y-direction
-        DO i = 3, ii-2
-            DO j = 3-nrv, jj-3+nlv
-                DO k = 3, kk-2
-                    IF ( v(k,j,i) > tol ) THEN
-                        IF ( isInterface(k,j,i) ) THEN
-                            ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                            eulerianFluxWidth = abs( v(k,j,i) ) * dt
-                            eulerianFluxAlpha = alpha(k,j,i) - normy(k,j,i) * ( ddy(j) - eulerianFluxWidth )
+        IF ( splitDir == 1 ) THEN
+            DO i = 3-nfu, ii-3+nbu
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        uE = 0.5 * ( iStag * ( u(k,j,i) + u(k,j,i+1) ) + jStag * ( u(k,j,i) + u(k,j+1,i) ) + kStag * ( u(k,j,i) + u(k+1,j,i) ) ) 
+                        IF ( uE > tol ) THEN
+                            IF ( isInterface(k,j,i,component) ) THEN
+                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
+                                eulerianFluxWidth = abs( uE ) * dt
+                                eulerianFluxAlpha = alpha(k,j,i,component) - normx(k,j,i,component) * ( deltaX(i) - eulerianFluxWidth )
 
-                            ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
-                            CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i), ddx(i), eulerianFluxWidth, ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
+                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
+                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i,component), eulerianFluxWidth, ddy(j), ddz(k), normx(k,j,i,component), normy(k,j,i,component), normz(k,j,i,component), tol)
+                                
+                                ! Calculate flux for multiphase cell
+                                flux = fluxedProportion  * ( abs( uE ) * dt / deltaX(i) )
+                                complementFlux = ( 1 - fluxedProportion ) * ( abs( uE ) * dt / deltaX(i) )
+                            ELSE
+                                ! Calculate flux for singlephase cell
+                                flux = field(k,j,i,component) * ( abs( uE ) * dt / deltaX(i) )
+                                complementFlux = ( 1 - field(k,j,i,component) ) * ( abs( uE ) * dt / deltaX(i) )
+                            END IF
+                        ELSE IF ( uE < -tol ) THEN
+                            IF ( isInterface(k,j,i,component) ) THEN
+                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the eastern cell
+                                eulerianFluxWidth = abs( uE ) * dt
+                                eulerianFluxAlpha = alpha(k,j,i+1,component)
 
-                            ! Calculate flux for multiphase cell
-                            fieldFlux = fluxedProportion * ( abs( v(k,j,i) ) * dt / ddy(j) )
+                                ! Caluculate the volume fraction in the fluxed volume subcell of the eastern cell
+                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i+1,component), eulerianFluxWidth, ddy(j), ddz(k), normx(k,j,i+1,component), normy(k,j,i+1,component), normz(k,j,i+1,component), tol)
+
+                                ! Calculate flux for multiphase cell
+                                flux = fluxedProportion * ( abs( uE ) * dt / deltaX(i+1) )
+                                complementFlux = ( 1 - fluxedProportion ) * ( abs( uE ) * dt / deltaX(i+1) )
+                            ELSE
+                                ! Calculate flux for singlephase cell
+                                flux = field(k,j,i+1,component) * ( abs( uE ) * dt / deltaX(i+1) )
+                                complementFlux = ( 1 - field(k,j,i+1,component) ) * ( abs( uE ) * dt / deltaX(i+1) )
+                            END IF
                         ELSE
-                            ! Calculate flux for singlephase cell
-                            fieldFlux = field(k,j,i) * ( abs( v(k,j,i) ) * dt / ddy(j) )
+                            flux = 0.0
+                            complementFlux = 0.0
                         END IF
-                    ELSE IF ( v(k,j,i) < -tol ) THEN
-                        IF ( isInterface(k,j,i) ) THEN
-                            ! Calculate the width of the fluxed volume and the alpha value for this subcell of the northern cell
-                            eulerianFluxWidth = abs( v(k,j,i) ) * dt
-                            eulerianFluxAlpha = alpha(k,j+1,i)
-
-                            ! Caluculate the volume fraction in the fluxed volume subcell of the northern cell 
-                            CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j+1,i), ddx(i), eulerianFluxWidth, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
-
-                            ! Calculate flux for multiphase cell
-                            fieldFlux = fluxedProportion * ( abs( v(k,j,i) ) * dt / ddy(j+1) )
-                        ELSE
-                            ! Calculate flux for singlephase cell
-                            fieldFlux = field(k,j+1,i) * ( abs( v(k,j,i) ) * dt / ddy(j+1) )
-                        END IF
-                    ELSE
-                        fieldFlux = 0.0
-                    END IF
-                    fluxy(k,j,i) = sign( 1.0, v(k,j,i) ) * fieldFlux / dt
+                        fieldFlux(k,j,i,component) = sign( 1.0, uE ) * flux / dt
+                        complementFieldFlux(k,j,i,component) = sign( 1.0, uE ) * complementFlux / dt
+                    END DO
                 END DO
             END DO
-        END DO
+        ELSE IF ( splitDir == 2 ) THEN
+            DO i = 3, ii-2
+                DO j = 3-nrv, jj-3+nlv
+                    DO k = 3, kk-2
+                        vN = 0.5 * ( iStag * ( v(k,j,i) + v(k,j,i+1) ) + jStag * ( v(k,j,i) + v(k,j+1,i) ) + kStag * ( v(k,j,i) + v(k+1,j,i) ) )
+                        IF ( vN > tol ) THEN
+                            IF ( isInterface(k,j,i,component) ) THEN
+                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
+                                eulerianFluxWidth = abs( vN ) * dt
+                                eulerianFluxAlpha = alpha(k,j,i,component) - normy(k,j,i,component) * ( deltaY(j) - eulerianFluxWidth )
 
-    END SUBROUTINE compute_fluxy
+                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
+                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i,component), ddx(i), eulerianFluxWidth, ddz(k), normx(k,j,i,component), normy(k,j,i,component), normz(k,j,i,component), tol)
 
-    !================================================================
+                                ! Calculate flux for multiphase cell
+                                flux = fluxedProportion * ( abs( vN ) * dt / deltaY(j) )
+                                complementFlux = ( 1 - fluxedProportion ) * ( abs( vN ) * dt / deltaY(j) )
+                            ELSE
+                                ! Calculate flux for singlephase cell
+                                flux = field(k,j,i,component) * ( abs( vN ) * dt / deltaY(j) )
+                                complementFlux = ( 1 - field(k,j,i,component) ) * ( abs( vN ) * dt / deltaY(j) )
+                            END IF
+                        ELSE IF ( vN < -tol ) THEN
+                            IF ( isInterface(k,j,i,component) ) THEN
+                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the northern cell
+                                eulerianFluxWidth = abs( vN ) * dt
+                                eulerianFluxAlpha = alpha(k,j+1,i,component)
 
-    SUBROUTINE compute_fluxz(fluxz, kk, jj, ii, field, isInterface, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
-        nfro, nbac, nrgt, nlft, nbot, ntop)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   This subroutine calculates the flux of a field in the z 
-    !   direction.
-    !----------------------------------------------------------------
+                                ! Caluculate the volume fraction in the fluxed volume subcell of the northern cell 
+                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j+1,i,component), ddx(i), eulerianFluxWidth, ddz(k), normx(k,j+1,i,component), normy(k,j+1,i,component), normz(k,j+1,i,component), tol)
 
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(out) :: fluxz(kk, jj, ii)
-        REAL(realk), INTENT(in) :: field(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
-        REAL(realk), INTENT(in) :: w(kk, jj, ii)
-        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
-        REAL(realk), INTENT(in) :: dt
-        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(in) :: tol
-        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
-
-        ! Local variables
-        INTEGER(intk) :: k, j, i
-        INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
-        REAL(realk) :: fieldFlux, fluxedProportion, eulerianFluxWidth, eulerianFluxAlpha
-
-        nfu = 0
-        nbu = 0
-        nrv = 0
-        nlv = 0
-        nbw = 0
-        ntw = 0
-
-        ! CON = 7
-        IF (nbac == 7) nbu = 1
-        IF (nlft == 7) nlv = 1
-        IF (ntop == 7) ntw = 1
-
-        ! OP1 = 3
-        IF (nfro == 3) nfu = 1
-        IF (nbac == 3) nbu = 1
-        IF (nrgt == 3) nrv = 1
-        IF (nlft == 3) nlv = 1
-        IF (nbot == 3) nbw = 1
-        IF (ntop == 3) ntw = 1
-
-        ! Calculate flux in z-direction
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3-nbw, kk-3+ntw
-                    IF ( w(k,j,i) > tol ) THEN
-                        IF ( isInterface(k,j,i) ) THEN
-                            ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                            eulerianFluxWidth = abs( w(k,j,i) ) * dt
-                            eulerianFluxAlpha = alpha(k,j,i) - normz(k,j,i) * ( ddz(k) - eulerianFluxWidth )
-
-                            ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
-                            CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i), ddx(i), ddy(j), eulerianFluxWidth, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
-
-                            ! Calculate flux for multiphase cell
-                            fieldFlux = fluxedProportion * ( abs( w(k,j,i) ) * dt / ddz(k) )
+                                ! Calculate flux for multiphase cell
+                                flux = fluxedProportion * ( abs( vN ) * dt / deltaY(j+1) )
+                                complementFlux = ( 1 - fluxedProportion ) * ( abs( vN ) * dt / deltaY(j+1) )
+                            ELSE
+                                ! Calculate flux for singlephase cell
+                                flux = field(k,j+1,i,component) * ( abs( vN ) * dt / deltaY(j+1) )
+                                complementFlux = ( 1 - field(k,j+1,i,component) ) * ( abs( vN ) * dt / deltaY(j+1) )
+                            END IF
                         ELSE
-                            ! Calculate flux for singlephase cell
-                            fieldFlux = field(k,j,i) * ( abs( w(k,j,i) ) * dt / ddz(k) )
+                            flux = 0.0
+                            complementFlux = 0.0
                         END IF
-                    ELSE IF ( w(k,j,i) < -tol ) THEN
-                        IF ( isInterface(k,j,i) ) THEN
-                            ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                            eulerianFluxWidth = abs( w(k,j,i) ) * dt
-                            eulerianFluxAlpha = alpha(k+1,j,i)
-
-                            ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
-                            CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k+1,j,i), ddx(i), ddy(j), eulerianFluxWidth, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
-
-                            ! Calculate flux for multiphase cell
-                            fieldFlux = fluxedProportion * ( abs( w(k,j,i) ) * dt / ddz(k+1) )
-                        ELSE
-                            ! Calculate flux for singlephase cell
-                            fieldFlux = field(k+1,j,i) * ( abs( w(k,j,i) ) * dt / ddz(k+1) )
-                        END IF
-                    ELSE
-                        fieldFlux = 0.0
-                    END IF
-                    fluxz(k,j,i) = sign( 1.0, w(k,j,i) ) * fieldFlux
+                        fieldFlux(k,j,i,component) = sign( 1.0, vN ) * flux / dt
+                        complementFieldFlux(k,j,i,component) = sign( 1.0, vN ) * complementFlux / dt
+                    END DO
                 END DO
             END DO
-        END DO
+        ELSE IF ( splitDir == 3 ) THEN
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3-nbw, kk-3+ntw
+                        wT = 0.5 * ( iStag * ( w(k,j,i) + w(k,j,i+1) ) + jStag * ( w(k,j,i) + w(k,j+1,i) ) + kStag * ( w(k,j,i) + w(k+1,j,i) ) )
+                        IF ( wT > tol ) THEN
+                            IF ( isInterface(k,j,i,component) ) THEN
+                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
+                                eulerianFluxWidth = abs( wT ) * dt
+                                eulerianFluxAlpha = alpha(k,j,i,component) - normz(k,j,i,component) * ( deltaZ(k) - eulerianFluxWidth )
 
-    END SUBROUTINE compute_fluxz
+                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
+                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i,component), ddx(i), ddy(j), eulerianFluxWidth, normx(k,j,i,component), normy(k,j,i,component), normz(k,j,i,component), tol)
 
-    
+                                ! Calculate flux for multiphase cell
+                                flux = fluxedProportion * ( abs( wT ) * dt / deltaZ(k) )
+                                complementFlux = ( 1 - fluxedProportion ) * ( abs( wT ) * dt / deltaZ(k) )
+                            ELSE
+                                ! Calculate flux for singlephase cell
+                                flux = field(k,j,i,component) * ( abs( wT ) * dt / deltaZ(k) )
+                                complementFlux = ( 1 - field(k,j,i,component) ) * ( abs( wT ) * dt / deltaZ(k) )
+                            END IF
+                        ELSE IF ( wT < -tol ) THEN
+                            IF ( isInterface(k,j,i,component) ) THEN
+                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
+                                eulerianFluxWidth = abs( wT ) * dt
+                                eulerianFluxAlpha = alpha(k+1,j,i,component)
+
+                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
+                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k+1,j,i,component), ddx(i), ddy(j), eulerianFluxWidth, normx(k+1,j,i,component), normy(k+1,j,i,component), normz(k+1,j,i,component), tol)
+
+                                ! Calculate flux for multiphase cell
+                                flux = fluxedProportion * ( abs( wT ) * dt / deltaZ(k+1) )
+                                complementFlux = ( 1 - fluxedProportion ) * ( abs( wT ) * dt / deltaZ(k+1) )
+                            ELSE
+                                ! Calculate flux for singlephase cell
+                                flux = field(k+1,j,i,component) * ( abs( wT ) * dt / deltaZ(k+1) )
+                                complementFlux = ( 1 - field(k+1,j,i,component) ) * ( abs( wT ) * dt / deltaZ(k+1) )
+                            END IF
+                        ELSE
+                            flux = 0.0
+                            complementFLux = 0.0
+                        END IF
+                        fieldFlux(k,j,i,component) = sign( 1.0, wT ) * flux / dt
+                        complementFieldFlux(k,j,i,component) = sign( 1.0, wT ) * complementFlux / dt
+                    END DO
+                END DO
+            END DO
+        END IF
+
+    END SUBROUTINE compute_flux_stag
+
     !================================================================
 
     SUBROUTINE update_field_pres(kk, jj, ii, splitDir, field, flux, compressionTerm, & 
@@ -704,134 +825,6 @@ CONTAINS
         END DO
 
     END SUBROUTINE clip_volume_fraction_field
-
-        !================================================================
-
-    SUBROUTINE field_flux_wrapper_pres(kk, jj, ii, splitDir, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop, fieldFlux, complementFieldFlux)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   The subroutine is just a wrapper for the subroutines, which
-    !   are used to compute the flux of a volume fraction field and
-    !   its complement field in advection direction.
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: splitDir
-        REAL(realk), INTENT(in) :: field(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
-        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
-        REAL(realk), INTENT(in) :: dt
-        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(in) :: tol
-        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
-        REAL(realk), INTENT(out) :: fieldFlux(kk, jj, ii)
-        REAL(realk), INTENT(out) :: complementFieldFlux(kk, jj, ii)
- 
-        ! Local variables
-        REAL(realk) :: complementField(kk, jj, ii)
-
-        complementField = 1.0 - field
-        
-        IF ( splitDir == 1 ) THEN 
-
-            CALL compute_fluxx(fieldFlux, kk, jj, ii, field, isInterface, u, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
-                nfro, nbac, nrgt, nlft, nbot, ntop)
-            CALL compute_fluxx(complementFieldFlux, kk, jj, ii, complementField, isInterface, u, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
-                nfro, nbac, nrgt, nlft, nbot, ntop)
-
-        ELSE IF ( splitDir == 2 ) THEN
-
-            CALL compute_fluxy(fieldFlux, kk, jj, ii, field, isInterface, v, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
-                nfro, nbac, nrgt, nlft, nbot, ntop)
-            CALL compute_fluxy(complementFieldFlux, kk, jj, ii, complementField, isInterface, v, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
-                nfro, nbac, nrgt, nlft, nbot, ntop)
-
-        ELSE IF ( splitDir == 3 ) THEN
-
-            CALL compute_fluxz(fieldFlux, kk, jj, ii, field, isInterface, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
-                nfro, nbac, nrgt, nlft, nbot, ntop)
-            CALL compute_fluxz(complementFieldFlux, kk, jj, ii, complementField, isInterface, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
-                nfro, nbac, nrgt, nlft, nbot, ntop)
-
-        END IF
-
-
-    END SUBROUTINE field_flux_wrapper_pres
-
-    !================================================================
-
-    SUBROUTINE field_flux_wrapper_stag(kk, jj, ii, component, splitDir, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop, fieldFlux, complementFieldFlux)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   The subroutine is just a wrapper for the subroutines, which
-    !   are used to compute the flux of a volume fraction field and
-    !   its complement field in advection direction.
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: component, splitDir
-        REAL(realk), INTENT(in) :: field(kk, jj, ii, 3)
-        LOGICAL, INTENT(in) :: isInterface(kk, jj, ii, 3)
-        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-        REAL(realk), INTENT(in) :: alpha(kk, jj, ii, 3)
-        REAL(realk), INTENT(in) :: dt
-        REAL(realk), INTENT(in) :: normx(kk, jj, ii, 3), normy(kk, jj, ii, 3), normz(kk, jj, ii, 3)
-        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(in) :: tol
-        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
-        REAL(realk), INTENT(out) :: fieldFlux(kk, jj, ii, 3)
-        REAL(realk), INTENT(out) :: complementFieldFlux(kk, jj, ii, 3)
- 
-        ! Local variables
-        REAL(realk) :: complementField(kk, jj, ii, 3)
-        REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
-
-        IF ( component == 1 ) THEN
-            deltaX = dx
-            deltaY = ddy
-            deltaZ = ddz
-        ELSE IF ( component == 2 ) THEN
-            deltaX = ddx
-            deltaY = dy
-            deltaZ = ddz
-        ELSE IF ( component == 3 ) THEN
-            deltaX = ddx
-            deltaY = ddy
-            deltaZ = dz
-        END IF
-
-        complementField = 1.0 - field
-        
-        IF ( splitDir == 1 ) THEN 
-
-            CALL compute_fluxx(fieldFlux(:,:,:,component), kk, jj, ii, field(:,:,:,component), isInterface(:,:,:,component), u, alpha(:,:,:,component), dt, normx(:,:,:,component), normy(:,:,:,component), normz(:,:,:,component), deltaX, deltaY, deltaZ, tol, & 
-                nfro, nbac, nrgt, nlft, nbot, ntop)
-            CALL compute_fluxx(complementFieldFlux(:,:,:,component), kk, jj, ii, complementField(:,:,:,component), isInterface(:,:,:,component), u, alpha(:,:,:,component), dt, normx(:,:,:,component), normy(:,:,:,component), normz(:,:,:,component), deltaX, deltaY, deltaZ, tol, & 
-                nfro, nbac, nrgt, nlft, nbot, ntop)
-
-        ELSE IF ( splitDir == 2 ) THEN
-
-            CALL compute_fluxy(fieldFlux(:,:,:,component), kk, jj, ii, field(:,:,:,component), isInterface(:,:,:,component), v, alpha(:,:,:,component), dt, normx(:,:,:,component), normy(:,:,:,component), normz(:,:,:,component), deltaX, deltaY, deltaZ, tol, & 
-                nfro, nbac, nrgt, nlft, nbot, ntop)
-            CALL compute_fluxy(complementFieldFlux(:,:,:,component), kk, jj, ii, complementField(:,:,:,component), isInterface(:,:,:,component), v, alpha(:,:,:,component), dt, normx(:,:,:,component), normy(:,:,:,component), normz(:,:,:,component), deltaX, deltaY, deltaZ, tol, & 
-                nfro, nbac, nrgt, nlft, nbot, ntop)
-
-        ELSE IF ( splitDir == 3 ) THEN
-
-            CALL compute_fluxz(fieldFlux(:,:,:,component), kk, jj, ii, field(:,:,:,component), isInterface(:,:,:,component), w, alpha(:,:,:,component), dt, normx(:,:,:,component), normy(:,:,:,component), normz(:,:,:,component), deltaX, deltaY, deltaZ, tol, & 
-                nfro, nbac, nrgt, nlft, nbot, ntop)
-            CALL compute_fluxz(complementFieldFlux(:,:,:,component), kk, jj, ii, complementField(:,:,:,component), isInterface(:,:,:,component), w, alpha(:,:,:,component), dt, normx(:,:,:,component), normy(:,:,:,component), normz(:,:,:,component), deltaX, deltaY, deltaZ, tol, & 
-                nfro, nbac, nrgt, nlft, nbot, ntop)
-
-        END IF
-
-
-    END SUBROUTINE field_flux_wrapper_stag
 
     !================================================================
 

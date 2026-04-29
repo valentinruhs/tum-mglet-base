@@ -21,7 +21,7 @@ MODULE multiphase_advection_mod
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
     USE multiphase_material_mod, ONLY: compute_material_property_field
     USE multiphase_plic_mod, ONLY: interface_reconstruction_wrapper, staggered_fractions_wrapper
-    USE multiphase_vof_transport_mod, ONLY: field_flux_wrapper, compute_density_flux, get_advection_sequence, compression_term_wrapper, update_field, clip_volume_fraction_field
+    USE multiphase_vof_transport_mod, ONLY: compute_flux, compute_density_flux, get_advection_sequence, compression_term_wrapper, update_field, clip_volume_fraction_field
 
     IMPLICIT NONE
     PRIVATE
@@ -69,7 +69,7 @@ CONTAINS
         INTEGER(intk) :: i, igrid, l, q, splitDir
         INTEGER(intk) :: kk, jj, ii
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
-        REAL(realk), PARAMETER :: tol = 1.0E-15
+        REAL(realk), PARAMETER :: tol = 1.0E-12
         REAL(realk), ALLOCATABLE :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
         REAL(realk), ALLOCATABLE :: normxStag(:,:,:,:), normyStag(:,:,:,:), normzStag(:,:,:,:)
         REAL(realk), ALLOCATABLE :: alpha(:,:,:), alphaStag(:,:,:,:)
@@ -179,25 +179,26 @@ CONTAINS
             CALL get_advection_sequence(itstep, advSeq)
             CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
 
-            DO q = 1, 3
+            DO q = 1, 3             ! Loop over staggered components u, v and w
 
                 CALL staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
-                densityFieldStagOld = densityFieldStag
                 CALL interface_reconstruction_wrapper(kk, jj, ii, q, vffStag, dx, dy, dz, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
                 CALL compute_material_property_field(kk, jj, ii, q, densityFieldStag, vffStag, rho1, rho2)
 
             END DO
+
+            densityFieldStagOld = densityFieldStag
 
             DO l = 1, 3             ! Loop over dimensions x, y and z for split-advection
                 DO q = 1, 3         ! Loop over staggered components u, v and w
 
                     splitDir = advSeq(l)
 
-                    CALL field_flux_wrapper(kk, jj, ii, q, splitDir, vffStag, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop, vffFluxStag, complementvffFluxStag)
+                    CALL compute_flux(kk, jj, ii, q, splitDir, vffFluxStag, complementvffFluxStag, vffStag, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop)
                     CALL compute_density_flux(kk, jj, ii, q, vffFluxStag, complementvffFluxStag, rho1, rho2, densityFieldFluxStag)
                     CALL compression_term_wrapper(kk, jj, ii, q, splitDir, u, v, w, vffStag, dx, dy, dz, ddx, ddy, ddz, densityCompressionTermStag, rho1, rho2)
                     CALL update_field(kk, jj, ii, q, splitDir, densityFieldStag, densityFieldFluxStag, densityCompressionTermStag, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
-                    CALL multiphase_advect_momentum(kk, jj, ii, splitDir, q, u, v, w, densityFieldFluxStag, &
+                    CALL multiphase_advect_momentum(kk, jj, ii, q, splitDir, u, v, w, densityFieldFluxStag, &
                         densityCompressionTermStag, densityFieldStagOld, densityFieldStag, &
                         isNearInterfaceStag, dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
                         nfro, nbac, nrgt, nlft, nbot, ntop)
@@ -205,7 +206,7 @@ CONTAINS
                 END DO
 
                 CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
-                CALL field_flux_wrapper(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop, vffFlux, complementvffFlux)
+                CALL compute_flux(kk, jj, ii, splitDir, vffFlux, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop)                
                 CALL compression_term_wrapper(kk, jj, ii, splitDir, u, v, w, vff, ddx, ddy, ddz, vffCompressionTerm)
                 CALL update_field(kk, jj, ii, splitDir, vff, vffFlux, vffCompressionTerm, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
                 CALL clip_volume_fraction_field(kk, ii, jj, vff, tol) 
@@ -217,7 +218,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE multiphase_advect_momentum(kk, jj, ii, splitDir, q, u, v, w, densityFieldFluxStag, &
+    SUBROUTINE multiphase_advect_momentum(kk, jj, ii, component, splitDir, u, v, w, densityFieldFluxStag, &
         densityCompressionTermStag, densityFieldStagOld, densityFieldStag, &
         isNearInterfaceStag, dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
         nfro, nbac, nrgt, nlft, nbot, ntop)
@@ -229,12 +230,12 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: splitDir
-        INTEGER(intk), INTENT(in) :: q
+        INTEGER(intk), INTENT(in) :: component
         REAL(realk), INTENT(inout) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-        REAL(realk), INTENT(in) :: densityFieldStagOld(kk, jj, ii), densityFieldFluxStag(kk, jj, ii) 
-        REAL(realk), INTENT(in) :: densityCompressionTermStag(kk, jj, ii)
-        REAL(realk), INTENT(in) :: densityFieldStag(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isNearInterfaceStag(kk, jj, ii)
+        REAL(realk), INTENT(in) :: densityFieldStagOld(kk, jj, ii, 3), densityFieldFluxStag(kk, jj, ii, 3) 
+        REAL(realk), INTENT(in) :: densityCompressionTermStag(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: densityFieldStag(kk, jj, ii, 3)
+        LOGICAL, INTENT(in) :: isNearInterfaceStag(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
@@ -243,46 +244,44 @@ CONTAINS
 
         ! Local variables
         INTEGER(intk) :: k, j, i
-        INTEGER(intk) :: nbu, nfu!, nrv, nbw, ntw, nlv
+        INTEGER(intk) :: nbu, nfu, nrv, nlv, nbw, ntw
         REAL(realk) :: advrE, advrW, advrN, advrS, advrT, advrB
         REAL(realk) :: adveE, adveW, adveN, adveS, adveT, adveB
         REAL(realk) :: iStag, jStag, kStag
         REAL(realk) :: velocity(kk, jj, ii)
         REAL(realk) :: dVelocity, dMomentum
 
-        return
-
         nfu = 0
         nbu = 0
-        ! nrv = 0
-        ! nlv = 0
-        ! nbw = 0
-        ! ntw = 0
+        nrv = 0
+        nlv = 0
+        nbw = 0
+        ntw = 0
 
-        ! ! CON = 7
-        ! IF (nbac == 7) nbu = 1
-        ! IF (nlft == 7) nlv = 1
-        ! IF (ntop == 7) ntw = 1
+        ! CON = 7
+        IF (nbac == 7) nbu = 1
+        IF (nlft == 7) nlv = 1
+        IF (ntop == 7) ntw = 1
 
         ! OP1 = 3
         IF (nfro == 3) nfu = 1
         IF (nbac == 3) nbu = 1
-        ! IF (nrgt == 3) nrv = 1
-        ! IF (nlft == 3) nlv = 1
-        ! IF (nbot == 3) nbw = 1
-        ! IF (ntop == 3) ntw = 1
+        IF (nrgt == 3) nrv = 1
+        IF (nlft == 3) nlv = 1
+        IF (nbot == 3) nbw = 1
+        IF (ntop == 3) ntw = 1
 
-        IF ( q == 1 ) THEN
+        IF ( component == 1 ) THEN
             iStag = 1.0
             jStag = 0.0
             kStag = 0.0
             velocity = u
-        ELSE IF ( q == 2 ) THEN
+        ELSE IF ( component == 2 ) THEN
             iStag = 0.0
             jStag = 1.0
             kStag = 0.0
             velocity = v
-        ELSE IF ( q == 3 ) THEN
+        ELSE IF ( component == 3 ) THEN
             iStag = 0.0
             jStag = 0.0
             kStag = 1.0
@@ -290,11 +289,9 @@ CONTAINS
         END IF
 
         IF ( splitDir == 1 ) THEN
-
             DO i = 3-nfu, ii-3+nbu
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        
                         CALL advecting_interpolation_scheme(kk, jj, ii, k, j, i, u, v, w, &
                             advrE, advrW, advrN, advrS, advrT, advrB, iStag, jStag, kStag)
 
@@ -302,44 +299,82 @@ CONTAINS
                             adveE, adveW, adveN, adveS, adveT, adveB, &
                             advrE, advrW, advrN, advrS, advrT, advrB)
 
-                        IF ( isNearInterfaceStag(k,j,i) ) THEN
-                            dMomentum = - ( adveE * densityFieldFluxStag(k,j,i) - adveW * densityFieldFluxStag(k,j,i-1) ) + velocity(k,j,i) * densityCompressionTermStag(k,j,i)
-                            velocity(k,j,i) = 1 / densityFieldStag(k,j,i) * ( densityFieldStagOld(k,j,i) * velocity(k,j,i) + dMomentum )
+                        IF ( isNearInterfaceStag(k,j,i,component) ) THEN
+                            dMomentum = - ( adveE * densityFieldFluxStag(k,j,i,component) - adveW * densityFieldFluxStag(k,j,i-1,component) ) + velocity(k,j,i) * densityCompressionTermStag(k,j,i,component)
+                            velocity(k,j,i) = 1 / densityFieldStag(k,j,i,component) * ( densityFieldStagOld(k,j,i,component) * velocity(k,j,i) + dMomentum )
                         ELSE
                             dVelocity = - ( ( adveE * advrE - adveW * advrW ) * rdx(i) )
                             velocity(k,j,i) = velocity(k,j,i) + dVelocity
                         END IF
 
-                        IF ( q == 1 ) THEN
+                        IF ( component == 1 ) THEN
                             u(k,j,i) = velocity(k,j,i)
+                        ELSE IF ( component == 2 ) THEN
+                            v(k,j,i) = velocity(k,j,i)
+                        ELSE IF ( component == 3 ) THEN
+                            w(k,j,i) = velocity(k,j,i)
                         END IF
-
                     END DO
                 END DO
             END DO
-
         ELSE IF ( splitDir == 2 ) THEN
+            DO i = 3, ii-2
+                DO j = 3-nrv, jj-3+nlv
+                    DO k = 3, kk-2
+                        CALL advecting_interpolation_scheme(kk, jj, ii, k, j, i, u, v, w, &
+                            advrE, advrW, advrN, advrS, advrT, advrB, iStag, jStag, kStag)
 
-                        ! IF ( isNearInterfaceiStag(k,j,i) ) THEN
-                        !     duo = - ( adveN * densityFluxiStag(k,j,i) - adveS * densityFluxiStag(k,j-1,i) ) + &
-                        !             u(k,j,i) * densityCompressionTermYiStag(k,j,i)
-                        !     uo(k,j,i) = uo(k,j,i) + 1 / densityFieldiStag(k,j,i) * duo
-                        ! ELSE
-                        !     duo = - ( ( adveN * advrN - adveS * advrS ) * rddy(j) )
-                        !     uo(k,j,i) = uo(k,j,i) + duo
-                        ! END IF
+                        CALL quick_advected_interpolation_scheme(kk, jj, ii, k, j, i, velocity, &
+                            adveE, adveW, adveN, adveS, adveT, adveB, &
+                            advrE, advrW, advrN, advrS, advrT, advrB)
 
-                        ! IF ( isNearInterfaceiStag(k,j,i) ) THEN
-                        !     duo = - ( adveT * densityFluxiStag(k,j,i) - adveB * densityFluxiStag(k-1,j,i) ) + &
-                        !             u(k,j,i) * densityCompressionTermZiStag(k,j,i)
-                        !     uo(k,j,i) = uo(k,j,i) + 1 / densityFieldiStag(k,j,i) * duo
-                        ! ELSE
-                        !     duo = - ( ( adveT * advrT - adveB * advrB ) * rddz(k) )
-                        !     uo(k,j,i) = uo(k,j,i) + duo
-                        ! END IF
+                        IF ( isNearInterfaceStag(k,j,i,component) ) THEN
+                            dMomentum = - ( adveN * densityFieldFluxStag(k,j,i,component) - adveS * densityFieldFluxStag(k,j-1,i,component) ) + velocity(k,j,i) * densityCompressionTermStag(k,j,i,component)
+                            velocity(k,j,i) = 1 / densityFieldStag(k,j,i,component) * ( densityFieldStagOld(k,j,i,component) * velocity(k,j,i) + dMomentum )
+                        ELSE
+                            dVelocity = - ( ( adveN * advrN - adveS * advrS ) * rdy(j) )
+                            velocity(k,j,i) = velocity(k,j,i) + dVelocity
+                        END IF
 
+                        IF ( component == 1 ) THEN
+                            u(k,j,i) = velocity(k,j,i)
+                        ELSE IF ( component == 2 ) THEN
+                            v(k,j,i) = velocity(k,j,i)
+                        ELSE IF ( component == 3 ) THEN
+                            w(k,j,i) = velocity(k,j,i)
+                        END IF
+                    END DO
+                END DO
+            END DO
         ELSE IF ( splitDir == 3 ) THEN
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3-nbw, kk-3+ntw
+                        CALL advecting_interpolation_scheme(kk, jj, ii, k, j, i, u, v, w, &
+                            advrE, advrW, advrN, advrS, advrT, advrB, iStag, jStag, kStag)
 
+                        CALL quick_advected_interpolation_scheme(kk, jj, ii, k, j, i, velocity, &
+                            adveE, adveW, adveN, adveS, adveT, adveB, &
+                            advrE, advrW, advrN, advrS, advrT, advrB)
+
+                        IF ( isNearInterfaceStag(k,j,i,component) ) THEN
+                            dMomentum = - ( adveT * densityFieldFluxStag(k,j,i,component) - adveB * densityFieldFluxStag(k-1,j,i,component) ) + velocity(k,j,i) * densityCompressionTermStag(k,j,i,component)
+                            velocity(k,j,i) = 1 / densityFieldStag(k,j,i,component) * ( densityFieldStagOld(k,j,i,component) * velocity(k,j,i) + dMomentum )
+                        ELSE
+                            dVelocity = - ( ( adveT * advrT - adveB * advrB ) * rdz(k) )
+                            velocity(k,j,i) = velocity(k,j,i) + dVelocity
+                        END IF
+
+                        IF ( component == 1 ) THEN
+                            u(k,j,i) = velocity(k,j,i)
+                        ELSE IF ( component == 2 ) THEN
+                            v(k,j,i) = velocity(k,j,i)
+                        ELSE IF ( component == 3 ) THEN
+                            w(k,j,i) = velocity(k,j,i)
+                        END IF
+                    END DO
+                END DO
+            END DO
         END IF
 
     END SUBROUTINE multiphase_advect_momentum
