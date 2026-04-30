@@ -57,6 +57,7 @@ CONTAINS
         ! Local variables
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
         TYPE(field_t), POINTER :: rdx_f, rdy_f, rdz_f, rddx_f, rddy_f, rddz_f
+        TYPE(field_t), POINTER :: normx_f, normy_f, normz_f, alpha_f
         REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: uo, vo, wo
         REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: u, v, w
         REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: ut, vt, wt
@@ -65,6 +66,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:)
         REAL(realk), POINTER, CONTIGUOUS :: rddx(:), rddy(:), rddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: normxField(:,:,:), normyField(:,:,:), normzField(:,:,:), alphaField(:,:,:)
         INTEGER(intk) :: advSeq(3)
         INTEGER(intk) :: i, igrid, l, q, splitDir
         INTEGER(intk) :: kk, jj, ii
@@ -104,6 +106,12 @@ CONTAINS
         CALL get_field(rddy_f, "RDDY")
         CALL get_field(rddz_f, "RDDZ")
 
+        CALL get_field(normx_f, "NORMX")
+        CALL get_field(normy_f, "NORMY")
+        CALL get_field(normz_f, "NORMZ")
+
+        CALL get_field(alpha_f, "ALPHA")
+
         DO i = 1, nmygrids
             igrid = mygrids(i)
 
@@ -139,6 +147,11 @@ CONTAINS
             CALL rdy_f%get_ptr(rdy, igrid)
             CALL rdz_f%get_ptr(rdz, igrid)
 
+            CALL normx_f%get_ptr(normxField, igrid)
+            CALL normy_f%get_ptr(normyField, igrid)
+            CALL normz_f%get_ptr(normzField, igrid)
+            CALL alpha_f%get_ptr(alphaField, igrid)
+
             CALL rddx_f%get_ptr(rddx, igrid)
             CALL rddy_f%get_ptr(rddy, igrid)
             CALL rddz_f%get_ptr(rddz, igrid)
@@ -146,6 +159,7 @@ CONTAINS
             IF (.NOT. ALLOCATED(normx))     ALLOCATE(normx(kk,jj,ii))
             IF (.NOT. ALLOCATED(normy))     ALLOCATE(normy(kk,jj,ii))
             IF (.NOT. ALLOCATED(normz))     ALLOCATE(normz(kk,jj,ii))
+
             IF (.NOT. ALLOCATED(normxStag)) ALLOCATE(normxStag(kk,jj,ii,3))
             IF (.NOT. ALLOCATED(normyStag)) ALLOCATE(normyStag(kk,jj,ii,3))
             IF (.NOT. ALLOCATED(normzStag)) ALLOCATE(normzStag(kk,jj,ii,3))
@@ -214,6 +228,11 @@ CONTAINS
             END DO
         END DO
 
+        normxField = normx
+        normyField = normy
+        normzField = normz
+        alphaField = alpha
+
     END SUBROUTINE multiphase_split_advection
 
     !================================================================
@@ -250,6 +269,8 @@ CONTAINS
         REAL(realk) :: iStag, jStag, kStag
         REAL(realk) :: velocity(kk, jj, ii)
         REAL(realk) :: dVelocity, dMomentum
+
+        return
 
         nfu = 0
         nbu = 0
@@ -300,6 +321,7 @@ CONTAINS
                             advrE, advrW, advrN, advrS, advrT, advrB)
 
                         IF ( isNearInterfaceStag(k,j,i,component) ) THEN
+                            IF ( k == 5 .AND. j == 4 .AND. i == 3 ) WRITE(*,*) component, adveE, adveW, densityFieldFluxStag(k,j,i,component), densityFieldFluxStag(k,j,i-1,component), densityCompressionTermStag(k,j,i,component) 
                             dMomentum = - ( adveE * densityFieldFluxStag(k,j,i,component) - adveW * densityFieldFluxStag(k,j,i-1,component) ) + velocity(k,j,i) * densityCompressionTermStag(k,j,i,component)
                             velocity(k,j,i) = 1 / densityFieldStag(k,j,i,component) * ( densityFieldStagOld(k,j,i,component) * velocity(k,j,i) + dMomentum )
                         ELSE

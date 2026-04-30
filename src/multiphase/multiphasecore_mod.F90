@@ -48,9 +48,13 @@ CONTAINS
         INTEGER(intk), PARAMETER :: unitsd(7) = [1, -3, 0, 0, 0, 0, 0]
         INTEGER(intk), PARAMETER :: unitsvff(7) = [0, 0, 0, 0, 0, 0, 0]
         INTEGER(intk), PARAMETER :: unitsphi(7) = [0, 1, 0, 0, 0, 0, 0]
+        INTEGER(intk), PARAMETER :: unitsnorm(7) = [0, 0, 0, 0, 0, 0, 0]
+        INTEGER(intk), PARAMETER :: unitsalpha(7) = [0, 1, 0, 0, 0, 0, 0]
         CHARACTER(len=*), PARAMETER :: descriptiond = "Density"
         CHARACTER(len=*), PARAMETER :: descriptionvff = "Volume fraction field"
         CHARACTER(len=*), PARAMETER :: descriptionphi = "Level set function"
+        CHARACTER(len=*), PARAMETER :: descriptionnorm = "Norm"
+        CHARACTER(len=*), PARAMETER :: descriptionalpha = "Alpha"
 
         ! Decide wether multiphase is used or not
         has_multiphase = .FALSE.
@@ -92,6 +96,14 @@ CONTAINS
             dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("PHI", description=descriptionphi , units=unitsphi, &
             dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("NORMX", description=descriptionnorm , units=unitsnorm, &
+            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("NORMY", description=descriptionnorm , units=unitsnorm, &
+            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("NORMZ", description=descriptionnorm , units=unitsnorm, &
+            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("ALPHA", description=descriptionalpha , units=unitsalpha, &
+            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
 
     END SUBROUTINE init_multiphasecore
 
