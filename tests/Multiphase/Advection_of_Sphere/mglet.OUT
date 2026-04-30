@@ -1,0 +1,107 @@
+
+M G L E T - Multi Grid Large Eddy Turbulence
+
+MPI INFORMATION:
+    Processes:     1
+    Serial IO:     F
+    MPI version:   Open MPI v4.1.6, package: Debian OpenMPI, ident: 4.1.6, repo rev: v4.1.6, Sep 30, 2023 
+
+IEEE aritmetic flags:
+    Underflow:     gradual
+    FPE traps:     divide_by_zero invalid overflow
+
+BUILD INFORMATION:
+    Date:          Apr 24 2026
+    Time:          12:15:48
+    Compiler:      GCC version 13.3.0
+    Options:       -cpp -I /usr/lib/x86_64-linux-gnu/fortran/gfortran-mod-15/openmpi -I /usr/lib/x86_64-linux-gnu/openmpi/lib -I /usr/local/hdf5/include -I /usr/include -imultiarch x86_64-linux-gnu -D _MGLET_IFK64_=1 -D NDEBUG -mtune=generic -march=x86-64 -g -O3 -O3 -Wall -Wextra -Wpedantic -Werror -Wno-maybe-uninitialized -Wno-unused-dummy-argument -Wno-uninitialized -std=f2018 -fPIC -fimplicit-none -ffpe-trap=invalid,zero,overflow -fopenmp-simd -ffree-line-length-none -finit-real=zero -J ../../modules -fpre-include=/usr/include/finclude/x86_64-linux-gnu/math-vector-fortran.h
+    OpenMP:        disabled
+
+COMPILED PRECISION:
+    REAL:          4 bytes
+    INTEGER:       4 bytes
+    INTEGER(ifk):  8 bytes
+
+JOB INFORMATION:
+    Date:          2026-04-30
+    Time:          15:17:33
+
+HDF5 collective IO: T
+
+GRIDS PER LEVEL AND PROCESS:
+============================
+ Level:           1    Sum
+----------------------------
+ Rank     0:      1      1
+----------------------------
+ Sum:             1      1
+============================
+
+ARRAY DIMENSIONS:
+    idim3d:        8000
+    idim2d:        400
+    idim1d:        20
+
+Read gridspacing arrays in  0.002 seconds
+
+CONNECT STATISTICS:
+    Faces:               0    with geometry:       0
+    Lines:               0    with geometry:       0
+    Corners:             0    with geometry:       0
+
+Using 'noib' immersed boundary method
+
+NO SCALAR
+
+ITSTEP, WTIME, DELTA:        0           0.000           0.000
+ITTOT, TIME, DT:             0      0.00000000      1.0000E-01
+LEVEL:  1 IPC=   0 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+ Init
+ITSTEP, WTIME, DELTA:        1           0.006           0.006
+ITTOT, TIME, DT:             1      0.10000000      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   3.9851E-06 CFLMAX=   0.04082
+
+ITSTEP, WTIME, DELTA:        2           0.012           0.006
+ITTOT, TIME, DT:             2      0.20000000      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   5.7090E-07 CFLMAX=   0.04082
+
+ITSTEP, WTIME, DELTA:        3           0.017           0.005
+ITTOT, TIME, DT:             3      0.30000001      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   8.2888E-08 CFLMAX=   0.04082
+
+ITSTEP, WTIME, DELTA:        4           0.023           0.006
+ITTOT, TIME, DT:             4      0.40000001      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.8626E-08 CFLMAX=   0.04082
+
+ITSTEP, WTIME, DELTA:        5           0.029           0.006
+ITTOT, TIME, DT:             5      0.50000000      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.4901E-08 CFLMAX=   0.04082
+
+ITSTEP, WTIME, DELTA:        6           0.034           0.006
+ITTOT, TIME, DT:             6      0.60000002      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.4901E-08 CFLMAX=   0.04082
+
+ITSTEP, WTIME, DELTA:        7           0.040           0.006
+ITTOT, TIME, DT:             7      0.69999999      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.4901E-08 CFLMAX=   0.04082
+
+ITSTEP, WTIME, DELTA:        8           0.046           0.006
+ITTOT, TIME, DT:             8      0.80000001      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   7.4506E-09 CFLMAX=   0.04082
+
+ITSTEP, WTIME, DELTA:        9           0.052           0.006
+ITTOT, TIME, DT:             9      0.90000004      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   7.4506E-09 CFLMAX=   0.04082
+
+ITSTEP, WTIME, DELTA:       10           0.057           0.006
+ITTOT, TIME, DT:            10      1.00000000      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.4901E-08 CFLMAX=   0.04082
+
+STOP SIMULATION, MTSTEP REACHED           10           10
+
+Opening file fields.h5 with mode w
+Wrote all fields in  0.007 seconds
+
+MGLET FINISHED SUCCESSFULLY!
+

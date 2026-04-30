@@ -1,0 +1,144 @@
+
+M G L E T - Multi Grid Large Eddy Turbulence
+
+MPI INFORMATION:
+    Processes:     1
+    Serial IO:     F
+    MPI version:   Open MPI v4.1.6, package: Debian OpenMPI, ident: 4.1.6, repo rev: v4.1.6, Sep 30, 2023 
+
+IEEE aritmetic flags:
+    Underflow:     gradual
+    FPE traps:     divide_by_zero invalid overflow
+
+BUILD INFORMATION:
+    Date:          Apr 24 2026
+    Time:          12:15:48
+    Compiler:      GCC version 13.3.0
+    Options:       -cpp -I /usr/lib/x86_64-linux-gnu/fortran/gfortran-mod-15/openmpi -I /usr/lib/x86_64-linux-gnu/openmpi/lib -I /usr/local/hdf5/include -I /usr/include -imultiarch x86_64-linux-gnu -D _MGLET_IFK64_=1 -D NDEBUG -mtune=generic -march=x86-64 -g -O3 -O3 -Wall -Wextra -Wpedantic -Werror -Wno-maybe-uninitialized -Wno-unused-dummy-argument -Wno-uninitialized -std=f2018 -fPIC -fimplicit-none -ffpe-trap=invalid,zero,overflow -fopenmp-simd -ffree-line-length-none -finit-real=zero -J ../../modules -fpre-include=/usr/include/finclude/x86_64-linux-gnu/math-vector-fortran.h
+    OpenMP:        disabled
+
+COMPILED PRECISION:
+    REAL:          4 bytes
+    INTEGER:       4 bytes
+    INTEGER(ifk):  8 bytes
+
+JOB INFORMATION:
+    Date:          2026-04-30
+    Time:          15:18:31
+
+HDF5 collective IO: T
+
+GRIDS PER LEVEL AND PROCESS:
+============================
+ Level:           1    Sum
+----------------------------
+ Rank     0:      1      1
+----------------------------
+ Sum:             1      1
+============================
+
+ARRAY DIMENSIONS:
+    idim3d:        8000
+    idim2d:        400
+    idim1d:        20
+
+Read gridspacing arrays in  0.002 seconds
+
+CONNECT STATISTICS:
+    Faces:               0    with geometry:       0
+    Lines:               0    with geometry:       0
+    Corners:             0    with geometry:       0
+
+Using 'noib' immersed boundary method
+
+Opening file fields_in.h5 for reading
+NO SCALAR
+
+ Init
+ITSTEP, WTIME, DELTA:        1           0.006           0.006
+ITTOT, TIME, DT:         10001   1000.09997559      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.5442E-07 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:        2           0.011           0.006
+ITTOT, TIME, DT:         10002   1000.20001221      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   4.8298E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:        3           0.017           0.006
+ITTOT, TIME, DT:         10003   1000.29998779      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   3.0521E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:        4           0.023           0.006
+ITTOT, TIME, DT:         10004   1000.40002441      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   2.5195E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:        5           0.028           0.006
+ITTOT, TIME, DT:         10005   1000.50000000      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   2.2288E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:        6           0.034           0.006
+ITTOT, TIME, DT:         10006   1000.59997559      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   2.0305E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:        7           0.039           0.006
+ITTOT, TIME, DT:         10007   1000.70001221      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.8808E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:        8           0.045           0.005
+ITTOT, TIME, DT:         10008   1000.79998779      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.7606E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:        9           0.050           0.006
+ITTOT, TIME, DT:         10009   1000.90002441      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.6604E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:       10           0.056           0.006
+ITTOT, TIME, DT:         10010   1001.00000000      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.5743E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:       11           0.062           0.005
+ITTOT, TIME, DT:         10011   1001.09997559      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.5003E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:       12           0.067           0.006
+ITTOT, TIME, DT:         10012   1001.20001221      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.4545E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:       13           0.073           0.006
+ITTOT, TIME, DT:         10013   1001.29998779      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.4094E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:       14           0.078           0.006
+ITTOT, TIME, DT:         10014   1001.40002441      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.3664E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:       15           0.084           0.005
+ITTOT, TIME, DT:         10015   1001.50000000      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.3250E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:       16           0.090           0.006
+ITTOT, TIME, DT:         10016   1001.59997559      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.2864E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:       17           0.095           0.006
+ITTOT, TIME, DT:         10017   1001.70001221      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.2493E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:       18           0.101           0.005
+ITTOT, TIME, DT:         10018   1001.79998779      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.2151E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:       19           0.106           0.006
+ITTOT, TIME, DT:         10019   1001.90002441      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.1838E-08 CFLMAX=   0.05189
+
+ITSTEP, WTIME, DELTA:       20           0.112           0.006
+ITTOT, TIME, DT:         10020   1002.00000000      1.0000E-01
+LEVEL:  1 IPC=   5 DIVMAX=   1.1525E-08 CFLMAX=   0.05189
+
+STOP SIMULATION, MTSTEP REACHED           20           20
+
+Opening file fields.h5 with mode a
+Wrote all fields in  0.006 seconds
+
+MGLET FINISHED SUCCESSFULLY!
+
