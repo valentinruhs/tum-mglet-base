@@ -71,7 +71,7 @@ CONTAINS
         INTEGER(intk) :: i, igrid, l, q, splitDir
         INTEGER(intk) :: kk, jj, ii
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
-        REAL(realk), PARAMETER :: tol = 1.0E-12
+        REAL(realk), PARAMETER :: tol = 1.0E-8
         REAL(realk), ALLOCATABLE :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
         REAL(realk), ALLOCATABLE :: normxStag(:,:,:,:), normyStag(:,:,:,:), normzStag(:,:,:,:)
         REAL(realk), ALLOCATABLE :: alpha(:,:,:), alphaStag(:,:,:,:)

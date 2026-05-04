@@ -19,11 +19,12 @@ MODULE multiphase_io_mod
     USE grids_mod, ONLY: get_mgdims, get_mgbasb
     USE precision_mod, ONLY: intk, realk
     USE fields_mod, ONLY: get_field
+    USE multiphasecore_mod, ONLY: test_multiphase
 
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: init_multiphase_io, finish_multiphase_io, read_vff, initialize_velocity_in_fluid_1
+    PUBLIC :: init_multiphase_io, finish_multiphase_io, read_vff, update_velocity
 
 CONTAINS
 
@@ -68,9 +69,11 @@ CONTAINS
         INTEGER(intk) :: Nx, Ny, Nz
         INTEGER(intk) :: i, unit
 
-        Nx = 20
-        Ny = 20
-        Nz = 20
+        IF ( test_multiphase == 'CylTra' ) THEN
+            Nx = 84
+            Ny = 84
+            Nz = 8
+        END IF
 
         OPEN(newunit=unit,file="vff.csv",status="old",action="read")
         DO i = 1, Nx*Ny*Nz
@@ -82,7 +85,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE initialize_velocity_in_fluid_1(u_f, v_f, w_f, vff_f)
+    SUBROUTINE update_velocity(u_f, v_f, w_f, vff_f, itstep)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -93,14 +96,17 @@ CONTAINS
         TYPE(field_t), INTENT(in) :: v_f
         TYPE(field_t), INTENT(in) :: w_f
         TYPE(field_t), INTENT(in) :: vff_f
+        INTEGER(intk), INTENT(in) :: itstep
 
         ! Local variables
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
         REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: u, v, w, vff
-        INTEGER(intk) :: n, igrid, i, j, k
+        INTEGER(intk) :: n, igrid!, i, j, k
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         INTEGER(intk) :: kk, jj, ii
+        INTEGER(intk), ALLOCATABLE :: seed(:)
+        REAL(realk) :: magnitude, fac = 0.25
 
         CALL get_field(dx_f, "DX")
         CALL get_field(dy_f, "DY")
@@ -128,17 +134,25 @@ CONTAINS
             CALL ddy_f%get_ptr(ddy, igrid)
             CALL ddz_f%get_ptr(ddz, igrid)
 
-            DO i = 1, ii
-                DO j = 1, jj
-                    DO k = 1, kk
-                        IF ( vff(k,j,i) >= 0.001 ) THEN
-                            u(k,j,i) = 0.016
-                            v(k,j,i) = 0.016
-                            w(k,j,i) = 0.0
-                        END IF
-                    END DO
-                END DO
-            END DO
+            IF ( itstep == 1 ) THEN
+                CALL random_seed(size = n)
+                IF (.NOT. ALLOCATED(seed)) ALLOCATE(seed(n))
+                seed = 1234
+                CALL random_seed(put = seed)
+            END IF
+
+            IF ( test_multiphase == 'CylTra' ) THEN
+
+                IF ( MOD(itstep, 10) == 1 .AND. itstep /= 1 ) THEN
+                    CALL random_number(fac)
+                END IF
+
+                magnitude = 0.08                       
+                u = cos(fac*2.0*3.1415) * magnitude
+                v = sin(fac*2.0*3.1415) * magnitude
+                w = 0.0
+
+            END IF
 
         END DO
 

@@ -249,9 +249,9 @@ CONTAINS
         REAL(realk) :: sumStencilx, sumStencily, sumStencilz
 
         ! Loop over cells
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
+        DO i = 2, ii-1
+            DO j = 2, jj-1
+                DO k = 2, kk-1
 
                     sumStencilx = 0.0_realk
                     sumStencily = 0.0_realk
@@ -769,7 +769,7 @@ CONTAINS
                 !     CALL errr(__FILE__, __LINE__)
                 ! END IF
                 
-                theta = acos(qo / sqrt((-po)**3)) / 3.0
+                theta = acos(qo / (-po)**1.5) / 3.0
                 alphaStd = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3.0
             ELSE IF ( vol >= V3 .AND. mc3 <= mc1 + mc2 ) THEN
                 a2 = - 3.0/2.0 * ( mc1 + mc2 + mc3 )
@@ -784,7 +784,7 @@ CONTAINS
                 !     CALL errr(__FILE__, __LINE__)
                 ! END IF
                 
-                theta = acos(qo / sqrt((-po)**3)) / 3.0
+                theta = acos(qo / (-po)**1.5) / 3.0
                 alphaStd = sqrt(-po) * ( sqrt(3.0) * sin(theta) - cos(theta) ) - a2 / 3.0
             ELSE IF ( vol >= V3 .AND. mc3 > mc1 + mc2 ) THEN
                 alphaStd = m3 * vol / ( c1 * c2 ) + ( mc1 + mc2 ) / 2.0

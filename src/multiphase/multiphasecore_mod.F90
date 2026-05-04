@@ -29,12 +29,13 @@ MODULE multiphasecore_mod
 
     ! Control parameters
     LOGICAL, PROTECTED :: has_multiphase, solve_multiphase
+    CHARACTER(len=6), PROTECTED :: test_multiphase
 
     ! Physical parameters
     REAL(realk), PROTECTED :: rho1, rho2
     REAL(realk), PROTECTED :: gmol1, gmol2
 
-    PUBLIC :: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase, rho1, rho2, gmol1, gmol2
+    PUBLIC :: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase, test_multiphase, rho1, rho2, gmol1, gmol2
 
 CONTAINS
 
@@ -72,6 +73,7 @@ CONTAINS
 
         ! Read steering input
         CALL multiphaseconf%get_value("/solve", solve_multiphase, .TRUE.)
+        CALL multiphaseconf%get_value("/test", test_multiphase, "none")
 
         ! Read densities
         CALL multiphaseconf%get_value("/rho1", rho1, 1.0)

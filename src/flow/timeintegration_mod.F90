@@ -13,8 +13,8 @@ MODULE timeintegration_mod
     USE boussinesqterm_mod, ONLY: boussinesqterm
     USE coriolisterm_mod, ONLY: coriolisterm
     USE multiphase_advection_mod, ONLY : multiphase_split_advection
-    USE multiphasecore_mod, ONLY: solve_multiphase
-    USE multiphase_io_mod, ONLY: initialize_velocity_in_fluid_1
+    USE multiphasecore_mod, ONLY: solve_multiphase, test_multiphase
+    USE multiphase_io_mod, ONLY: update_velocity
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -97,9 +97,8 @@ CONTAINS
         END IF
 
         IF ( solve_multiphase ) THEN
-            IF ( itstep == 1 .AND. irk == 1 ) THEN
-                WRITE(*,*) "Init"
-                CALL initialize_velocity_in_fluid_1(u, v, w, vff)
+            IF ( test_multiphase /= "none" ) THEN
+                CALL update_velocity(u, v, w, vff, itstep)
             END IF
 
             CALL multiphase_split_advection(uo, vo, wo, u, v, w, ut, vt, wt, &
@@ -116,8 +115,6 @@ CONTAINS
         CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
         CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
         CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
-
-        ! CALL multiphase_vof_transport(vff, u, v, w, dtrki, itstep)
 
         IF (ib%type == "GHOSTCELL") THEN
             ! Equivalent to old "cop3dzero"

@@ -1,10 +1,10 @@
 {
     "time": {
         "dt": 0.1,
-        "mtstep": 20,
+        "mtstep": 11,
 	"itinfo": 1,
         "tstat": 10.0,
-	"read": true
+	"read": false
     },
     "io": {
         "grids": "grids.h5",
@@ -17,7 +17,7 @@
     "flow": {
         "gmol": 0.001,
         "rho": 1.0,
-        "uinf": [0.016, 0.016, 0.0],
+        "uinf": [0.0, 0.0, 0.0],
         "pressuresolver": {
             "type": "sip",
             "epcorr": 0.00002,
@@ -31,9 +31,10 @@
     
     "multiphase": {
     	"solve": true,
-	"rho1" : 10.0,
+	"test": "CylTra",
+	"rho1" : 1.0,
 	"rho2" : 1.0,
-	"gmol1" : 0.000000001,
-	"gmol2" : 0.000000001
+	"gmol1" : 0.000001,
+	"gmol2" : 0.000001
     }   
 }
