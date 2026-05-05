@@ -76,8 +76,8 @@ CONTAINS
         CALL multiphaseconf%get_value("/test", test_multiphase, "none")
 
         ! Read densities
-        CALL multiphaseconf%get_value("/rho1", rho1, 1.0)
-        CALL multiphaseconf%get_value("/rho2", rho2, 1.0)
+        CALL multiphaseconf%get_value("/rho1", rho1, 1.0_realk)
+        CALL multiphaseconf%get_value("/rho2", rho2, 1.0_realk)
         IF (rho1 <= 0.0 .OR. rho2 <= 0.0) THEN
             WRITE(*, *) "Densities must be positive. rho1 = ", rho1, ", rho2 = ", rho2
             CALL errr(__FILE__, __LINE__)
@@ -86,7 +86,7 @@ CONTAINS
         ! Read viscosities
         CALL multiphaseconf%get_value("/gmol1", gmol1)
         CALL multiphaseconf%get_value("/gmol2", gmol2)
-        IF (gmol1 <= 0.0 .OR. gmol2 <= 0.0) THEN
+        IF (gmol1 <= 0.0_realk .OR. gmol2 <= 0.0_realk) THEN
             WRITE(*, *) "Viscosities must be positive. gmol1 = ", gmol1, ", gmol2 = ", gmol2
             CALL errr(__FILE__, __LINE__)
         END IF

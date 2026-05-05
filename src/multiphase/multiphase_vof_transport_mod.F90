@@ -163,8 +163,8 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        uE = 0.5 * ( iStag * ( u(k,j,i) + u(k,j,i+1) ) + jStag * ( u(k,j,i) + u(k,j+1,i) ) + kStag * ( u(k,j,i) + u(k+1,j,i) ) ) 
-                        uW = 0.5 * ( iStag * ( u(k,j,i-1) + u(k,j,i) ) + jStag * ( u(k,j,i-1) + u(k,j+1,i-1) ) + kStag * ( u(k,j,i-1) + u(k+1,j,i-1) ) )
+                        uE = 0.5_realk * ( iStag * ( u(k,j,i) + u(k,j,i+1) ) + jStag * ( u(k,j,i) + u(k,j+1,i) ) + kStag * ( u(k,j,i) + u(k+1,j,i) ) ) 
+                        uW = 0.5_realk * ( iStag * ( u(k,j,i-1) + u(k,j,i) ) + jStag * ( u(k,j,i-1) + u(k,j+1,i-1) ) + kStag * ( u(k,j,i-1) + u(k+1,j,i-1) ) )
                         strainRate(k,j,i,component) = ( uE - uW ) / ( iStag * dx(i) + jStag * ddx(i) + kStag * ddx(i) )
                     END DO
                 END DO
@@ -173,8 +173,8 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        vN = 0.5 * ( iStag * ( v(k,j,i) + v(k,j,i+1) ) + jStag * ( v(k,j,i) + v(k,j+1,i) ) + kStag * ( v(k,j,i) + v(k+1,j,i) ) )
-                        vS = 0.5 * ( iStag * ( v(k,j-1,i) + v(k,j-1,i+1) ) + jStag * ( v(k,j-1,i) + v(k,j,i) ) + kStag * ( v(k+1,j-1,i) + v(k,j-1,i) ) )
+                        vN = 0.5_realk * ( iStag * ( v(k,j,i) + v(k,j,i+1) ) + jStag * ( v(k,j,i) + v(k,j+1,i) ) + kStag * ( v(k,j,i) + v(k+1,j,i) ) )
+                        vS = 0.5_realk * ( iStag * ( v(k,j-1,i) + v(k,j-1,i+1) ) + jStag * ( v(k,j-1,i) + v(k,j,i) ) + kStag * ( v(k+1,j-1,i) + v(k,j-1,i) ) )
                         strainRate(k,j,i,component) = ( vN - vS ) / ( iStag * ddy(j) + jStag * dy(j) + kStag * ddy(j) )
                     END DO
                 END DO
@@ -183,8 +183,8 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        wT = 0.5 * ( iStag * ( w(k,j,i) + w(k,j,i+1) ) + jStag * ( w(k,j,i) + w(k,j+1,i) ) + kStag * ( w(k,j,i) + w(k+1,j,i) ) ) 
-                        wB = 0.5 * ( iStag * ( w(k-1,j,i) + w(k-1,j,i+1) ) + jStag * ( w(k-1,j,i) + w(k-1,j+1,i) ) + kStag * ( w(k-1,j,i) + w(k,j,i) ) ) 
+                        wT = 0.5_realk * ( iStag * ( w(k,j,i) + w(k,j,i+1) ) + jStag * ( w(k,j,i) + w(k,j+1,i) ) + kStag * ( w(k,j,i) + w(k+1,j,i) ) ) 
+                        wB = 0.5_realk * ( iStag * ( w(k-1,j,i) + w(k-1,j,i+1) ) + jStag * ( w(k-1,j,i) + w(k-1,j+1,i) ) + kStag * ( w(k-1,j,i) + w(k,j,i) ) ) 
                         strainRate(k,j,i,component) = ( wT - wB ) / ( iStag * ddz(k) + jStag * ddz(k) + kStag * dz(k) )                    
                     END DO
                 END DO
@@ -213,10 +213,10 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    IF ( vff(k,j,i) >= 0.5 ) THEN
-                        nonDirectionalCompressionCoefficient(k,j,i) = 1.0
+                    IF ( vff(k,j,i) >= 0.5_realk ) THEN
+                        nonDirectionalCompressionCoefficient(k,j,i) = 1.0_realk
                     ELSE
-                        nonDirectionalCompressionCoefficient(k,j,i) = 0.0
+                        nonDirectionalCompressionCoefficient(k,j,i) = 0.0_realk
                     END IF
                 END DO
             END DO
@@ -245,10 +245,10 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    IF ( vff(k,j,i,component) >= 0.5 ) THEN
-                        nonDirectionalCompressionCoefficient(k,j,i,component) = 1.0
+                    IF ( vff(k,j,i,component) >= 0.5_realk ) THEN
+                        nonDirectionalCompressionCoefficient(k,j,i,component) = 1.0_realk
                     ELSE
-                        nonDirectionalCompressionCoefficient(k,j,i,component) = 0.0
+                        nonDirectionalCompressionCoefficient(k,j,i,component) = 0.0_realk
                     END IF
                 END DO
             END DO
@@ -324,7 +324,7 @@ CONTAINS
                                 flux = field(k,j,i) * ( abs( u(k,j,i) ) * dt / ddx(i) )
                             END IF
                         ELSE IF ( u(k,j,i) < -tol ) THEN
-                            IF ( isInterface(k,j,i) ) THEN
+                            IF ( isInterface(k,j,i+1) ) THEN
                                 ! Calculate the width of the fluxed volume and the alpha value for this subcell of the eastern cell
                                 eulerianFluxWidth = abs( u(k,j,i) ) * dt
                                 eulerianFluxAlpha = alpha(k,j,i+1)
@@ -339,9 +339,9 @@ CONTAINS
                                 flux = field(k,j,i+1) * ( abs( u(k,j,i) ) * dt / ddx(i+1) )
                             END IF
                         ELSE
-                            flux = 0.0
+                            flux = 0.0_realk
                         END IF
-                        fieldFlux(k,j,i) = sign( 1.0, u(k,j,i) ) * flux / dt
+                        fieldFlux(k,j,i) = sign( 1.0_realk, u(k,j,i) ) * flux / dt
                     END DO
                 END DO
             END DO
@@ -365,7 +365,7 @@ CONTAINS
                                 flux = field(k,j,i) * ( abs( v(k,j,i) ) * dt / ddy(j) )
                             END IF
                         ELSE IF ( v(k,j,i) < -tol ) THEN
-                            IF ( isInterface(k,j,i) ) THEN
+                            IF ( isInterface(k,j+1,i) ) THEN
                                 ! Calculate the width of the fluxed volume and the alpha value for this subcell of the northern cell
                                 eulerianFluxWidth = abs( v(k,j,i) ) * dt
                                 eulerianFluxAlpha = alpha(k,j+1,i)
@@ -380,9 +380,9 @@ CONTAINS
                                 flux = field(k,j+1,i) * ( abs( v(k,j,i) ) * dt / ddy(j+1) )
                             END IF
                         ELSE
-                            flux = 0.0
+                            flux = 0.0_realk
                         END IF
-                        fieldFlux(k,j,i) = sign( 1.0, v(k,j,i) ) * flux / dt
+                        fieldFlux(k,j,i) = sign( 1.0_realk, v(k,j,i) ) * flux / dt
                     END DO
                 END DO
             END DO
@@ -406,7 +406,7 @@ CONTAINS
                                 flux = field(k,j,i) * ( abs( w(k,j,i) ) * dt / ddz(k) )
                             END IF
                         ELSE IF ( w(k,j,i) < -tol ) THEN
-                            IF ( isInterface(k,j,i) ) THEN
+                            IF ( isInterface(k+1,j,i) ) THEN
                                 ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
                                 eulerianFluxWidth = abs( w(k,j,i) ) * dt
                                 eulerianFluxAlpha = alpha(k+1,j,i)
@@ -421,9 +421,9 @@ CONTAINS
                                 flux = field(k+1,j,i) * ( abs( w(k,j,i) ) * dt / ddz(k+1) )
                             END IF
                         ELSE
-                            flux = 0.0
+                            flux = 0.0_realk
                         END IF
-                        fieldFlux(k,j,i) = sign( 1.0, w(k,j,i) ) * flux / dt
+                        fieldFlux(k,j,i) = sign( 1.0_realk, w(k,j,i) ) * flux / dt
                     END DO
                 END DO
             END DO
@@ -464,23 +464,23 @@ CONTAINS
         REAL(realk) :: flux, complementFlux, fluxedProportion, eulerianFluxWidth, eulerianFluxAlpha, uE, vN, wT
 
         IF ( component == 1 ) THEN
-            iStag = 1.0
-            jStag = 0.0
-            kStag = 0.0
+            iStag = 1.0_realk
+            jStag = 0.0_realk
+            kStag = 0.0_realk
             deltaX = dx
             deltaY = ddy
             deltaZ = ddz
         ELSE IF ( component == 2 ) THEN
-            iStag = 0.0
-            jStag = 1.0
-            kStag = 0.0
+            iStag = 0.0_realk
+            jStag = 1.0_realk
+            kStag = 0.0_realk
             deltaX = ddx
             deltaY = dy
             deltaZ = ddz
         ELSE IF ( component == 3 ) THEN
-            iStag = 0.0
-            jStag = 0.0
-            kStag = 1.0
+            iStag = 0.0_realk
+            jStag = 0.0_realk
+            kStag = 1.0_realk
             deltaX = ddx
             deltaY = ddy
             deltaZ = dz
@@ -510,7 +510,7 @@ CONTAINS
             DO i = 3-nfu, ii-3+nbu
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        uE = 0.5 * ( iStag * ( u(k,j,i) + u(k,j,i+1) ) + jStag * ( u(k,j,i) + u(k,j+1,i) ) + kStag * ( u(k,j,i) + u(k+1,j,i) ) ) 
+                        uE = 0.5_realk * ( iStag * ( u(k,j,i) + u(k,j,i+1) ) + jStag * ( u(k,j,i) + u(k,j+1,i) ) + kStag * ( u(k,j,i) + u(k+1,j,i) ) ) 
                         IF ( uE > tol ) THEN
                             IF ( isInterface(k,j,i,component) ) THEN
                                 ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
@@ -522,14 +522,14 @@ CONTAINS
                                 
                                 ! Calculate flux for multiphase cell
                                 flux = fluxedProportion  * ( abs( uE ) * dt / deltaX(i) )
-                                complementFlux = ( 1 - fluxedProportion ) * ( abs( uE ) * dt / deltaX(i) )
+                                complementFlux = ( 1.0_realk - fluxedProportion ) * ( abs( uE ) * dt / deltaX(i) )
                             ELSE
                                 ! Calculate flux for singlephase cell
                                 flux = field(k,j,i,component) * ( abs( uE ) * dt / deltaX(i) )
-                                complementFlux = ( 1 - field(k,j,i,component) ) * ( abs( uE ) * dt / deltaX(i) )
+                                complementFlux = ( 1.0_realk - field(k,j,i,component) ) * ( abs( uE ) * dt / deltaX(i) )
                             END IF
                         ELSE IF ( uE < -tol ) THEN
-                            IF ( isInterface(k,j,i,component) ) THEN
+                            IF ( isInterface(k,j,i+1,component) ) THEN
                                 ! Calculate the width of the fluxed volume and the alpha value for this subcell of the eastern cell
                                 eulerianFluxWidth = abs( uE ) * dt
                                 eulerianFluxAlpha = alpha(k,j,i+1,component)
@@ -539,18 +539,18 @@ CONTAINS
 
                                 ! Calculate flux for multiphase cell
                                 flux = fluxedProportion * ( abs( uE ) * dt / deltaX(i+1) )
-                                complementFlux = ( 1 - fluxedProportion ) * ( abs( uE ) * dt / deltaX(i+1) )
+                                complementFlux = ( 1.0_realk - fluxedProportion ) * ( abs( uE ) * dt / deltaX(i+1) )
                             ELSE
                                 ! Calculate flux for singlephase cell
                                 flux = field(k,j,i+1,component) * ( abs( uE ) * dt / deltaX(i+1) )
-                                complementFlux = ( 1 - field(k,j,i+1,component) ) * ( abs( uE ) * dt / deltaX(i+1) )
+                                complementFlux = ( 1.0_realk - field(k,j,i+1,component) ) * ( abs( uE ) * dt / deltaX(i+1) )
                             END IF
                         ELSE
-                            flux = 0.0
-                            complementFlux = 0.0
+                            flux = 0.0_realk
+                            complementFlux = 0.0_realk
                         END IF
-                        fieldFlux(k,j,i,component) = sign( 1.0, uE ) * flux / dt
-                        complementFieldFlux(k,j,i,component) = sign( 1.0, uE ) * complementFlux / dt
+                        fieldFlux(k,j,i,component) = sign( 1.0_realk, uE ) * flux / dt
+                        complementFieldFlux(k,j,i,component) = sign( 1.0_realk, uE ) * complementFlux / dt
                     END DO
                 END DO
             END DO
@@ -558,7 +558,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3-nrv, jj-3+nlv
                     DO k = 3, kk-2
-                        vN = 0.5 * ( iStag * ( v(k,j,i) + v(k,j,i+1) ) + jStag * ( v(k,j,i) + v(k,j+1,i) ) + kStag * ( v(k,j,i) + v(k+1,j,i) ) )
+                        vN = 0.5_realk * ( iStag * ( v(k,j,i) + v(k,j,i+1) ) + jStag * ( v(k,j,i) + v(k,j+1,i) ) + kStag * ( v(k,j,i) + v(k+1,j,i) ) )
                         IF ( vN > tol ) THEN
                             IF ( isInterface(k,j,i,component) ) THEN
                                 ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
@@ -570,14 +570,14 @@ CONTAINS
 
                                 ! Calculate flux for multiphase cell
                                 flux = fluxedProportion * ( abs( vN ) * dt / deltaY(j) )
-                                complementFlux = ( 1 - fluxedProportion ) * ( abs( vN ) * dt / deltaY(j) )
+                                complementFlux = ( 1.0_realk - fluxedProportion ) * ( abs( vN ) * dt / deltaY(j) )
                             ELSE
                                 ! Calculate flux for singlephase cell
                                 flux = field(k,j,i,component) * ( abs( vN ) * dt / deltaY(j) )
-                                complementFlux = ( 1 - field(k,j,i,component) ) * ( abs( vN ) * dt / deltaY(j) )
+                                complementFlux = ( 1.0_realk - field(k,j,i,component) ) * ( abs( vN ) * dt / deltaY(j) )
                             END IF
                         ELSE IF ( vN < -tol ) THEN
-                            IF ( isInterface(k,j,i,component) ) THEN
+                            IF ( isInterface(k,j+1,i,component) ) THEN
                                 ! Calculate the width of the fluxed volume and the alpha value for this subcell of the northern cell
                                 eulerianFluxWidth = abs( vN ) * dt
                                 eulerianFluxAlpha = alpha(k,j+1,i,component)
@@ -587,18 +587,18 @@ CONTAINS
 
                                 ! Calculate flux for multiphase cell
                                 flux = fluxedProportion * ( abs( vN ) * dt / deltaY(j+1) )
-                                complementFlux = ( 1 - fluxedProportion ) * ( abs( vN ) * dt / deltaY(j+1) )
+                                complementFlux = ( 1.0_realk - fluxedProportion ) * ( abs( vN ) * dt / deltaY(j+1) )
                             ELSE
                                 ! Calculate flux for singlephase cell
                                 flux = field(k,j+1,i,component) * ( abs( vN ) * dt / deltaY(j+1) )
-                                complementFlux = ( 1 - field(k,j+1,i,component) ) * ( abs( vN ) * dt / deltaY(j+1) )
+                                complementFlux = ( 1.0_realk - field(k,j+1,i,component) ) * ( abs( vN ) * dt / deltaY(j+1) )
                             END IF
                         ELSE
-                            flux = 0.0
-                            complementFlux = 0.0
+                            flux = 0.0_realk
+                            complementFlux = 0.0_realk
                         END IF
-                        fieldFlux(k,j,i,component) = sign( 1.0, vN ) * flux / dt
-                        complementFieldFlux(k,j,i,component) = sign( 1.0, vN ) * complementFlux / dt
+                        fieldFlux(k,j,i,component) = sign( 1.0_realk, vN ) * flux / dt
+                        complementFieldFlux(k,j,i,component) = sign( 1.0_realk, vN ) * complementFlux / dt
                     END DO
                 END DO
             END DO
@@ -606,7 +606,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3-nbw, kk-3+ntw
-                        wT = 0.5 * ( iStag * ( w(k,j,i) + w(k,j,i+1) ) + jStag * ( w(k,j,i) + w(k,j+1,i) ) + kStag * ( w(k,j,i) + w(k+1,j,i) ) )
+                        wT = 0.5_realk * ( iStag * ( w(k,j,i) + w(k,j,i+1) ) + jStag * ( w(k,j,i) + w(k,j+1,i) ) + kStag * ( w(k,j,i) + w(k+1,j,i) ) )
                         IF ( wT > tol ) THEN
                             IF ( isInterface(k,j,i,component) ) THEN
                                 ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
@@ -618,14 +618,14 @@ CONTAINS
 
                                 ! Calculate flux for multiphase cell
                                 flux = fluxedProportion * ( abs( wT ) * dt / deltaZ(k) )
-                                complementFlux = ( 1 - fluxedProportion ) * ( abs( wT ) * dt / deltaZ(k) )
+                                complementFlux = ( 1.0_realk - fluxedProportion ) * ( abs( wT ) * dt / deltaZ(k) )
                             ELSE
                                 ! Calculate flux for singlephase cell
                                 flux = field(k,j,i,component) * ( abs( wT ) * dt / deltaZ(k) )
-                                complementFlux = ( 1 - field(k,j,i,component) ) * ( abs( wT ) * dt / deltaZ(k) )
+                                complementFlux = ( 1.0_realk - field(k,j,i,component) ) * ( abs( wT ) * dt / deltaZ(k) )
                             END IF
                         ELSE IF ( wT < -tol ) THEN
-                            IF ( isInterface(k,j,i,component) ) THEN
+                            IF ( isInterface(k+1,j,i,component) ) THEN
                                 ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
                                 eulerianFluxWidth = abs( wT ) * dt
                                 eulerianFluxAlpha = alpha(k+1,j,i,component)
@@ -635,18 +635,18 @@ CONTAINS
 
                                 ! Calculate flux for multiphase cell
                                 flux = fluxedProportion * ( abs( wT ) * dt / deltaZ(k+1) )
-                                complementFlux = ( 1 - fluxedProportion ) * ( abs( wT ) * dt / deltaZ(k+1) )
+                                complementFlux = ( 1.0_realk - fluxedProportion ) * ( abs( wT ) * dt / deltaZ(k+1) )
                             ELSE
                                 ! Calculate flux for singlephase cell
                                 flux = field(k+1,j,i,component) * ( abs( wT ) * dt / deltaZ(k+1) )
-                                complementFlux = ( 1 - field(k+1,j,i,component) ) * ( abs( wT ) * dt / deltaZ(k+1) )
+                                complementFlux = ( 1.0_realk - field(k+1,j,i,component) ) * ( abs( wT ) * dt / deltaZ(k+1) )
                             END IF
                         ELSE
-                            flux = 0.0
-                            complementFLux = 0.0
+                            flux = 0.0_realk
+                            complementFLux = 0.0_realk
                         END IF
-                        fieldFlux(k,j,i,component) = sign( 1.0, wT ) * flux / dt
-                        complementFieldFlux(k,j,i,component) = sign( 1.0, wT ) * complementFlux / dt
+                        fieldFlux(k,j,i,component) = sign( 1.0_realk, wT ) * flux / dt
+                        complementFieldFlux(k,j,i,component) = sign( 1.0_realk, wT ) * complementFlux / dt
                     END DO
                 END DO
             END DO
@@ -816,9 +816,9 @@ CONTAINS
             DO j = 3, jj-2
                 DO k = 3, kk-2
                     IF ( vff(k,j,i) < tol ) THEN
-                        vff(k,j,i) = 0.0
-                    ELSE IF ( vff(k,j,i) > 1 - tol ) THEN
-                        vff(k,j,i) = 1.0
+                        vff(k,j,i) = 0.0_realk
+                    ELSE IF ( vff(k,j,i) > 1.0_realk - tol ) THEN
+                        vff(k,j,i) = 1.0_realk
                     END IF
                 END DO
             END DO
@@ -911,7 +911,7 @@ CONTAINS
         IF ( .NOT. PRESENT(propertyFluid1) .OR. .NOT. PRESENT(propertyFluid2) ) THEN
             compressionTerm = nonDirectionalCompressionCoefficient * strainRate
         ELSE IF ( PRESENT(propertyFluid1) .AND. PRESENT(propertyFluid2) ) THEN
-            compressionTerm = ( nonDirectionalCompressionCoefficient * propertyFluid1 + ( 1.0 - nonDirectionalCompressionCoefficient ) * propertyFluid2 ) * strainRate
+            compressionTerm = ( nonDirectionalCompressionCoefficient * propertyFluid1 + ( 1.0_realk - nonDirectionalCompressionCoefficient ) * propertyFluid2 ) * strainRate
         END IF
 
     END SUBROUTINE compression_term_wrapper_pres
@@ -944,7 +944,7 @@ CONTAINS
         IF ( .NOT. PRESENT(propertyFluid1) .OR. .NOT. PRESENT(propertyFluid2) ) THEN
             compressionTerm(:,:,:,component) = nonDirectionalCompressionCoefficient(:,:,:,component) * strainRate(:,:,:,component)
         ELSE IF ( PRESENT(propertyFluid1) .AND. PRESENT(propertyFluid2) ) THEN
-            compressionTerm(:,:,:,component) = ( nonDirectionalCompressionCoefficient(:,:,:,component) * propertyFluid1 + ( 1.0 - nonDirectionalCompressionCoefficient(:,:,:,component) ) * propertyFluid2 ) * strainRate(:,:,:,component)
+            compressionTerm(:,:,:,component) = ( nonDirectionalCompressionCoefficient(:,:,:,component) * propertyFluid1 + ( 1.0_realk - nonDirectionalCompressionCoefficient(:,:,:,component) ) * propertyFluid2 ) * strainRate(:,:,:,component)
         END IF
 
     END SUBROUTINE compression_term_wrapper_stag

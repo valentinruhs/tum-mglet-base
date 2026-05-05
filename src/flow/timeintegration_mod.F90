@@ -98,7 +98,7 @@ CONTAINS
 
         IF ( solve_multiphase ) THEN
             IF ( test_multiphase /= "none" ) THEN
-                CALL update_velocity(u, v, w, vff, itstep)
+                CALL update_velocity(u, v, w, vff, itstep, dt)
             END IF
 
             CALL multiphase_split_advection(uo, vo, wo, u, v, w, ut, vt, wt, &

@@ -440,8 +440,8 @@ CONTAINS
 
                     ! Normal stresses
                     !             -----------inner derivatives-----------
-                    tauxxe = ge * 2 * (u(k,j,i+1) - u(k,j,i)) * rddx(i+1)
-                    tauxxw = gw * 2 * (u(k,j,i) - u(k,j,i-1)) * rddx(i)
+                    tauxxe = ge * 2.0_realk * (u(k,j,i+1) - u(k,j,i)) * rddx(i+1)
+                    tauxxw = gw * 2.0_realk * (u(k,j,i) - u(k,j,i-1)) * rddx(i)
 
                     ! Shear stresses
                     !             ------------------------------inner derivatives------------------------------
@@ -491,8 +491,8 @@ CONTAINS
 
                     ! Normal stresses
                     !             -----------inner derivatives-----------
-                    tauyyn = gn * 2 * (v(k,j+1,i) - v(k,j,i)) * rddy(j+1)
-                    tauyys = gs * 2 * (v(k,j,i) - v(k,j-1,i)) * rddy(j)
+                    tauyyn = gn * 2.0_realk * (v(k,j+1,i) - v(k,j,i)) * rddy(j+1)
+                    tauyys = gs * 2.0_realk * (v(k,j,i) - v(k,j-1,i)) * rddy(j)
                     
                     ! Shear stresses
                     !             ------------------------------inner derivatives------------------------------
@@ -542,8 +542,8 @@ CONTAINS
                     
                     ! Normal stresses
                     !             -----------inner derivatives-----------
-                    tauzzt = gt * 2 * (w(k+1,j,i) - w(k,j,i)) * rddz(k+1)
-                    tauzzb = gb * 2 * (w(k,j,i) - w(k-1,j,i)) * rddz(k)
+                    tauzzt = gt * 2.0_realk * (w(k+1,j,i) - w(k,j,i)) * rddz(k+1)
+                    tauzzb = gb * 2.0_realk * (w(k,j,i) - w(k-1,j,i)) * rddz(k)
 
                     ! Change due to diffusion
                     !                                  ---------------------------------------outer derivatives----------------------------------------

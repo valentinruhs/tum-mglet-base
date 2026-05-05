@@ -99,7 +99,7 @@ CONTAINS
         DO i = 1, ii
             DO j = 1, jj
                 DO k = 1, kk
-                    propertyField(k,j,i) = propertyFluid1 * vff(k,j,i) + propertyFluid2 * ( 1 - vff(k,j,i) )
+                    propertyField(k,j,i) = propertyFluid1 * vff(k,j,i) + propertyFluid2 * ( 1.0_realk - vff(k,j,i) )
                 END DO
             END DO
         END DO
@@ -128,7 +128,7 @@ CONTAINS
         DO i = 1, ii
             DO j = 1, jj
                 DO k = 1, kk
-                    propertyField(k,j,i,component) = propertyFluid1 * vff(k,j,i,component) + propertyFluid2 * ( 1 - vff(k,j,i,component) )
+                    propertyField(k,j,i,component) = propertyFluid1 * vff(k,j,i,component) + propertyFluid2 * ( 1.0_realk - vff(k,j,i,component) )
                 END DO
             END DO
         END DO

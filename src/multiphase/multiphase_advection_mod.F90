@@ -71,7 +71,7 @@ CONTAINS
         INTEGER(intk) :: i, igrid, l, q, splitDir
         INTEGER(intk) :: kk, jj, ii
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
-        REAL(realk), PARAMETER :: tol = 1.0E-8
+        REAL(realk), PARAMETER :: tol = 1.0E-8_realk
         REAL(realk), ALLOCATABLE :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
         REAL(realk), ALLOCATABLE :: normxStag(:,:,:,:), normyStag(:,:,:,:), normzStag(:,:,:,:)
         REAL(realk), ALLOCATABLE :: alpha(:,:,:), alphaStag(:,:,:,:)
@@ -194,7 +194,7 @@ CONTAINS
             CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
 
             DO q = 1, 3             ! Loop over staggered components u, v and w
-
+                cycle
                 CALL staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
                 CALL interface_reconstruction_wrapper(kk, jj, ii, q, vffStag, dx, dy, dz, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
                 CALL compute_material_property_field(kk, jj, ii, q, densityFieldStag, vffStag, rho1, rho2)
@@ -204,9 +204,10 @@ CONTAINS
             densityFieldStagOld = densityFieldStag
 
             DO l = 1, 3             ! Loop over dimensions x, y and z for split-advection
-                DO q = 1, 3         ! Loop over staggered components u, v and w
 
-                    splitDir = advSeq(l)
+                splitDir = advSeq(l)
+
+                DO q = 1, 3         ! Loop over staggered components u, v and w
 
                     CALL compute_flux(kk, jj, ii, q, splitDir, vffFluxStag, complementvffFluxStag, vffStag, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop)
                     CALL compute_density_flux(kk, jj, ii, q, vffFluxStag, complementvffFluxStag, rho1, rho2, densityFieldFluxStag)
@@ -224,7 +225,6 @@ CONTAINS
                 CALL compression_term_wrapper(kk, jj, ii, splitDir, u, v, w, vff, ddx, ddy, ddz, vffCompressionTerm)
                 CALL update_field(kk, jj, ii, splitDir, vff, vffFlux, vffCompressionTerm, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
                 CALL clip_volume_fraction_field(kk, ii, jj, vff, tol) 
-
             END DO
         END DO
 
@@ -293,19 +293,19 @@ CONTAINS
         IF (ntop == 3) ntw = 1
 
         IF ( component == 1 ) THEN
-            iStag = 1.0
-            jStag = 0.0
-            kStag = 0.0
+            iStag = 1.0_realk
+            jStag = 0.0_realk
+            kStag = 0.0_realk
             velocity = u
         ELSE IF ( component == 2 ) THEN
-            iStag = 0.0
-            jStag = 1.0
-            kStag = 0.0
+            iStag = 0.0_realk
+            jStag = 1.0_realk
+            kStag = 0.0_realk
             velocity = v
         ELSE IF ( component == 3 ) THEN
-            iStag = 0.0
-            jStag = 0.0
-            kStag = 1.0
+            iStag = 0.0_realk
+            jStag = 0.0_realk
+            kStag = 1.0_realk
             velocity = w
         END IF
 
@@ -323,7 +323,7 @@ CONTAINS
                         IF ( isNearInterfaceStag(k,j,i,component) ) THEN
                             IF ( k == 5 .AND. j == 4 .AND. i == 3 ) WRITE(*,*) component, adveE, adveW, densityFieldFluxStag(k,j,i,component), densityFieldFluxStag(k,j,i-1,component), densityCompressionTermStag(k,j,i,component) 
                             dMomentum = - ( adveE * densityFieldFluxStag(k,j,i,component) - adveW * densityFieldFluxStag(k,j,i-1,component) ) + velocity(k,j,i) * densityCompressionTermStag(k,j,i,component)
-                            velocity(k,j,i) = 1 / densityFieldStag(k,j,i,component) * ( densityFieldStagOld(k,j,i,component) * velocity(k,j,i) + dMomentum )
+                            velocity(k,j,i) = 1.0_realk / densityFieldStag(k,j,i,component) * ( densityFieldStagOld(k,j,i,component) * velocity(k,j,i) + dMomentum )
                         ELSE
                             dVelocity = - ( ( adveE * advrE - adveW * advrW ) * rdx(i) )
                             velocity(k,j,i) = velocity(k,j,i) + dVelocity
@@ -352,7 +352,7 @@ CONTAINS
 
                         IF ( isNearInterfaceStag(k,j,i,component) ) THEN
                             dMomentum = - ( adveN * densityFieldFluxStag(k,j,i,component) - adveS * densityFieldFluxStag(k,j-1,i,component) ) + velocity(k,j,i) * densityCompressionTermStag(k,j,i,component)
-                            velocity(k,j,i) = 1 / densityFieldStag(k,j,i,component) * ( densityFieldStagOld(k,j,i,component) * velocity(k,j,i) + dMomentum )
+                            velocity(k,j,i) = 1.0_realk / densityFieldStag(k,j,i,component) * ( densityFieldStagOld(k,j,i,component) * velocity(k,j,i) + dMomentum )
                         ELSE
                             dVelocity = - ( ( adveN * advrN - adveS * advrS ) * rdy(j) )
                             velocity(k,j,i) = velocity(k,j,i) + dVelocity
@@ -381,7 +381,7 @@ CONTAINS
 
                         IF ( isNearInterfaceStag(k,j,i,component) ) THEN
                             dMomentum = - ( adveT * densityFieldFluxStag(k,j,i,component) - adveB * densityFieldFluxStag(k-1,j,i,component) ) + velocity(k,j,i) * densityCompressionTermStag(k,j,i,component)
-                            velocity(k,j,i) = 1 / densityFieldStag(k,j,i,component) * ( densityFieldStagOld(k,j,i,component) * velocity(k,j,i) + dMomentum )
+                            velocity(k,j,i) = 1.0_realk / densityFieldStag(k,j,i,component) * ( densityFieldStagOld(k,j,i,component) * velocity(k,j,i) + dMomentum )
                         ELSE
                             dVelocity = - ( ( adveT * advrT - adveB * advrB ) * rdz(k) )
                             velocity(k,j,i) = velocity(k,j,i) + dVelocity
@@ -425,18 +425,18 @@ CONTAINS
         ! None
 
         !       -------indicator-function------   ------------------------------QUICK 3^rd order interpolation------------------------------
-        adveE = 0.5 * ( 1.0 + SIGN(1.0,advrE) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k,j,i+1) - 0.125 * adveVelocity(k,j,i-1) + &
-                0.5 * ( 1.0 - SIGN(1.0,advrE) ) * 0.75 * adveVelocity(k,j,i+1) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k,j,i+2)
-        adveW = 0.5 * ( 1.0 + SIGN(1.0,advrW) ) * 0.75 * adveVelocity(k,j,i-1) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k,j,i-2) + &
-                0.5 * ( 1.0 - SIGN(1.0,advrW) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k,j,i-1) - 0.125 * adveVelocity(k,j,i+1)
-        adveN = 0.5 * ( 1.0 + SIGN(1.0,advrN) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k,j+1,i) - 0.125 * adveVelocity(k,j-1,i) + &
-                0.5 * ( 1.0 - SIGN(1.0,advrN) ) * 0.75 * adveVelocity(k,j+1,i) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k,j+2,i)
-        adveS = 0.5 * ( 1.0 + SIGN(1.0,advrS) ) * 0.75 * adveVelocity(k,j-1,i) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k,j-2,i) + &
-                0.5 * ( 1.0 - SIGN(1.0,advrS) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k,j-1,i) - 0.125 * adveVelocity(k,j+1,i)
-        adveT = 0.5 * ( 1.0 + SIGN(1.0,advrT) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k+1,j,i) - 0.125 * adveVelocity(k-1,j,i) + &
-                0.5 * ( 1.0 - SIGN(1.0,advrT) ) * 0.75 * adveVelocity(k+1,j,i) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k+2,j,i)
-        adveB = 0.5 * ( 1.0 + SIGN(1.0,advrB) ) * 0.75 * adveVelocity(k-1,j,i) + 0.375 * adveVelocity(k,j,i) - 0.125 * adveVelocity(k-2,j,i) + &
-                0.5 * ( 1.0 - SIGN(1.0,advrB) ) * 0.75 * adveVelocity(k,j,i) + 0.375 * adveVelocity(k-1,j,i) - 0.125 * adveVelocity(k+1,j,i)
+        adveE = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrE) ) * 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j,i+1) - 0.125_realk * adveVelocity(k,j,i-1) + &
+                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrE) ) * 0.75_realk * adveVelocity(k,j,i+1) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j,i+2)
+        adveW = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrW) ) * 0.75_realk * adveVelocity(k,j,i-1) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j,i-2) + &
+                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrW) ) * 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j,i-1) - 0.125_realk * adveVelocity(k,j,i+1)
+        adveN = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrN) ) * 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j+1,i) - 0.125_realk * adveVelocity(k,j-1,i) + &
+                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrN) ) * 0.75_realk * adveVelocity(k,j+1,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j+2,i)
+        adveS = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrS) ) * 0.75_realk * adveVelocity(k,j-1,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j-2,i) + &
+                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrS) ) * 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j-1,i) - 0.125_realk * adveVelocity(k,j+1,i)
+        adveT = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrT) ) * 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k+1,j,i) - 0.125_realk * adveVelocity(k-1,j,i) + &
+                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrT) ) * 0.75_realk * adveVelocity(k+1,j,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k+2,j,i)
+        adveB = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrB) ) * 0.75_realk * adveVelocity(k-1,j,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k-2,j,i) + &
+                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrB) ) * 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k-1,j,i) - 0.125_realk * adveVelocity(k+1,j,i)
 
     END SUBROUTINE quick_advected_interpolation_scheme
 
@@ -461,12 +461,12 @@ CONTAINS
         ! Loval variables
         ! None
 
-        advrE = 0.5 * ( iStag * ( u(k,j,i) + u(k,j,i+1) ) + jStag * ( u(k,j,i) + u(k,j+1,i) ) + kStag * ( u(k,j,i) + u(k+1,j,i) ) )
-        advrW = 0.5 * ( iStag * ( u(k,j,i-1) + u(k,j,i) ) + jStag * ( u(k,j,i-1) + u(k,j+1,i-1) ) + kStag * ( u(k,j,i-1) + u(k+1,j,i-1) ) )
-        advrN = 0.5 * ( iStag * ( v(k,j,i) + v(k,j,i+1) ) + jStag * ( v(k,j,i) + v(k,j+1,i) ) + kStag * ( v(k,j,i) + v(k+1,j,i) ) )
-        advrS = 0.5 * ( iStag * ( v(k,j-1,i) + v(k,j-1,i+1) ) + jStag * ( v(k,j-1,i) + v(k,j,i) ) + kStag * ( v(k,j-1,i) + v(k+1,j-1,i) ) )
-        advrT = 0.5 * ( iStag * ( w(k,j,i) + w(k,j,i+1) ) + jStag * ( w(k,j,i) + w(k,j+1,i) ) + kStag * ( w(k,j,i) + w(k+1,j,i) ) )
-        advrB = 0.5 * ( iStag * ( w(k-1,j,i) + w(k-1,j,i+1) ) + jStag * ( w(k-1,j,i) + w(k-1,j+1,i) ) + kStag * ( w(k-1,j,i) + w(k,j,i) ) )
+        advrE = 0.5_realk * ( iStag * ( u(k,j,i) + u(k,j,i+1) ) + jStag * ( u(k,j,i) + u(k,j+1,i) ) + kStag * ( u(k,j,i) + u(k+1,j,i) ) )
+        advrW = 0.5_realk * ( iStag * ( u(k,j,i-1) + u(k,j,i) ) + jStag * ( u(k,j,i-1) + u(k,j+1,i-1) ) + kStag * ( u(k,j,i-1) + u(k+1,j,i-1) ) )
+        advrN = 0.5_realk * ( iStag * ( v(k,j,i) + v(k,j,i+1) ) + jStag * ( v(k,j,i) + v(k,j+1,i) ) + kStag * ( v(k,j,i) + v(k+1,j,i) ) )
+        advrS = 0.5_realk * ( iStag * ( v(k,j-1,i) + v(k,j-1,i+1) ) + jStag * ( v(k,j-1,i) + v(k,j,i) ) + kStag * ( v(k,j-1,i) + v(k+1,j-1,i) ) )
+        advrT = 0.5_realk * ( iStag * ( w(k,j,i) + w(k,j,i+1) ) + jStag * ( w(k,j,i) + w(k,j+1,i) ) + kStag * ( w(k,j,i) + w(k+1,j,i) ) )
+        advrB = 0.5_realk * ( iStag * ( w(k-1,j,i) + w(k-1,j,i+1) ) + jStag * ( w(k-1,j,i) + w(k-1,j+1,i) ) + kStag * ( w(k-1,j,i) + w(k,j,i) ) )
 
     END SUBROUTINE advecting_interpolation_scheme
 

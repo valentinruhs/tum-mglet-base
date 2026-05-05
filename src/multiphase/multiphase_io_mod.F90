@@ -72,10 +72,10 @@ CONTAINS
         IF ( test_multiphase == 'CylTra' ) THEN
             Nx = 84
             Ny = 84
-            Nz = 8
+            Nz = 84
         END IF
 
-        OPEN(newunit=unit,file="vff.csv",status="old",action="read")
+        OPEN(newunit=unit,file="vffInitSub2.csv",status="old",action="read")
         DO i = 1, Nx*Ny*Nz
             READ(unit,*) vff%arr(i)
         END DO
@@ -85,7 +85,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE update_velocity(u_f, v_f, w_f, vff_f, itstep)
+    SUBROUTINE update_velocity(u_f, v_f, w_f, vff_f, itstep, dt)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -97,6 +97,7 @@ CONTAINS
         TYPE(field_t), INTENT(in) :: w_f
         TYPE(field_t), INTENT(in) :: vff_f
         INTEGER(intk), INTENT(in) :: itstep
+        REAL(realk), INTENT(in) :: dt
 
         ! Local variables
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
@@ -104,9 +105,11 @@ CONTAINS
         INTEGER(intk) :: n, igrid!, i, j, k
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
-        INTEGER(intk) :: kk, jj, ii
+        INTEGER(intk) :: kk, jj, ii, k, j, i
         INTEGER(intk), ALLOCATABLE :: seed(:)
-        REAL(realk) :: magnitude, fac = 0.25
+        REAL(realk) :: magnitude, fac = 0.25_realk
+        REAL(realk), PARAMETER :: pi = 4.0_realk * atan(1.0_realk)
+        REAL(realk), ALLOCATABLE :: psi(:,:,:)
 
         CALL get_field(dx_f, "DX")
         CALL get_field(dy_f, "DY")
@@ -134,24 +137,43 @@ CONTAINS
             CALL ddy_f%get_ptr(ddy, igrid)
             CALL ddz_f%get_ptr(ddz, igrid)
 
-            IF ( itstep == 1 ) THEN
-                CALL random_seed(size = n)
-                IF (.NOT. ALLOCATED(seed)) ALLOCATE(seed(n))
-                seed = 1234
-                CALL random_seed(put = seed)
-            END IF
-
             IF ( test_multiphase == 'CylTra' ) THEN
+                IF ( itstep == 1 ) THEN
+                    CALL random_seed(size = n)
+                    IF (.NOT. ALLOCATED(seed)) ALLOCATE(seed(n))
+                    seed = 54321
+                    CALL random_seed(put = seed)
+                END IF
 
                 IF ( MOD(itstep, 10) == 1 .AND. itstep /= 1 ) THEN
                     CALL random_number(fac)
                 END IF
 
-                magnitude = 0.08                       
-                u = cos(fac*2.0*3.1415) * magnitude
-                v = sin(fac*2.0*3.1415) * magnitude
-                w = 0.0
-
+                magnitude = 0.02_realk                     
+                u = cos(fac*2.0_realk*pi) * magnitude
+                v = sin(fac*2.0_realk*pi) * magnitude
+                w = 0.0_realk
+            ELSE IF ( test_multiphase == 'VorBox' ) THEN
+                IF (.NOT. itstep == 1) return
+                IF (.NOT. ALLOCATED(psi)) ALLOCATE(psi(kk,jj,ii))
+                DO i = 1, ii
+                    DO j = 1, jj
+                        DO k = 1, kk
+                            psi(k,j,i) = 1/pi * cos(pi * itstep * dt / 2.0_realk) * &
+                                sin(pi*(-2.0_realk*ddx(1)+sum(ddx(1:i))))**2.0_realk * &
+                                sin(pi*(-2.0_realk*ddy(1)+sum(ddy(1:j))))**2.0_realk
+                        END DO
+                    END DO 
+                END DO
+                DO i = 2, ii-1
+                    DO j = 2, jj-1
+                        DO k = 2, kk-1
+                            u(k,j,i) = ( psi(k,j+1,i) - psi(k,j-1,i) ) / ( 2.0_realk * ddy(j) )
+                            v(k,j,i) = - ( psi(k,j,i+1) - psi(k,j,i-1) ) / ( 2.0_realk * ddx(i) )
+                            w(k,j,i) = 0.0_realk 
+                        END DO
+                    END DO
+                END DO                        
             END IF
 
         END DO
