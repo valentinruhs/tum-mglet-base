@@ -70,12 +70,17 @@ CONTAINS
         INTEGER(intk) :: i, unit
 
         IF ( test_multiphase == 'CylTra' ) THEN
+            OPEN(newunit=unit,file="vffInitSub32.csv",status="old",action="read")
             Nx = 84
             Ny = 84
-            Nz = 84
+            Nz = 85
+        ELSE IF ( test_multiphase == 'VorBox' ) THEN
+            OPEN(newunit=unit,file="vffInitSub16.csv",status="old",action="read")
+            Nx = 132
+            Ny = 132
+            Nz = 133
         END IF
 
-        OPEN(newunit=unit,file="vffInitSub2.csv",status="old",action="read")
         DO i = 1, Nx*Ny*Nz
             READ(unit,*) vff%arr(i)
         END DO
@@ -106,8 +111,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         INTEGER(intk) :: kk, jj, ii, k, j, i
-        INTEGER(intk), ALLOCATABLE :: seed(:)
-        REAL(realk) :: magnitude, fac = 0.25_realk
+        REAL(realk) :: magnitude, fac(8)
         REAL(realk), PARAMETER :: pi = 4.0_realk * atan(1.0_realk)
         REAL(realk), ALLOCATABLE :: psi(:,:,:)
 
@@ -138,38 +142,37 @@ CONTAINS
             CALL ddz_f%get_ptr(ddz, igrid)
 
             IF ( test_multiphase == 'CylTra' ) THEN
-                IF ( itstep == 1 ) THEN
-                    CALL random_seed(size = n)
-                    IF (.NOT. ALLOCATED(seed)) ALLOCATE(seed(n))
-                    seed = 54321
-                    CALL random_seed(put = seed)
+                fac = [0.768583431793480, 0.595513129409263, 0.103136189378590, &
+                       0.551367965286398, 0.224230895589156, 0.251321097681516, &
+                       0.286000011427295, 0.027896377820804]
+                magnitude = 0.0125_realk
+                IF ( itstep <= 1200 ) THEN 
+                    u = cos(fac(floor((itstep-1)/200.0_realk) + 1)*2.0_realk*pi) * magnitude
+                    v = sin(fac(floor((itstep-1)/200.0_realk) + 1)*2.0_realk*pi) * magnitude
+                ELSE if ( itstep <= 1400 ) THEN 
+                    u = cos(fac(7)*2.0_realk*pi) * magnitude
+                    v = sin(fac(7)*2.0_realk*pi) * magnitude
+                ELSE 
+                    u = cos(fac(8)*2.0_realk*pi) * magnitude
+                    v = sin(fac(8)*2.0_realk*pi) * magnitude
                 END IF
-
-                IF ( MOD(itstep, 10) == 1 .AND. itstep /= 1 ) THEN
-                    CALL random_number(fac)
-                END IF
-
-                magnitude = 0.02_realk                     
-                u = cos(fac*2.0_realk*pi) * magnitude
-                v = sin(fac*2.0_realk*pi) * magnitude
                 w = 0.0_realk
             ELSE IF ( test_multiphase == 'VorBox' ) THEN
-                IF (.NOT. itstep == 1) return
                 IF (.NOT. ALLOCATED(psi)) ALLOCATE(psi(kk,jj,ii))
                 DO i = 1, ii
                     DO j = 1, jj
                         DO k = 1, kk
-                            psi(k,j,i) = 1/pi * cos(pi * itstep * dt / 2.0_realk) * &
-                                sin(pi*(-2.0_realk*ddx(1)+sum(ddx(1:i))))**2.0_realk * &
-                                sin(pi*(-2.0_realk*ddy(1)+sum(ddy(1:j))))**2.0_realk
+                            psi(k,j,i) = - 1/pi * cos(pi * itstep * dt / 2.0_realk) * &
+                                sin(pi*(- 2.0_realk * ddx(1) + i * ddx(1)))**2.0_realk * &
+                                sin(pi*(- 2.0_realk * ddy(1) + j * ddy(1)))**2.0_realk
                         END DO
                     END DO 
                 END DO
                 DO i = 2, ii-1
                     DO j = 2, jj-1
                         DO k = 2, kk-1
-                            u(k,j,i) = ( psi(k,j+1,i) - psi(k,j-1,i) ) / ( 2.0_realk * ddy(j) )
-                            v(k,j,i) = - ( psi(k,j,i+1) - psi(k,j,i-1) ) / ( 2.0_realk * ddx(i) )
+                            u(k,j,i) = ( psi(k,j,i) - psi(k,j-1,i) ) / ddy(j)
+                            v(k,j,i) = - ( psi(k,j,i) - psi(k,j,i-1) ) / ddx(i)
                             w(k,j,i) = 0.0_realk 
                         END DO
                     END DO

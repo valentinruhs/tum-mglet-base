@@ -102,7 +102,7 @@ CONTAINS
             END IF
 
             CALL multiphase_split_advection(uo, vo, wo, u, v, w, ut, vt, wt, &
-                vff, p, g, d, dtrki, itstep)
+                vff, p, g, d, dtrki*dt, itstep)
         ELSE 
             ! TSTLE4 zeroize uo, vo, wo before use internally
             CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g)

@@ -31,7 +31,7 @@ else()
 endif()
 
 # CMake build options
-option(MGLET_REAL64 "Compile MGLET with double precision support" OFF)
+option(MGLET_REAL64 "Compile MGLET with double precision support" ON)
 if(MGLET_REAL64)
     message(STATUS "Compiling MGLET in double precision mode")
     add_compile_definitions(_MGLET_DOUBLE_PRECISION_=1)

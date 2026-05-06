@@ -71,7 +71,7 @@ CONTAINS
         INTEGER(intk) :: i, igrid, l, q, splitDir
         INTEGER(intk) :: kk, jj, ii
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
-        REAL(realk), PARAMETER :: tol = 1.0E-8_realk
+        REAL(realk), PARAMETER :: tol = 1.0E-15_realk
         REAL(realk), ALLOCATABLE :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
         REAL(realk), ALLOCATABLE :: normxStag(:,:,:,:), normyStag(:,:,:,:), normzStag(:,:,:,:)
         REAL(realk), ALLOCATABLE :: alpha(:,:,:), alphaStag(:,:,:,:)
@@ -83,7 +83,7 @@ CONTAINS
         REAL(realk), ALLOCATABLE :: complementvffFlux(:,:,:), complementvffFluxStag(:,:,:,:)
         REAL(realk), ALLOCATABLE :: densityFieldFluxStag(:,:,:,:)
         REAL(realk), ALLOCATABLE :: vffCompressionTerm(:,:,:)
-        REAL(realk), ALLOCATABLE :: densityCompressionTermStag(:,:,:,:)
+        REAL(realk), ALLOCATABLE :: densityCompressionTermStag(:,:,:,:), sumComp(:,:,:)
 
         ! Set all the output to zero everywhere before we start!
         uo_f = 0.0_realk
@@ -190,6 +190,8 @@ CONTAINS
 
             IF (.NOT. ALLOCATED(densityCompressionTermStag)) ALLOCATE(densityCompressionTermStag(kk,jj,ii,3))
 
+            IF (.NOT. ALLOCATED(sumComp)) ALLOCATE(sumComp(kk,jj,ii))
+
             CALL get_advection_sequence(itstep, advSeq)
             CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
 
@@ -202,6 +204,8 @@ CONTAINS
             END DO
 
             densityFieldStagOld = densityFieldStag
+
+            sumComp = 0.0_realk
 
             DO l = 1, 3             ! Loop over dimensions x, y and z for split-advection
 
@@ -225,7 +229,10 @@ CONTAINS
                 CALL compression_term_wrapper(kk, jj, ii, splitDir, u, v, w, vff, ddx, ddy, ddz, vffCompressionTerm)
                 CALL update_field(kk, jj, ii, splitDir, vff, vffFlux, vffCompressionTerm, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
                 CALL clip_volume_fraction_field(kk, ii, jj, vff, tol) 
+
+                sumComp = sumComp + vffCompressionTerm
             END DO
+            ! WRITE(*,*) maxval(sumComp)
         END DO
 
         normxField = normx
