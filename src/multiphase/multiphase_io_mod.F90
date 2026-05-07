@@ -74,11 +74,16 @@ CONTAINS
             Nx = 84
             Ny = 84
             Nz = 85
-        ELSE IF ( test_multiphase == 'VorBox' ) THEN
-            OPEN(newunit=unit,file="vffInitSub16.csv",status="old",action="read")
+        ELSE IF ( test_multiphase == 'VorBoF' ) THEN
+            OPEN(newunit=unit,file="vffInitSub128.csv",status="old",action="read")
             Nx = 132
             Ny = 132
             Nz = 133
+        ELSE IF ( test_multiphase == 'VorBoC' ) THEN
+            OPEN(newunit=unit,file="vffInitSub256.csv",status="old",action="read")
+            Nx = 36
+            Ny = 36
+            Nz = 37
         END IF
 
         DO i = 1, Nx*Ny*Nz
@@ -111,7 +116,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         INTEGER(intk) :: kk, jj, ii, k, j, i
-        REAL(realk) :: magnitude, fac(8)
+        REAL(realk) :: magnitude, fac(6)
         REAL(realk), PARAMETER :: pi = 4.0_realk * atan(1.0_realk)
         REAL(realk), ALLOCATABLE :: psi(:,:,:)
 
@@ -142,22 +147,25 @@ CONTAINS
             CALL ddz_f%get_ptr(ddz, igrid)
 
             IF ( test_multiphase == 'CylTra' ) THEN
-                fac = [0.768583431793480, 0.595513129409263, 0.103136189378590, &
-                       0.551367965286398, 0.224230895589156, 0.251321097681516, &
-                       0.286000011427295, 0.027896377820804]
+                fac = [0.7686000, 0.5968000, 0.1035700, &
+                       0.5514000, 0.2242010, 0.2512981]
                 magnitude = 0.0125_realk
+
+                ! In the first 1200 steps the sphere is translated in
+                ! 6 random directions (see fac). In steps 1201-1400
+                ! the sphere is translated back to [0.5, 0.5].
                 IF ( itstep <= 1200 ) THEN 
                     u = cos(fac(floor((itstep-1)/200.0_realk) + 1)*2.0_realk*pi) * magnitude
                     v = sin(fac(floor((itstep-1)/200.0_realk) + 1)*2.0_realk*pi) * magnitude
-                ELSE if ( itstep <= 1400 ) THEN 
-                    u = cos(fac(7)*2.0_realk*pi) * magnitude
-                    v = sin(fac(7)*2.0_realk*pi) * magnitude
+                ELSE IF ( itstep <= 1400 ) THEN
+                    u =   0.008793826_realk
+                    v = - 0.008883616_realk
                 ELSE 
-                    u = cos(fac(8)*2.0_realk*pi) * magnitude
-                    v = sin(fac(8)*2.0_realk*pi) * magnitude
+                    u = 0.0_realk
+                    v = 0.0_realk
                 END IF
                 w = 0.0_realk
-            ELSE IF ( test_multiphase == 'VorBox' ) THEN
+            ELSE IF ( test_multiphase == 'VorBoF' .OR. test_multiphase == 'VorBoC' ) THEN
                 IF (.NOT. ALLOCATED(psi)) ALLOCATE(psi(kk,jj,ii))
                 DO i = 1, ii
                     DO j = 1, jj

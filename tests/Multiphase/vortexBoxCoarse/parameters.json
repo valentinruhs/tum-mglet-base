@@ -1,0 +1,40 @@
+{
+    "time": {
+        "dt": 0.02,
+        "mtstep": 100,
+	"itinfo": 10,
+        "tstat": 10.0,
+	"read": false
+    },
+    "io": {
+        "grids": "grids.h5",
+        "infile": "fields_in.h5",
+        "outfile": "fields.h5"
+    },
+    "ib": {
+        "type": "noib"
+    },
+    "flow": {
+        "gmol": 0.001,
+        "rho": 1.0,
+        "uinf": [0.0, 0.0, 0.0],
+        "pressuresolver": {
+            "type": "sip",
+            "epcorr": 0.00002,
+            "nouter": 9,
+            "ninner": 5
+        },
+        "lesmodel": {
+            "model": "none"
+        }
+    },
+    
+    "multiphase": {
+    	"solve": true,
+	"test": "VorBoC",
+	"rho1" : 1.0,
+	"rho2" : 1.0,
+	"gmol1" : 0.000001,
+	"gmol2" : 0.000001
+    }   
+}

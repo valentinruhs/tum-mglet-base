@@ -77,13 +77,13 @@ CONTAINS
         REAL(realk), ALLOCATABLE :: alpha(:,:,:), alphaStag(:,:,:,:)
         LOGICAL, ALLOCATABLE :: isInterface(:,:,:), isInterfaceStag(:,:,:,:)
         LOGICAL, ALLOCATABLE :: isNearInterface(:,:,:), isNearInterfaceStag(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: vffStag(:,:,:,:)
+        REAL(realk), ALLOCATABLE :: vffStag(:,:,:,:), vffOld(:,:,:)
         REAL(realk), ALLOCATABLE :: densityFieldStag(:,:,:,:), densityFieldStagOld(:,:,:,:)
         REAL(realk), ALLOCATABLE :: vffFlux(:,:,:), vffFluxStag(:,:,:,:)
         REAL(realk), ALLOCATABLE :: complementvffFlux(:,:,:), complementvffFluxStag(:,:,:,:)
         REAL(realk), ALLOCATABLE :: densityFieldFluxStag(:,:,:,:)
         REAL(realk), ALLOCATABLE :: vffCompressionTerm(:,:,:)
-        REAL(realk), ALLOCATABLE :: densityCompressionTermStag(:,:,:,:), sumComp(:,:,:)
+        REAL(realk), ALLOCATABLE :: densityCompressionTermStag(:,:,:,:)
 
         ! Set all the output to zero everywhere before we start!
         uo_f = 0.0_realk
@@ -174,6 +174,7 @@ CONTAINS
             IF (.NOT. ALLOCATED(isNearInterfaceStag)) ALLOCATE(isNearInterfaceStag(kk,jj,ii,3))
 
             IF (.NOT. ALLOCATED(vffStag)) ALLOCATE(vffStag(kk,jj,ii,3))
+            IF (.NOT. ALLOCATED(vffOld)) ALLOCATE(vffOld(kk,jj,ii))
 
             IF (.NOT. ALLOCATED(densityFieldStag)) ALLOCATE(densityFieldStag(kk,jj,ii,3))
             IF (.NOT. ALLOCATED(densityFieldStagOld)) ALLOCATE(densityFieldStagOld(kk,jj,ii,3))
@@ -190,8 +191,6 @@ CONTAINS
 
             IF (.NOT. ALLOCATED(densityCompressionTermStag)) ALLOCATE(densityCompressionTermStag(kk,jj,ii,3))
 
-            IF (.NOT. ALLOCATED(sumComp)) ALLOCATE(sumComp(kk,jj,ii))
-
             CALL get_advection_sequence(itstep, advSeq)
             CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
 
@@ -204,8 +203,7 @@ CONTAINS
             END DO
 
             densityFieldStagOld = densityFieldStag
-
-            sumComp = 0.0_realk
+            vffOld = vff
 
             DO l = 1, 3             ! Loop over dimensions x, y and z for split-advection
 
@@ -223,16 +221,14 @@ CONTAINS
                         nfro, nbac, nrgt, nlft, nbot, ntop)
 
                 END DO
-
+                
                 CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
                 CALL compute_flux(kk, jj, ii, splitDir, vffFlux, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop)                
-                CALL compression_term_wrapper(kk, jj, ii, splitDir, u, v, w, vff, ddx, ddy, ddz, vffCompressionTerm)
+                CALL compression_term_wrapper(kk, jj, ii, splitDir, u, v, w, vffOld, ddx, ddy, ddz, vffCompressionTerm)
                 CALL update_field(kk, jj, ii, splitDir, vff, vffFlux, vffCompressionTerm, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
                 CALL clip_volume_fraction_field(kk, ii, jj, vff, tol) 
 
-                sumComp = sumComp + vffCompressionTerm
             END DO
-            ! WRITE(*,*) maxval(sumComp)
         END DO
 
         normxField = normx

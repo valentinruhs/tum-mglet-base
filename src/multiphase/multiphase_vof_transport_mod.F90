@@ -908,7 +908,7 @@ CONTAINS
         CALL compute_normal_strain_rate(kk, jj, ii, splitDir, strainRate, u, v, w, ddx, ddy, ddz)
         CALL compute_non_directional_compression_coeffiecient(kk, jj, ii, nonDirectionalCompressionCoefficient, vff)
 
-        IF ( .NOT. PRESENT(propertyFluid1) .OR. .NOT. PRESENT(propertyFluid2) ) THEN
+        IF ( .NOT. PRESENT(propertyFluid1) .AND. .NOT. PRESENT(propertyFluid2) ) THEN
             compressionTerm = nonDirectionalCompressionCoefficient * strainRate
         ELSE IF ( PRESENT(propertyFluid1) .AND. PRESENT(propertyFluid2) ) THEN
             compressionTerm = ( nonDirectionalCompressionCoefficient * propertyFluid1 + ( 1.0_realk - nonDirectionalCompressionCoefficient ) * propertyFluid2 ) * strainRate
