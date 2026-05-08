@@ -196,7 +196,7 @@ CONTAINS
             CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
 
             DO q = 1, 3             ! Loop over staggered components u, v and w
-                cycle
+                
                 CALL staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
                 CALL interface_reconstruction_wrapper(kk, jj, ii, q, vffStag, dx, dy, dz, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
                 CALL compute_material_property_field(kk, jj, ii, q, densityFieldStag, vffStag, rho1, rho2)
@@ -212,7 +212,7 @@ CONTAINS
                 splitDir = advSeq(l)
 
                 DO q = 1, 3         ! Loop over staggered components u, v and w
-
+                    
                     CALL compute_flux(kk, jj, ii, q, splitDir, vffFluxStag, complementvffFluxStag, vffStag, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop)
                     CALL compute_density_flux(kk, jj, ii, q, vffFluxStag, complementvffFluxStag, rho1, rho2, densityFieldFluxStag)
                     CALL compression_term_wrapper(kk, jj, ii, q, splitDir, u, v, w, vffStagOld, dx, dy, dz, ddx, ddy, ddz, densityCompressionTermStag, rho1, rho2)
@@ -275,8 +275,6 @@ CONTAINS
         REAL(realk) :: velocity(kk, jj, ii)
         REAL(realk) :: dVelocity, dMomentum
 
-        return
-
         nfu = 0
         nbu = 0
         nrv = 0
@@ -326,7 +324,6 @@ CONTAINS
                             advrE, advrW, advrN, advrS, advrT, advrB)
 
                         IF ( isNearInterfaceStag(k,j,i,component) ) THEN
-                            IF ( k == 5 .AND. j == 4 .AND. i == 3 ) WRITE(*,*) component, adveE, adveW, densityFieldFluxStag(k,j,i,component), densityFieldFluxStag(k,j,i-1,component), densityCompressionTermStag(k,j,i,component) 
                             dMomentum = - ( adveE * densityFieldFluxStag(k,j,i,component) - adveW * densityFieldFluxStag(k,j,i-1,component) ) + velocity(k,j,i) * densityCompressionTermStag(k,j,i,component)
                             velocity(k,j,i) = 1.0_realk / densityFieldStag(k,j,i,component) * ( densityFieldStagOld(k,j,i,component) * velocity(k,j,i) + dMomentum )
                         ELSE
