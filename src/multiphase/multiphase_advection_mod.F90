@@ -77,7 +77,7 @@ CONTAINS
         REAL(realk), ALLOCATABLE :: alpha(:,:,:), alphaStag(:,:,:,:)
         LOGICAL, ALLOCATABLE :: isInterface(:,:,:), isInterfaceStag(:,:,:,:)
         LOGICAL, ALLOCATABLE :: isNearInterface(:,:,:), isNearInterfaceStag(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: vffStag(:,:,:,:), vffOld(:,:,:)
+        REAL(realk), ALLOCATABLE :: vffStag(:,:,:,:), vffOld(:,:,:), VffStagOld(:,:,:,:)
         REAL(realk), ALLOCATABLE :: densityFieldStag(:,:,:,:), densityFieldStagOld(:,:,:,:)
         REAL(realk), ALLOCATABLE :: vffFlux(:,:,:), vffFluxStag(:,:,:,:)
         REAL(realk), ALLOCATABLE :: complementvffFlux(:,:,:), complementvffFluxStag(:,:,:,:)
@@ -174,6 +174,7 @@ CONTAINS
             IF (.NOT. ALLOCATED(isNearInterfaceStag)) ALLOCATE(isNearInterfaceStag(kk,jj,ii,3))
 
             IF (.NOT. ALLOCATED(vffStag)) ALLOCATE(vffStag(kk,jj,ii,3))
+            IF (.NOT. ALLOCATED(vffStagOld)) ALLOCATE(vffStagOld(kk,jj,ii,3))
             IF (.NOT. ALLOCATED(vffOld)) ALLOCATE(vffOld(kk,jj,ii))
 
             IF (.NOT. ALLOCATED(densityFieldStag)) ALLOCATE(densityFieldStag(kk,jj,ii,3))
@@ -204,6 +205,7 @@ CONTAINS
 
             densityFieldStagOld = densityFieldStag
             vffOld = vff
+            vffStagOld = vffStag
 
             DO l = 1, 3             ! Loop over dimensions x, y and z for split-advection
 
@@ -213,7 +215,7 @@ CONTAINS
 
                     CALL compute_flux(kk, jj, ii, q, splitDir, vffFluxStag, complementvffFluxStag, vffStag, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop)
                     CALL compute_density_flux(kk, jj, ii, q, vffFluxStag, complementvffFluxStag, rho1, rho2, densityFieldFluxStag)
-                    CALL compression_term_wrapper(kk, jj, ii, q, splitDir, u, v, w, vffStag, dx, dy, dz, ddx, ddy, ddz, densityCompressionTermStag, rho1, rho2)
+                    CALL compression_term_wrapper(kk, jj, ii, q, splitDir, u, v, w, vffStagOld, dx, dy, dz, ddx, ddy, ddz, densityCompressionTermStag, rho1, rho2)
                     CALL update_field(kk, jj, ii, q, splitDir, densityFieldStag, densityFieldFluxStag, densityCompressionTermStag, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
                     CALL multiphase_advect_momentum(kk, jj, ii, q, splitDir, u, v, w, densityFieldFluxStag, &
                         densityCompressionTermStag, densityFieldStagOld, densityFieldStag, &

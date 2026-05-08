@@ -69,7 +69,7 @@ CONTAINS
         INTEGER(intk) :: Nx, Ny, Nz
         INTEGER(intk) :: i, unit
 
-        IF ( test_multiphase == 'CylTra' ) THEN
+        IF ( test_multiphase == 'SphTra' ) THEN
             OPEN(newunit=unit,file="vffInitSub32.csv",status="old",action="read")
             Nx = 84
             Ny = 84
@@ -84,6 +84,11 @@ CONTAINS
             Nx = 36
             Ny = 36
             Nz = 37
+        ELSE IF ( test_multiphase == 'CylAdv' ) THEN
+            OPEN(newunit=unit,file="vffInitSub64.csv",status="old",action="read")
+            Nx = 20
+            Ny = 20
+            Nz = 21
         END IF
 
         DO i = 1, Nx*Ny*Nz
@@ -146,7 +151,7 @@ CONTAINS
             CALL ddy_f%get_ptr(ddy, igrid)
             CALL ddz_f%get_ptr(ddz, igrid)
 
-            IF ( test_multiphase == 'CylTra' ) THEN
+            IF ( test_multiphase == 'SphTra' ) THEN
                 fac = [0.7686000, 0.5968000, 0.1035700, &
                        0.5514000, 0.2242010, 0.2512981]
                 magnitude = 0.0125_realk
@@ -184,7 +189,11 @@ CONTAINS
                             w(k,j,i) = 0.0_realk 
                         END DO
                     END DO
-                END DO                        
+                END DO   
+            ELSE IF ( test_multiphase == 'CylAdv' ) THEN
+                u = 0.016_realk
+                v = 0.016_realk
+                w = 0.0_realk
             END IF
 
         END DO
