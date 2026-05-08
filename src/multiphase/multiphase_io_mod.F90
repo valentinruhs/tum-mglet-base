@@ -85,7 +85,7 @@ CONTAINS
             Ny = 36
             Nz = 37
         ELSE IF ( test_multiphase == 'CylAdv' ) THEN
-            OPEN(newunit=unit,file="vffInitSub64.csv",status="old",action="read")
+            OPEN(newunit=unit,file="vffInitSub256.csv",status="old",action="read")
             Nx = 20
             Ny = 20
             Nz = 21
