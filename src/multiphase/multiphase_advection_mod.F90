@@ -84,6 +84,7 @@ CONTAINS
         REAL(realk), ALLOCATABLE :: densityFieldFluxStag(:,:,:,:)
         REAL(realk), ALLOCATABLE :: vffCompressionTerm(:,:,:)
         REAL(realk), ALLOCATABLE :: densityCompressionTermStag(:,:,:,:)
+        REAL(realk), ALLOCATABLE :: uNew(:,:,:), vNew(:,:,:), wNew(:,:,:)
 
         ! Set all the output to zero everywhere before we start!
         uo_f = 0.0_realk
@@ -192,6 +193,10 @@ CONTAINS
 
             IF (.NOT. ALLOCATED(densityCompressionTermStag)) ALLOCATE(densityCompressionTermStag(kk,jj,ii,3))
 
+            IF (.NOT. ALLOCATED(uNew)) ALLOCATE(uNew(kk,jj,ii))
+            IF (.NOT. ALLOCATED(vNew)) ALLOCATE(vNew(kk,jj,ii))
+            IF (.NOT. ALLOCATED(wNew)) ALLOCATE(wNew(kk,jj,ii))
+
             CALL get_advection_sequence(itstep, advSeq)
             CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
 
@@ -223,13 +228,16 @@ CONTAINS
                     CALL compute_density_flux(kk, jj, ii, q, vffFluxStag, complementvffFluxStag, rho1, rho2, densityFieldFluxStag)
                     CALL compression_term_wrapper(kk, jj, ii, q, splitDir, u, v, w, vffStagOld, dx, dy, dz, ddx, ddy, ddz, densityCompressionTermStag, rho1, rho2)
                     CALL update_field(kk, jj, ii, q, splitDir, densityFieldStag, densityFieldFluxStag, densityCompressionTermStag, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
-                    CALL multiphase_advect_momentum(kk, jj, ii, q, splitDir, u, v, w, densityFieldFluxStag, &
+                    CALL multiphase_advect_momentum(kk, jj, ii, q, splitDir, u, v, w, uNew, vNew, wNew, densityFieldFluxStag, &
                         densityCompressionTermStag, densityFieldStagOld, densityFieldStag, &
                         isNearInterfaceStag, dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
                         nfro, nbac, nrgt, nlft, nbot, ntop)
 
                 END DO
             END DO
+            u(3:-3,3:-3,3:-3) = uNew(3:-3,3:-3,3:-3)
+            v(3:-3,3:-3,3:-3) = vNew(3:-3,3:-3,3:-3)
+            w(3:-3,3:-3,3:-3) = wNew(3:-3,3:-3,3:-3)
         END DO
 
         normxField = normx
@@ -241,7 +249,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE multiphase_advect_momentum(kk, jj, ii, component, splitDir, u, v, w, densityFieldFluxStag, &
+    SUBROUTINE multiphase_advect_momentum(kk, jj, ii, component, splitDir, u, v, w, uNew, vNew, wNew, densityFieldFluxStag, &
         densityCompressionTermStag, densityFieldStagOld, densityFieldStag, &
         isNearInterfaceStag, dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
         nfro, nbac, nrgt, nlft, nbot, ntop)
@@ -254,7 +262,8 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: splitDir
         INTEGER(intk), INTENT(in) :: component
-        REAL(realk), INTENT(inout) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(out) :: uNew(kk, jj, ii), vNew(kk, jj, ii), wNew(kk, jj, ii)
         REAL(realk), INTENT(in) :: densityFieldStagOld(kk, jj, ii, 3), densityFieldFluxStag(kk, jj, ii, 3) 
         REAL(realk), INTENT(in) :: densityCompressionTermStag(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: densityFieldStag(kk, jj, ii, 3)
@@ -275,7 +284,7 @@ CONTAINS
         REAL(realk) :: dVelocity, dMomentum
 
         ! return
-        WRITE(*,*) "Mom. Adv. Running"
+        ! WRITE(*,*) "Mom. Adv. Running"
 
         nfu = 0
         nbu = 0
@@ -380,11 +389,11 @@ CONTAINS
         END IF
 
         IF ( component == 1 ) THEN
-            u = velocity
+            uNew = velocity
         ELSE IF ( component == 2 ) THEN
-            v = velocity
+            vNew = velocity
         ELSE IF ( component == 3 ) THEN
-            w = velocity
+            wNew = velocity
         END IF
 
     END SUBROUTINE multiphase_advect_momentum

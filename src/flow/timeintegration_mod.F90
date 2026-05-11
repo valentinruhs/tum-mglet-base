@@ -108,13 +108,13 @@ CONTAINS
             CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g)
             CALL boussinesqterm(uo, vo, wo)
             CALL coriolisterm(uo, vo, wo)
-        END IF
 
-        ! dU_j = A_j*dU_(j-1) + dt*uo
-        ! U_j = U_(j-1) + B_j*dU_j
-        CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
-        CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
-        CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
+            ! dU_j = A_j*dU_(j-1) + dt*uo
+            ! U_j = U_(j-1) + B_j*dU_j
+            CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
+            CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
+            CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
+        END IF
 
         IF (ib%type == "GHOSTCELL") THEN
             ! Equivalent to old "cop3dzero"
@@ -140,7 +140,7 @@ CONTAINS
         END DO
 
         ! TODO: check dtrk
-        CALL mgpoisl(u, v, w, p, dtrk*dt, ittot, irk)
+        ! CALL mgpoisl(u, v, w, p, dtrk*dt, ittot, irk)
         CALL lesmodel(g)
 
         IF (ib%type == "GHOSTCELL") THEN

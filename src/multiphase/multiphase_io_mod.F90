@@ -191,9 +191,11 @@ CONTAINS
                     END DO
                 END DO   
             ELSE IF ( test_multiphase == 'CylAdv' ) THEN
-                u = 0.016_realk
-                v = 0.016_realk
-                w = 0.0_realk
+                IF ( itstep == 1 ) THEN
+                    u = 0.016_realk
+                    v = 0.016_realk
+                    w = 0.0_realk
+                END IF
             END IF
 
         END DO

@@ -444,7 +444,7 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: component
         INTEGER(intk), INTENT(in) :: splitDir
-        REAL(realk), INTENT(out) :: fieldFlux(kk, jj, ii, 3), complementFieldFlux(kk, jj, ii, 3)
+        REAL(realk), INTENT(inout) :: fieldFlux(kk, jj, ii, 3), complementFieldFlux(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: field(kk, jj, ii, 3)
         LOGICAL, INTENT(in) :: isInterface(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
@@ -840,7 +840,7 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: component
         REAL(realk), INTENT(in) :: flux(kk, jj, ii, 3), fluxComp(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: rho1, rho2
-        REAL(realk), INTENT(out) :: densityFlux(kk, jj, ii, 3)
+        REAL(realk), INTENT(inout) :: densityFlux(kk, jj, ii, 3)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
