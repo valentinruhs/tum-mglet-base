@@ -211,6 +211,12 @@ CONTAINS
 
                 splitDir = advSeq(l)
 
+                CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
+                CALL compute_flux(kk, jj, ii, splitDir, vffFlux, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop)                
+                CALL compression_term_wrapper(kk, jj, ii, splitDir, u, v, w, vffOld, ddx, ddy, ddz, vffCompressionTerm)
+                CALL update_field(kk, jj, ii, splitDir, vff, vffFlux, vffCompressionTerm, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
+                CALL clip_volume_fraction_field(kk, ii, jj, vff, tol) 
+
                 DO q = 1, 3         ! Loop over staggered components u, v and w
                     
                     CALL compute_flux(kk, jj, ii, q, splitDir, vffFluxStag, complementvffFluxStag, vffStag, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop)
@@ -223,13 +229,6 @@ CONTAINS
                         nfro, nbac, nrgt, nlft, nbot, ntop)
 
                 END DO
-                
-                CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
-                CALL compute_flux(kk, jj, ii, splitDir, vffFlux, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop)                
-                CALL compression_term_wrapper(kk, jj, ii, splitDir, u, v, w, vffOld, ddx, ddy, ddz, vffCompressionTerm)
-                CALL update_field(kk, jj, ii, splitDir, vff, vffFlux, vffCompressionTerm, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
-                CALL clip_volume_fraction_field(kk, ii, jj, vff, tol) 
-
             END DO
         END DO
 
@@ -274,6 +273,9 @@ CONTAINS
         REAL(realk) :: iStag, jStag, kStag
         REAL(realk) :: velocity(kk, jj, ii)
         REAL(realk) :: dVelocity, dMomentum
+
+        ! return
+        WRITE(*,*) "Mom. Adv. Running"
 
         nfu = 0
         nbu = 0
@@ -330,14 +332,6 @@ CONTAINS
                             dVelocity = - ( ( adveE * advrE - adveW * advrW ) * rdx(i) )
                             velocity(k,j,i) = velocity(k,j,i) + dVelocity
                         END IF
-
-                        IF ( component == 1 ) THEN
-                            u(k,j,i) = velocity(k,j,i)
-                        ELSE IF ( component == 2 ) THEN
-                            v(k,j,i) = velocity(k,j,i)
-                        ELSE IF ( component == 3 ) THEN
-                            w(k,j,i) = velocity(k,j,i)
-                        END IF
                     END DO
                 END DO
             END DO
@@ -358,14 +352,6 @@ CONTAINS
                         ELSE
                             dVelocity = - ( ( adveN * advrN - adveS * advrS ) * rdy(j) )
                             velocity(k,j,i) = velocity(k,j,i) + dVelocity
-                        END IF
-
-                        IF ( component == 1 ) THEN
-                            u(k,j,i) = velocity(k,j,i)
-                        ELSE IF ( component == 2 ) THEN
-                            v(k,j,i) = velocity(k,j,i)
-                        ELSE IF ( component == 3 ) THEN
-                            w(k,j,i) = velocity(k,j,i)
                         END IF
                     END DO
                 END DO
@@ -388,17 +374,17 @@ CONTAINS
                             dVelocity = - ( ( adveT * advrT - adveB * advrB ) * rdz(k) )
                             velocity(k,j,i) = velocity(k,j,i) + dVelocity
                         END IF
-
-                        IF ( component == 1 ) THEN
-                            u(k,j,i) = velocity(k,j,i)
-                        ELSE IF ( component == 2 ) THEN
-                            v(k,j,i) = velocity(k,j,i)
-                        ELSE IF ( component == 3 ) THEN
-                            w(k,j,i) = velocity(k,j,i)
-                        END IF
                     END DO
                 END DO
             END DO
+        END IF
+
+        IF ( component == 1 ) THEN
+            u = velocity
+        ELSE IF ( component == 2 ) THEN
+            v = velocity
+        ELSE IF ( component == 3 ) THEN
+            w = velocity
         END IF
 
     END SUBROUTINE multiphase_advect_momentum
@@ -426,21 +412,82 @@ CONTAINS
         ! Loval variables
         ! None
 
-        !       -------indicator-function------   ------------------------------QUICK 3^rd order interpolation------------------------------
-        adveE = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrE) ) * 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j,i+1) - 0.125_realk * adveVelocity(k,j,i-1) + &
-                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrE) ) * 0.75_realk * adveVelocity(k,j,i+1) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j,i+2)
-        adveW = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrW) ) * 0.75_realk * adveVelocity(k,j,i-1) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j,i-2) + &
-                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrW) ) * 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j,i-1) - 0.125_realk * adveVelocity(k,j,i+1)
-        adveN = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrN) ) * 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j+1,i) - 0.125_realk * adveVelocity(k,j-1,i) + &
-                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrN) ) * 0.75_realk * adveVelocity(k,j+1,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j+2,i)
-        adveS = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrS) ) * 0.75_realk * adveVelocity(k,j-1,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j-2,i) + &
-                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrS) ) * 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j-1,i) - 0.125_realk * adveVelocity(k,j+1,i)
-        adveT = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrT) ) * 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k+1,j,i) - 0.125_realk * adveVelocity(k-1,j,i) + &
-                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrT) ) * 0.75_realk * adveVelocity(k+1,j,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k+2,j,i)
-        adveB = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrB) ) * 0.75_realk * adveVelocity(k-1,j,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k-2,j,i) + &
-                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrB) ) * 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k-1,j,i) - 0.125_realk * adveVelocity(k+1,j,i)
+        !                   ----------indicator-function---------   -----------------------------------------QUICK 3^rd order interpolation-----------------------------------------
+        adveE = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrE) ) * ( 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j,i+1) - 0.125_realk * adveVelocity(k,j,i-1) ) + &
+                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrE) ) * ( 0.75_realk * adveVelocity(k,j,i+1) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j,i+2) )
+        adveW = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrW) ) * ( 0.75_realk * adveVelocity(k,j,i-1) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j,i-2) ) + &
+                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrW) ) * ( 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j,i-1) - 0.125_realk * adveVelocity(k,j,i+1) )
+        adveN = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrN) ) * ( 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j+1,i) - 0.125_realk * adveVelocity(k,j-1,i) ) + &
+                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrN) ) * ( 0.75_realk * adveVelocity(k,j+1,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j+2,i) )
+        adveS = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrS) ) * ( 0.75_realk * adveVelocity(k,j-1,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j-2,i) ) + &
+                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrS) ) * ( 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j-1,i) - 0.125_realk * adveVelocity(k,j+1,i) )
+        adveT = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrT) ) * ( 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k+1,j,i) - 0.125_realk * adveVelocity(k-1,j,i) ) + &
+                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrT) ) * ( 0.75_realk * adveVelocity(k+1,j,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k+2,j,i) )
+        adveB = 0.5_realk * ( 1.0_realk + SIGN(1.0_realk,advrB) ) * ( 0.75_realk * adveVelocity(k-1,j,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k-2,j,i) ) + &
+                0.5_realk * ( 1.0_realk - SIGN(1.0_realk,advrB) ) * ( 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k-1,j,i) - 0.125_realk * adveVelocity(k+1,j,i) )
 
     END SUBROUTINE quick_advected_interpolation_scheme
+
+    !================================================================
+
+    ! PURE SUBROUTINE quick_advected_interpolation_scheme_test(kk, jj, ii, k, j, i, adveVelocity, &
+    !     adveE, adveW, adveN, adveS, adveT, adveB, &
+    !     advrE, advrW, advrN, advrS, advrT, advrB)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !   The subroutine performes a QUICK interpolation for the 
+    ! !   advected components of the momentum calculation.
+    ! !   adve = advected component (advectee)
+    ! !   advr = advecting component (advector)
+    ! !----------------------------------------------------------------
+
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
+    !     INTEGER(intk), INTENT(in) :: k, j, i
+    !     REAL(realk), INTENT(in) :: adveVelocity(kk, jj, ii)
+    !     REAL(realk), INTENT(out) :: adveE, adveW, adveN, adveS, adveT, adveB
+    !     REAL(realk), INTENT(in) :: advrE, advrW, advrN, advrS, advrT, advrB
+
+    !     ! Loval variables
+    !     ! None
+
+    !     IF ( advrE >= 0.0_realk ) THEN
+    !         adveE = ( 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j,i+1) - 0.125_realk * adveVelocity(k,j,i-1) )
+    !     ELSE IF ( advrE > 0.0_realk ) THEN
+    !         adveE = ( 0.75_realk * adveVelocity(k,j,i+1) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j,i+2) )
+    !     END IF
+
+    !     IF ( advrW >= 0.0_realk ) THEN
+    !         adveW = ( 0.75_realk * adveVelocity(k,j,i-1) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j,i-2) )
+    !     ELSE IF ( advrW < 0.0_realk ) THEN
+    !         adveW = ( 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j,i-1) - 0.125_realk * adveVelocity(k,j,i+1) )
+    !     END IF
+
+    !     IF ( advrN >= 0.0_realk ) THEN
+    !         adveN = ( 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j+1,i) - 0.125_realk * adveVelocity(k,j-1,i) )
+    !     ELSE IF ( advrN < 0.0_realk ) THEN
+    !         adveN = ( 0.75_realk * adveVelocity(k,j+1,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j+2,i) )
+    !     END IF
+
+    !     IF ( advrS >= 0.0_realk ) THEN
+    !         adveS = ( 0.75_realk * adveVelocity(k,j-1,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k,j-2,i) )
+    !     ELSE IF ( advrS < 0.0_realk ) THEN
+    !         adveS = ( 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k,j-1,i) - 0.125_realk * adveVelocity(k,j+1,i) )
+    !     END IF
+
+    !     IF ( advrT >= 0.0_realk ) THEN
+    !         adveT = ( 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k+1,j,i) - 0.125_realk * adveVelocity(k-1,j,i) )
+    !     ELSE IF ( advrT < 0.0_realk ) THEN
+    !         adveT = ( 0.75_realk * adveVelocity(k+1,j,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k+2,j,i) )
+    !     END IF
+
+    !     IF ( advrB >= 0.0_realk ) THEN
+    !         adveB = ( 0.75_realk * adveVelocity(k-1,j,i) + 0.375_realk * adveVelocity(k,j,i) - 0.125_realk * adveVelocity(k-2,j,i) )
+    !     ELSE IF ( advrB < 0.0_realk ) THEN
+    !         adveB = ( 0.75_realk * adveVelocity(k,j,i) + 0.375_realk * adveVelocity(k-1,j,i) - 0.125_realk * adveVelocity(k+1,j,i) )
+    !     END IF
+
+    ! END SUBROUTINE quick_advected_interpolation_scheme_test
 
     !================================================================
 

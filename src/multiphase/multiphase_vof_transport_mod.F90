@@ -146,17 +146,17 @@ CONTAINS
         REAL(realk) :: iStag, jStag, kStag
 
         IF ( component == 1 ) THEN
-            iStag = 1.0
-            jStag = 0.0
-            kStag = 0.0
+            iStag = 1.0_realk
+            jStag = 0.0_realk
+            kStag = 0.0_realk
         ELSE IF ( component == 2 ) THEN
-            iStag = 0.0
-            jStag = 1.0
-            kStag = 0.0
+            iStag = 0.0_realk
+            jStag = 1.0_realk
+            kStag = 0.0_realk
         ELSE IF ( component == 3 ) THEN
-            iStag = 0.0
-            jStag = 0.0
-            kStag = 1.0
+            iStag = 0.0_realk
+            jStag = 0.0_realk
+            kStag = 1.0_realk
         END IF
 
         IF ( splitDir == 1 ) THEN
