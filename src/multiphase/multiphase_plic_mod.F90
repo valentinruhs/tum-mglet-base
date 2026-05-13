@@ -651,19 +651,19 @@ CONTAINS
         CASE (1); m1 = abs(normx); c1 = ddx
         CASE (2); m1 = abs(normy); c1 = ddy
         CASE (3); m1 = abs(normz); c1 = ddz
-        end SELECT
+        END SELECT
 
         SELECT CASE (i2)
         CASE (1); m2 = abs(normx); c2 = ddx
         CASE (2); m2 = abs(normy); c2 = ddy
         CASE (3); m2 = abs(normz); c2 = ddz
-        end SELECT
+        END SELECT
 
         SELECT CASE (i3)
         CASE (1); m3 = abs(normx); c3 = ddx
         CASE (2); m3 = abs(normy); c3 = ddy
         CASE (3); m3 = abs(normz); c3 = ddz
-        end SELECT
+        END SELECT
 
     END SUBROUTINE get_corner_crossing_order
 

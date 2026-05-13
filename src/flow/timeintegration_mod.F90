@@ -12,7 +12,7 @@ MODULE timeintegration_mod
     USE setboundarybuffers_mod
     USE boussinesqterm_mod, ONLY: boussinesqterm
     USE coriolisterm_mod, ONLY: coriolisterm
-    USE multiphase_advection_mod, ONLY : multiphase_split_advection
+    USE multiphase_vof_transport_mod, ONLY : multiphase_split_advection
     USE multiphasecore_mod, ONLY: solve_multiphase, test_multiphase
     USE multiphase_io_mod, ONLY: update_velocity
 
