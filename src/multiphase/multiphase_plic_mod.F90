@@ -669,7 +669,7 @@ CONTAINS
 
     !================================================================
 
-    PURE SUBROUTINE solve_alpha_standart_cases(m1, m2, m3, c1, c2, c3, alphaStd, alphaMax, vff, ddx, ddy, ddz, tol)
+    SUBROUTINE solve_alpha_standart_cases(m1, m2, m3, c1, c2, c3, alphaStd, alphaMax, vff, ddx, ddy, ddz, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   This is a pure subroutine to enhance the performance by 

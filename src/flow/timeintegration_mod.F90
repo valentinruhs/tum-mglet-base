@@ -12,7 +12,7 @@ MODULE timeintegration_mod
     USE setboundarybuffers_mod
     USE boussinesqterm_mod, ONLY: boussinesqterm
     USE coriolisterm_mod, ONLY: coriolisterm
-    USE multiphase_vof_transport_mod, ONLY : multiphase_split_advection
+    USE multiphase_vof_transport_mod, ONLY : multiphase_solve
     USE multiphasecore_mod, ONLY: solve_multiphase, test_multiphase
     USE multiphase_io_mod, ONLY: update_velocity
 
@@ -101,8 +101,10 @@ CONTAINS
                 CALL update_velocity(u, v, w, vff, itstep, dt)
             END IF
 
-            CALL multiphase_split_advection(uo, vo, wo, u, v, w, ut, vt, wt, &
+            CALL multiphase_solve(uo, vo, wo, u, v, w, ut, vt, wt, &
                 vff, p, g, d, dtrki*dt, itstep)
+            
+            ! CALL connect(layers=2, s1=vff, corners=.TRUE.)
         ELSE 
             ! TSTLE4 zeroize uo, vo, wo before use internally
             CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g)

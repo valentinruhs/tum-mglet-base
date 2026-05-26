@@ -5,9 +5,6 @@ add_library(multiphase STATIC
 	multiphase_io_mod.F90
 	multiphase_plic_mod.F90
 	multiphase_vof_transport_mod.F90
-	multiphase_levelset_transport.F90
-	multiphase_clsvof_coupling_mod.F90
-	multiphase_reinit_mod.F90
 )
 
 target_include_directories(multiphase

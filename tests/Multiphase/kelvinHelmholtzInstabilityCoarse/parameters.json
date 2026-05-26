@@ -31,7 +31,7 @@
     
     "multiphase": {
     	"solve": true,
-	"test": "SphTra",
+	"test": "KelHel",
 	"rho1" : 1.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.000001,

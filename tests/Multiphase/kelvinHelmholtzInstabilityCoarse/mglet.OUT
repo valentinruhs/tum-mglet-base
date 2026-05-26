@@ -1,0 +1,67 @@
+
+M G L E T - Multi Grid Large Eddy Turbulence
+
+MPI INFORMATION:
+    Processes:     1
+    Serial IO:     F
+    MPI version:   Open MPI v4.1.6, package: Debian OpenMPI, ident: 4.1.6, repo rev: v4.1.6, Sep 30, 2023 
+
+IEEE aritmetic flags:
+    Underflow:     gradual
+    FPE traps:     divide_by_zero invalid overflow
+
+BUILD INFORMATION:
+    Date:          May 13 2026
+    Time:          10:23:58
+    Compiler:      GCC version 13.3.0
+    Options:       -cpp -I /usr/lib/x86_64-linux-gnu/fortran/gfortran-mod-15/openmpi -I /usr/lib/x86_64-linux-gnu/openmpi/lib -I /usr/local/hdf5/include -I /usr/include -imultiarch x86_64-linux-gnu -D _MGLET_DOUBLE_PRECISION_=1 -D _MGLET_IFK64_=1 -D NDEBUG -mtune=generic -march=x86-64 -g -O3 -O3 -Wall -Wextra -Wpedantic -Werror -Wno-maybe-uninitialized -Wno-unused-dummy-argument -Wno-uninitialized -std=f2018 -fPIC -fimplicit-none -ffpe-trap=invalid,zero,overflow -fopenmp-simd -ffree-line-length-none -finit-real=zero -J ../../modules -fpre-include=/usr/include/finclude/x86_64-linux-gnu/math-vector-fortran.h
+    OpenMP:        disabled
+
+COMPILED PRECISION:
+    REAL:          8 bytes
+    INTEGER:       4 bytes
+    INTEGER(ifk):  8 bytes
+
+JOB INFORMATION:
+    Date:          2026-05-20
+    Time:          11:09:18
+
+HDF5 collective IO: T
+
+GRIDS PER LEVEL AND PROCESS:
+==================================
+ Level:           1      2    Sum
+----------------------------------
+ Rank     0:      8     64     72
+----------------------------------
+ Sum:             8     64     72
+==================================
+
+ARRAY DIMENSIONS:
+    idim3d:        15552
+    idim2d:        2592
+    idim1d:        432
+
+Read gridspacing arrays in  0.003 seconds
+
+CONNECT STATISTICS:
+    Faces:             312    with geometry:     312
+    Lines:             792    with geometry:     792
+    Corners:           560    with geometry:     560
+
+Using 'noib' immersed boundary method
+
+NO SCALAR
+
+ITSTEP, WTIME, DELTA:        0           0.000           0.000
+ITTOT, TIME, DT:             0      0.00000000      1.0000E-01
+LEVEL:  1 IPC=   0 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+LEVEL:  2 IPC=   0 DIVMAX=   0.0000E+00 CFLMAX=   0.00000
+
+STOP SIMULATION, MTSTEP REACHED            1            1
+
+Opening file fields.h5 with mode w
+Wrote all fields in  0.013 seconds
+
+MGLET FINISHED SUCCESSFULLY!
+

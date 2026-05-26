@@ -26,7 +26,7 @@ MODULE multiphase_vof_transport_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: init_multiphase_vof_transport, finish_multiphase_vof_transport, compute_flux, compute_density_flux, get_advection_sequence, compression_term_wrapper, update_field, clip_volume_fraction_field, multiphase_split_advection
+    PUBLIC :: init_multiphase_vof_transport, finish_multiphase_vof_transport, compute_flux, compute_density_flux, get_advection_sequence, compression_term_wrapper, update_field, clip_volume_fraction_field, multiphase_solve
 
     INTERFACE compute_normal_strain_rate
         MODULE PROCEDURE comp_normal_strain_rate_pres
@@ -38,9 +38,9 @@ MODULE multiphase_vof_transport_mod
         MODULE PROCEDURE compression_term_wrapper_stag
     END INTERFACE
 
-    INTERFACE compute_non_directional_compression_coeffiecient
-        MODULE PROCEDURE compute_non_directional_compression_coeffiecient_pres
-        MODULE PROCEDURE compute_non_directional_compression_coeffiecient_stag
+    INTERFACE comp_nondir_compr_coeff
+        MODULE PROCEDURE comp_nondir_compr_coeff_pres
+        MODULE PROCEDURE comp_nondir_compr_coeff_stag
     END INTERFACE
 
     INTERFACE update_field
@@ -49,7 +49,7 @@ MODULE multiphase_vof_transport_mod
     END INTERFACE
 
     INTERFACE compute_flux
-        MODULE PROCEDURE compute_flux_pres
+        MODULE PROCEDURE comp_flux_pres
         MODULE PROCEDURE compute_flux_stag
     END INTERFACE
 
@@ -152,9 +152,11 @@ CONTAINS
         REAL(realk) :: iStag, jStag, kStag
         REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
 
-        CALL get_component_specifics(kk, jj, ii, q, dx=dx, dy=dy, dz=dz, ddx=ddx, ddy=ddy, ddz=ddz, &
-            iStag=iStag, jStag=jStag, kStag=kStag, deltaX=deltaX, deltaY=deltaY, deltaZ=deltaZ)
-        CALL comp_advr_centr(kk, jj, ii, u, v, w, iStag, jStag, kStag, advrE, advrW, advrN, advrS, advrT, advrB)
+        CALL get_component_specifics(kk, jj, ii, q, dx=dx, dy=dy, dz=dz, &
+            ddx=ddx, ddy=ddy, ddz=ddz, iStag=iStag, jStag=jStag, kStag=kStag, &
+            deltaX=deltaX, deltaY=deltaY, deltaZ=deltaZ)
+        CALL comp_advr_centr(kk, jj, ii, u, v, w, iStag, jStag, kStag, &
+            advrE, advrW, advrN, advrS, advrT, advrB)
 
         IF ( splitDir == 1 ) THEN
             DO i = 3, ii-2
@@ -186,80 +188,107 @@ CONTAINS
     
     !================================================================
 
-    SUBROUTINE compute_non_directional_compression_coeffiecient_pres(kk, jj, ii, nonDirectionalCompressionCoefficient, vff)
+    SUBROUTINE comp_nondir_compr_coeff_pres(kk, jj, ii, vff, nonDirComprCoeff)
     !----------------------------------------------------------------
     !   What it does:
-    !   This subroutine computes the nondirectional compression 
-    !   coefficient c for Weymouth and Yue's advection scheme.
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(out) :: nonDirectionalCompressionCoefficient(kk, jj, ii)
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-
-        ! Local variables
-        INTEGER(intk) :: k, j, i
-
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
-                    IF ( vff(k,j,i) >= 0.5_realk ) THEN
-                        nonDirectionalCompressionCoefficient(k,j,i) = 1.0_realk
-                    ELSE
-                        nonDirectionalCompressionCoefficient(k,j,i) = 0.0_realk
-                    END IF
-                END DO
-            END DO
-        END DO
-
-    END SUBROUTINE compute_non_directional_compression_coeffiecient_pres
-
-    !================================================================
-
-    SUBROUTINE compute_non_directional_compression_coeffiecient_stag(kk, jj, ii, component, nonDirectionalCompressionCoefficient, vff)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   This subroutine computes the nondirectional compression 
-    !   coefficient c for Weymouth and Yue's advection scheme.
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: component
-        REAL(realk), INTENT(out) :: nonDirectionalCompressionCoefficient(kk, jj, ii, 3)
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii, 3)
-
-        ! Local variables
-        INTEGER(intk) :: k, j, i
-
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
-                    IF ( vff(k,j,i,component) >= 0.5_realk ) THEN
-                        nonDirectionalCompressionCoefficient(k,j,i,component) = 1.0_realk
-                    ELSE
-                        nonDirectionalCompressionCoefficient(k,j,i,component) = 0.0_realk
-                    END IF
-                END DO
-            END DO
-        END DO
-
-    END SUBROUTINE compute_non_directional_compression_coeffiecient_stag
-
-    !================================================================
-
-    SUBROUTINE compute_flux_pres(kk, jj, ii, splitDir, fieldFlux, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
-        nfro, nbac, nrgt, nlft, nbot, ntop)
-    !----------------------------------------------------------------
-    !   What it does:
+    !   Computes the nondirectional compression coefficient c for 
+    !   Weymouth and Yue's advection scheme.
+    !
+    !   Source:
+    !   T. Arrufat et al., “A mass-momentum consistent, 
+    !   Volume-of-Fluid method for incompressible flow on staggered 
+    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
+    !   doi: 10.1016/j.compfluid.2020.104785.
     !   
+    !   G. D. Weymouth and D. K.-P. Yue, “Conservative 
+    !   Volume-of-Fluid method for free-surface simulations on 
+    !   Cartesian-grids,” Journal of Computational Physics, vol. 229,
+    !   no. 8, pp. 2853–2865, Apr. 2010, 
+    !   doi: 10.1016/j.jcp.2009.12.018.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(out) :: nonDirComprCoeff(kk, jj, ii)
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    IF ( vff(k,j,i) > 0.5_realk ) THEN
+                        nonDirComprCoeff(k,j,i) = 1.0_realk
+                    ELSE
+                        nonDirComprCoeff(k,j,i) = 0.0_realk
+                    END IF
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE comp_nondir_compr_coeff_pres
+
+    !================================================================
+
+    SUBROUTINE comp_nondir_compr_coeff_stag(kk, jj, ii, q, vff, nonDirComprCoeff)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Computes the nondirectional compression coefficient c for 
+    !   Weymouth and Yue's advection scheme for the three staggered
+    !   grids.
+    !
+    !   Source:
+    !   T. Arrufat et al., “A mass-momentum consistent, 
+    !   Volume-of-Fluid method for incompressible flow on staggered 
+    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
+    !   doi: 10.1016/j.compfluid.2020.104785.
+    !   
+    !   G. D. Weymouth and D. K.-P. Yue, “Conservative 
+    !   Volume-of-Fluid method for free-surface simulations on 
+    !   Cartesian-grids,” Journal of Computational Physics, vol. 229,
+    !   no. 8, pp. 2853–2865, Apr. 2010, 
+    !   doi: 10.1016/j.jcp.2009.12.018.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: q
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii, 3)
+        REAL(realk), INTENT(out) :: nonDirComprCoeff(kk, jj, ii, 3)
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    IF ( vff(k,j,i,q) > 0.5_realk ) THEN
+                        nonDirComprCoeff(k,j,i,q) = 1.0_realk
+                    ELSE
+                        nonDirComprCoeff(k,j,i,q) = 0.0_realk
+                    END IF
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE comp_nondir_compr_coeff_stag
+
+    !================================================================
+
+    SUBROUTINE comp_flux_pres(kk, jj, ii, splitDir, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
+        nfro, nbac, nrgt, nlft, nbot, ntop, fieldFlux)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Computes the volume fraction fluxes depending on the current
+    !   split direction. It is distinguished between several cases 
+    !   depending on the velocity direction and volume fraction 
+    !   field.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: splitDir
-        REAL(realk), INTENT(out) :: fieldFlux(kk, jj, ii)
         REAL(realk), INTENT(in) :: field(kk, jj, ii)
         LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
@@ -269,11 +298,12 @@ CONTAINS
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        REAL(realk), INTENT(out) :: fieldFlux(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
-        REAL(realk) :: flux, fluxedProportion, eulerianFluxWidth, eulerianFluxAlpha
+        REAL(realk) :: flux, fluxedProp, fluxWidth, fluxAlpha
 
         nfu = 0
         nbu = 0
@@ -301,35 +331,90 @@ CONTAINS
                     DO k = 3, kk-2
                         IF ( u(k,j,i) > tol ) THEN
                             IF ( isInterface(k,j,i) ) THEN
-                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                                eulerianFluxWidth = abs( u(k,j,i) ) * dt
-                                eulerianFluxAlpha = alpha(k,j,i) - normx(k,j,i) * ( ddx(i) - eulerianFluxWidth )
+                                ! CASE 1
+                                ! vff:      <1     E       
+                                !       +----------+----------+
+                                !       |     |    |          |
+                                !       |     |   --> u       |
+                                !       |     |    |          |
+                                !       +----------+----------+
+                                !             <---->
+                                !             u * dt
+                                ! 
+                                ! The proportion of the cell, which 
+                                ! is relevant for volume transport is
+                                ! calculated. The alpha value is
+                                ! transformed to match the new node
+                                ! of the cell and the fluxed
+                                ! proportion is computed.
 
-                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
-                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i), eulerianFluxWidth, ddy(j), ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
+                                fluxWidth = abs( u(k,j,i) ) * dt
+                                fluxAlpha = alpha(k,j,i) - normx(k,j,i) * ( ddx(i) - fluxWidth )
+
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i), &
+                                    fluxWidth, ddy(j), ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
                                 
-                                ! Calculate flux for multiphase cell
-                                flux = fluxedProportion  * ( abs( u(k,j,i) ) * dt / ddx(i) )
+                                flux = fluxedProp  * ( abs( u(k,j,i) ) * dt / ddx(i) )
                             ELSE
-                                ! Calculate flux for singlephase cell
+                                ! CASE 2
+                                ! vff:      =1     E       
+                                !       +----------+----------+
+                                !       |          |          |
+                                !       |         --> u       |
+                                !       |          |          |
+                                !       +----------+----------+
+                                ! 
+                                ! Since there is no interface in the 
+                                ! upwind cell there is no need to 
+                                ! compute the proportion.
+
                                 flux = field(k,j,i) * ( abs( u(k,j,i) ) * dt / ddx(i) )
                             END IF
                         ELSE IF ( u(k,j,i) < -tol ) THEN
                             IF ( isInterface(k,j,i+1) ) THEN
-                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the eastern cell
-                                eulerianFluxWidth = abs( u(k,j,i) ) * dt
-                                eulerianFluxAlpha = alpha(k,j,i+1)
+                                ! CASE 3
+                                ! vff:             E       
+                                !       +----------+----------+
+                                !       |          |    |     |
+                                !       |       u <--   |     |
+                                !       |          |    |     |
+                                !       +----------+----------+
+                                !                  <---->
+                                !                  u * dt
+                                ! 
+                                ! The proportion of the cell, which 
+                                ! is relevant for volume transport is
+                                ! calculated. The alpha value is
+                                ! transformed to match the new node
+                                ! of the cell and the fluxed
+                                ! proportion is computed.
 
-                                ! Caluculate the volume fraction in the fluxed volume subcell of the eastern cell
-                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i+1), eulerianFluxWidth, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
+                                fluxWidth = abs( u(k,j,i) ) * dt
+                                fluxAlpha = alpha(k,j,i+1)
 
-                                ! Calculate flux for multiphase cell
-                                flux = fluxedProportion * ( abs( u(k,j,i) ) * dt / ddx(i+1) )
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i+1), fluxWidth, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
+
+                                flux = fluxedProp * ( abs( u(k,j,i) ) * dt / ddx(i+1) )
                             ELSE
-                                ! Calculate flux for singlephase cell
+                                ! CASE 4
+                                ! vff:             E    =1 
+                                !       +----------+----------+
+                                !       |          |          |
+                                !       |       u <--         |
+                                !       |          |          |
+                                !       +----------+----------+
+                                ! 
+                                ! Since there is no interface in the  
+                                ! upwind cell there is no need to 
+                                ! compute the proportion.
+
                                 flux = field(k,j,i+1) * ( abs( u(k,j,i) ) * dt / ddx(i+1) )
                             END IF
                         ELSE
+                            ! CASE 5
+                            ! Velocity is smaller than tolerance. 
+                            ! Hence, there is no flux.
+
                             flux = 0.0_realk
                         END IF
                         fieldFlux(k,j,i) = sign( 1.0_realk, u(k,j,i) ) * flux / dt
@@ -342,35 +427,32 @@ CONTAINS
                     DO k = 3, kk-2
                         IF ( v(k,j,i) > tol ) THEN
                             IF ( isInterface(k,j,i) ) THEN
-                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                                eulerianFluxWidth = abs( v(k,j,i) ) * dt
-                                eulerianFluxAlpha = alpha(k,j,i) - normy(k,j,i) * ( ddy(j) - eulerianFluxWidth )
+                                ! See explanation above.
+                                fluxWidth = abs( v(k,j,i) ) * dt
+                                fluxAlpha = alpha(k,j,i) - normy(k,j,i) * ( ddy(j) - fluxWidth )
 
-                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
-                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i), ddx(i), eulerianFluxWidth, ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i), ddx(i), fluxWidth, ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
 
-                                ! Calculate flux for multiphase cell
-                                flux = fluxedProportion * ( abs( v(k,j,i) ) * dt / ddy(j) )
+                                flux = fluxedProp * ( abs( v(k,j,i) ) * dt / ddy(j) )
                             ELSE
-                                ! Calculate flux for singlephase cell
+                                ! See explanation above.
                                 flux = field(k,j,i) * ( abs( v(k,j,i) ) * dt / ddy(j) )
                             END IF
                         ELSE IF ( v(k,j,i) < -tol ) THEN
                             IF ( isInterface(k,j+1,i) ) THEN
-                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the northern cell
-                                eulerianFluxWidth = abs( v(k,j,i) ) * dt
-                                eulerianFluxAlpha = alpha(k,j+1,i)
+                                ! See explanation above.
+                                fluxWidth = abs( v(k,j,i) ) * dt
+                                fluxAlpha = alpha(k,j+1,i)
 
-                                ! Caluculate the volume fraction in the fluxed volume subcell of the northern cell 
-                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j+1,i), ddx(i), eulerianFluxWidth, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j+1,i), ddx(i), fluxWidth, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
 
-                                ! Calculate flux for multiphase cell
-                                flux = fluxedProportion * ( abs( v(k,j,i) ) * dt / ddy(j+1) )
+                                flux = fluxedProp * ( abs( v(k,j,i) ) * dt / ddy(j+1) )
                             ELSE
-                                ! Calculate flux for singlephase cell
+                                ! See explanation above.
                                 flux = field(k,j+1,i) * ( abs( v(k,j,i) ) * dt / ddy(j+1) )
                             END IF
                         ELSE
+                            ! See explanation above.
                             flux = 0.0_realk
                         END IF
                         fieldFlux(k,j,i) = sign( 1.0_realk, v(k,j,i) ) * flux / dt
@@ -383,35 +465,32 @@ CONTAINS
                     DO k = 3-nbw, kk-3+ntw
                         IF ( w(k,j,i) > tol ) THEN
                             IF ( isInterface(k,j,i) ) THEN
-                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                                eulerianFluxWidth = abs( w(k,j,i) ) * dt
-                                eulerianFluxAlpha = alpha(k,j,i) - normz(k,j,i) * ( ddz(k) - eulerianFluxWidth )
+                                ! See explanation above.
+                                fluxWidth = abs( w(k,j,i) ) * dt
+                                fluxAlpha = alpha(k,j,i) - normz(k,j,i) * ( ddz(k) - fluxWidth )
 
-                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
-                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i), ddx(i), ddy(j), eulerianFluxWidth, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i), ddx(i), ddy(j), fluxWidth, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
 
-                                ! Calculate flux for multiphase cell
-                                flux = fluxedProportion * ( abs( w(k,j,i) ) * dt / ddz(k) )
+                                flux = fluxedProp * ( abs( w(k,j,i) ) * dt / ddz(k) )
                             ELSE
-                                ! Calculate flux for singlephase cell
+                                ! See explanation above.
                                 flux = field(k,j,i) * ( abs( w(k,j,i) ) * dt / ddz(k) )
                             END IF
                         ELSE IF ( w(k,j,i) < -tol ) THEN
                             IF ( isInterface(k+1,j,i) ) THEN
-                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                                eulerianFluxWidth = abs( w(k,j,i) ) * dt
-                                eulerianFluxAlpha = alpha(k+1,j,i)
+                                ! See explanation above.
+                                fluxWidth = abs( w(k,j,i) ) * dt
+                                fluxAlpha = alpha(k+1,j,i)
 
-                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
-                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k+1,j,i), ddx(i), ddy(j), eulerianFluxWidth, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k+1,j,i), ddx(i), ddy(j), fluxWidth, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
 
-                                ! Calculate flux for multiphase cell
-                                flux = fluxedProportion * ( abs( w(k,j,i) ) * dt / ddz(k+1) )
+                                flux = fluxedProp * ( abs( w(k,j,i) ) * dt / ddz(k+1) )
                             ELSE
-                                ! Calculate flux for singlephase cell
+                                ! See explanation above.
                                 flux = field(k+1,j,i) * ( abs( w(k,j,i) ) * dt / ddz(k+1) )
                             END IF
                         ELSE
+                            ! See explanation above.
                             flux = 0.0_realk
                         END IF
                         fieldFlux(k,j,i) = sign( 1.0_realk, w(k,j,i) ) * flux / dt
@@ -420,22 +499,24 @@ CONTAINS
             END DO
         END IF
 
-    END SUBROUTINE compute_flux_pres
+    END SUBROUTINE comp_flux_pres
 
     !================================================================
 
-    SUBROUTINE compute_flux_stag(kk, jj, ii, component, splitDir, fieldFlux, complementFieldFlux, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, & 
-        nfro, nbac, nrgt, nlft, nbot, ntop)
+    SUBROUTINE compute_flux_stag(kk, jj, ii, q, splitDir, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, & 
+        nfro, nbac, nrgt, nlft, nbot, ntop, fieldFlux, complementFieldFlux)
     !----------------------------------------------------------------
     !   What it does:
-    !   
+    !   Computes the volume fraction fluxes depending on the current
+    !   split direction for the three staggered girds. It is 
+    !   distinguished between several cases depending on the velocity 
+    !   direction and volume fraction field.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: component
+        INTEGER(intk), INTENT(in) :: q
         INTEGER(intk), INTENT(in) :: splitDir
-        REAL(realk), INTENT(inout) :: fieldFlux(kk, jj, ii, 3), complementFieldFlux(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: field(kk, jj, ii, 3)
         LOGICAL, INTENT(in) :: isInterface(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
@@ -446,37 +527,15 @@ CONTAINS
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        REAL(realk), INTENT(inout) :: fieldFlux(kk, jj, ii, 3), complementFieldFlux(kk, jj, ii, 3)
 
         ! Local variables
         REAL(realk) :: iStag, jStag, kStag
         REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
-        REAL(realk) :: flux, complementFlux, fluxedProportion, eulerianFluxWidth, eulerianFluxAlpha
+        REAL(realk) :: flux, complementFlux, fluxedProp, fluxWidth, fluxAlpha
         REAL(realk) :: advrE(kk, jj, ii), advrW(kk, jj, ii), advrN(kk, jj, ii), advrS(kk, jj, ii), advrT(kk, jj, ii), advrB(kk, jj, ii)
-
-        IF ( component == 1 ) THEN
-            iStag = 1.0_realk
-            jStag = 0.0_realk
-            kStag = 0.0_realk
-            deltaX = dx
-            deltaY = ddy
-            deltaZ = ddz
-        ELSE IF ( component == 2 ) THEN
-            iStag = 0.0_realk
-            jStag = 1.0_realk
-            kStag = 0.0_realk
-            deltaX = ddx
-            deltaY = dy
-            deltaZ = ddz
-        ELSE IF ( component == 3 ) THEN
-            iStag = 0.0_realk
-            jStag = 0.0_realk
-            kStag = 1.0_realk
-            deltaX = ddx
-            deltaY = ddy
-            deltaZ = dz
-        END IF
 
         nfu = 0
         nbu = 0
@@ -498,52 +557,53 @@ CONTAINS
         IF (nbot == 3) nbw = 1
         IF (ntop == 3) ntw = 1
 
-        CALL comp_advr_centr(kk, jj, ii, u, v, w, iStag, jStag, kStag, advrE, advrW, advrN, advrS, advrT, advrB)
+        CALL get_component_specifics(kk, jj, ii, q, dx=dx, dy=dy, dz=dz, &
+            ddx=ddx, ddy=ddy, ddz=ddz, iStag=iStag, jStag=jStag, kStag=kStag, &
+            deltaX=deltaX, deltaY=deltaY, deltaZ=deltaZ)
+        CALL comp_advr_centr(kk, jj, ii, u, v, w, iStag, jStag, kStag, &
+            advrE, advrW, advrN, advrS, advrT, advrB)
 
         IF ( splitDir == 1 ) THEN
             DO i = 3-nfu, ii-3+nbu
                 DO j = 3, jj-2
                     DO k = 3, kk-2
                         IF ( advrE(k,j,i) > tol ) THEN
-                            IF ( isInterface(k,j,i,component) ) THEN
-                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                                eulerianFluxWidth = abs( advrE(k,j,i) ) * dt
-                                eulerianFluxAlpha = alpha(k,j,i,component) - normx(k,j,i,component) * ( deltaX(i) - eulerianFluxWidth )
+                            IF ( isInterface(k,j,i,q) ) THEN
+                                ! See explanation above.
+                                fluxWidth = abs( advrE(k,j,i) ) * dt
+                                fluxAlpha = alpha(k,j,i,q) - normx(k,j,i,q) * ( deltaX(i) - fluxWidth )
 
-                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
-                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i,component), eulerianFluxWidth, ddy(j), ddz(k), normx(k,j,i,component), normy(k,j,i,component), normz(k,j,i,component), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i,q), fluxWidth, ddy(j), ddz(k), normx(k,j,i,q), normy(k,j,i,q), normz(k,j,i,q), tol)
                                 
-                                ! Calculate flux for multiphase cell
-                                flux = fluxedProportion  * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
-                                complementFlux = ( 1.0_realk - fluxedProportion ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
+                                flux = fluxedProp  * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
+                                complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
                             ELSE
-                                ! Calculate flux for singlephase cell
-                                flux = field(k,j,i,component) * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
-                                complementFlux = ( 1.0_realk - field(k,j,i,component) ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
+                                ! See explanation above.
+                                flux = field(k,j,i,q) * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
+                                complementFlux = max( 1.0_realk - field(k,j,i,q), 0.0_realk ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
                             END IF
                         ELSE IF ( advrE(k,j,i) < -tol ) THEN
-                            IF ( isInterface(k,j,i+1,component) ) THEN
-                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the eastern cell
-                                eulerianFluxWidth = abs( advrE(k,j,i) ) * dt
-                                eulerianFluxAlpha = alpha(k,j,i+1,component)
+                            IF ( isInterface(k,j,i+1,q) ) THEN
+                                ! See explanation above.
+                                fluxWidth = abs( advrE(k,j,i) ) * dt
+                                fluxAlpha = alpha(k,j,i+1,q)
 
-                                ! Caluculate the volume fraction in the fluxed volume subcell of the eastern cell
-                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i+1,component), eulerianFluxWidth, ddy(j), ddz(k), normx(k,j,i+1,component), normy(k,j,i+1,component), normz(k,j,i+1,component), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i+1,q), fluxWidth, ddy(j), ddz(k), normx(k,j,i+1,q), normy(k,j,i+1,q), normz(k,j,i+1,q), tol)
 
-                                ! Calculate flux for multiphase cell
-                                flux = fluxedProportion * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
-                                complementFlux = ( 1.0_realk - fluxedProportion ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
+                                flux = fluxedProp * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
+                                complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
                             ELSE
-                                ! Calculate flux for singlephase cell
-                                flux = field(k,j,i+1,component) * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
-                                complementFlux = ( 1.0_realk - field(k,j,i+1,component) ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
+                                ! See explanation above.
+                                flux = field(k,j,i+1,q) * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
+                                complementFlux = max( 1.0_realk - field(k,j,i+1,q), 0.0_realk ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
                             END IF
                         ELSE
+                            ! See explanation above.
                             flux = 0.0_realk
                             complementFlux = 0.0_realk
                         END IF
-                        fieldFlux(k,j,i,component) = sign( 1.0_realk, advrE(k,j,i) ) * flux / dt
-                        complementFieldFlux(k,j,i,component) = sign( 1.0_realk, advrE(k,j,i) ) * complementFlux / dt
+                        fieldFlux(k,j,i,q) = sign( 1.0_realk, advrE(k,j,i) ) * flux / dt
+                        complementFieldFlux(k,j,i,q) = sign( 1.0_realk, advrE(k,j,i) ) * complementFlux / dt
                     END DO
                 END DO
             END DO
@@ -552,45 +612,42 @@ CONTAINS
                 DO j = 3-nrv, jj-3+nlv
                     DO k = 3, kk-2
                         IF ( advrN(k,j,i) > tol ) THEN
-                            IF ( isInterface(k,j,i,component) ) THEN
-                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                                eulerianFluxWidth = abs( advrN(k,j,i) ) * dt
-                                eulerianFluxAlpha = alpha(k,j,i,component) - normy(k,j,i,component) * ( deltaY(j) - eulerianFluxWidth )
+                            IF ( isInterface(k,j,i,q) ) THEN
+                                ! See explanation above.
+                                fluxWidth = abs( advrN(k,j,i) ) * dt
+                                fluxAlpha = alpha(k,j,i,q) - normy(k,j,i,q) * ( deltaY(j) - fluxWidth )
 
-                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
-                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i,component), ddx(i), eulerianFluxWidth, ddz(k), normx(k,j,i,component), normy(k,j,i,component), normz(k,j,i,component), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i,q), ddx(i), fluxWidth, ddz(k), normx(k,j,i,q), normy(k,j,i,q), normz(k,j,i,q), tol)
 
-                                ! Calculate flux for multiphase cell
-                                flux = fluxedProportion * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
-                                complementFlux = ( 1.0_realk - fluxedProportion ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
+                                flux = fluxedProp * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
+                                complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
                             ELSE
-                                ! Calculate flux for singlephase cell
-                                flux = field(k,j,i,component) * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
-                                complementFlux = ( 1.0_realk - field(k,j,i,component) ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
+                                ! See explanation above.
+                                flux = field(k,j,i,q) * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
+                                complementFlux = max( 1.0_realk - field(k,j,i,q), 0.0_realk ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
                             END IF
                         ELSE IF ( advrN(k,j,i) < -tol ) THEN
-                            IF ( isInterface(k,j+1,i,component) ) THEN
-                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the northern cell
-                                eulerianFluxWidth = abs( advrN(k,j,i) ) * dt
-                                eulerianFluxAlpha = alpha(k,j+1,i,component)
+                            IF ( isInterface(k,j+1,i,q) ) THEN
+                                ! See explanation above.
+                                fluxWidth = abs( advrN(k,j,i) ) * dt
+                                fluxAlpha = alpha(k,j+1,i,q)
 
-                                ! Caluculate the volume fraction in the fluxed volume subcell of the northern cell 
-                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j+1,i,component), ddx(i), eulerianFluxWidth, ddz(k), normx(k,j+1,i,component), normy(k,j+1,i,component), normz(k,j+1,i,component), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j+1,i,q), ddx(i), fluxWidth, ddz(k), normx(k,j+1,i,q), normy(k,j+1,i,q), normz(k,j+1,i,q), tol)
 
-                                ! Calculate flux for multiphase cell
-                                flux = fluxedProportion * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
-                                complementFlux = ( 1.0_realk - fluxedProportion ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
+                                flux = fluxedProp * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
+                                complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
                             ELSE
-                                ! Calculate flux for singlephase cell
-                                flux = field(k,j+1,i,component) * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
-                                complementFlux = ( 1.0_realk - field(k,j+1,i,component) ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
+                                ! See explanation above.
+                                flux = field(k,j+1,i,q) * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
+                                complementFlux = max( 1.0_realk - field(k,j+1,i,q), 0.0_realk ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
                             END IF
                         ELSE
+                            ! See explanation above.
                             flux = 0.0_realk
                             complementFlux = 0.0_realk
                         END IF
-                        fieldFlux(k,j,i,component) = sign( 1.0_realk, advrN(k,j,i) ) * flux / dt
-                        complementFieldFlux(k,j,i,component) = sign( 1.0_realk, advrN(k,j,i) ) * complementFlux / dt
+                        fieldFlux(k,j,i,q) = sign( 1.0_realk, advrN(k,j,i) ) * flux / dt
+                        complementFieldFlux(k,j,i,q) = sign( 1.0_realk, advrN(k,j,i) ) * complementFlux / dt
                     END DO
                 END DO
             END DO
@@ -599,45 +656,42 @@ CONTAINS
                 DO j = 3, jj-2
                     DO k = 3-nbw, kk-3+ntw
                         IF ( advrT(k,j,i) > tol ) THEN
-                            IF ( isInterface(k,j,i,component) ) THEN
-                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                                eulerianFluxWidth = abs( advrT(k,j,i) ) * dt
-                                eulerianFluxAlpha = alpha(k,j,i,component) - normz(k,j,i,component) * ( deltaZ(k) - eulerianFluxWidth )
+                            IF ( isInterface(k,j,i,q) ) THEN
+                                ! See explanation above.
+                                fluxWidth = abs( advrT(k,j,i) ) * dt
+                                fluxAlpha = alpha(k,j,i,q) - normz(k,j,i,q) * ( deltaZ(k) - fluxWidth )
 
-                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
-                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k,j,i,component), ddx(i), ddy(j), eulerianFluxWidth, normx(k,j,i,component), normy(k,j,i,component), normz(k,j,i,component), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i,q), ddx(i), ddy(j), fluxWidth, normx(k,j,i,q), normy(k,j,i,q), normz(k,j,i,q), tol)
 
-                                ! Calculate flux for multiphase cell
-                                flux = fluxedProportion * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
-                                complementFlux = ( 1.0_realk - fluxedProportion ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
+                                flux = fluxedProp * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
+                                complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
                             ELSE
-                                ! Calculate flux for singlephase cell
-                                flux = field(k,j,i,component) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
-                                complementFlux = ( 1.0_realk - field(k,j,i,component) ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
+                                ! See explanation above.
+                                flux = field(k,j,i,q) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
+                                complementFlux = max( 1.0_realk - field(k,j,i,q), 0.0_realk ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
                             END IF
                         ELSE IF ( advrT(k,j,i) < -tol ) THEN
-                            IF ( isInterface(k+1,j,i,component) ) THEN
-                                ! Calculate the width of the fluxed volume and the alpha value for this subcell of the investigated cell
-                                eulerianFluxWidth = abs( advrT(k,j,i) ) * dt
-                                eulerianFluxAlpha = alpha(k+1,j,i,component)
+                            IF ( isInterface(k+1,j,i,q) ) THEN
+                                ! See explanation above.
+                                fluxWidth = abs( advrT(k,j,i) ) * dt
+                                fluxAlpha = alpha(k+1,j,i,q)
 
-                                ! Caluculate the volume fraction in the fluxed volume subcell of the investigated cell 
-                                CALL compute_cell_proportion(fluxedProportion, eulerianFluxAlpha, field(k+1,j,i,component), ddx(i), ddy(j), eulerianFluxWidth, normx(k+1,j,i,component), normy(k+1,j,i,component), normz(k+1,j,i,component), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k+1,j,i,q), ddx(i), ddy(j), fluxWidth, normx(k+1,j,i,q), normy(k+1,j,i,q), normz(k+1,j,i,q), tol)
 
-                                ! Calculate flux for multiphase cell
-                                flux = fluxedProportion * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
-                                complementFlux = ( 1.0_realk - fluxedProportion ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
+                                flux = fluxedProp * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
+                                complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
                             ELSE
-                                ! Calculate flux for singlephase cell
-                                flux = field(k+1,j,i,component) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
-                                complementFlux = ( 1.0_realk - field(k+1,j,i,component) ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
+                                ! See explanation above.
+                                flux = field(k+1,j,i,q) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
+                                complementFlux = max( 1.0_realk - field(k+1,j,i,q), 0.0_realk ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
                             END IF
                         ELSE
+                            ! See explanation above.
                             flux = 0.0_realk
                             complementFLux = 0.0_realk
                         END IF
-                        fieldFlux(k,j,i,component) = sign( 1.0_realk, advrT(k,j,i) ) * flux / dt
-                        complementFieldFlux(k,j,i,component) = sign( 1.0_realk, advrT(k,j,i) ) * complementFlux / dt
+                        fieldFlux(k,j,i,q) = sign( 1.0_realk, advrT(k,j,i) ) * flux / dt
+                        complementFieldFlux(k,j,i,q) = sign( 1.0_realk, advrT(k,j,i) ) * complementFlux / dt
                     END DO
                 END DO
             END DO
@@ -647,21 +701,22 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE update_field_pres(kk, jj, ii, splitDir, field, flux, compressionTerm, & 
-            dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+    SUBROUTINE update_field_pres(kk, jj, ii, splitDir, flux, comprTerm, & 
+            dt, nfro, nbac, nrgt, nlft, nbot, ntop, fld)
     !----------------------------------------------------------------
     !   What it does:
-    !   
+    !   Update the input field with corresponding fluxes and 
+    !   compression term.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: splitDir
-        REAL(realk), INTENT(inout) :: field(kk, jj, ii)
         REAL(realk), INTENT(in) :: flux(kk, jj, ii)
-        REAL(realk), INTENT(in) :: compressionTerm(kk, jj, ii)
+        REAL(realk), INTENT(in) :: comprTerm(kk, jj, ii)
         REAL(realk), INTENT(in) :: dt
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        REAL(realk), INTENT(inout) :: fld(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -691,7 +746,7 @@ CONTAINS
             DO i = 3-nfu, ii-3+nbu
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        field(k,j,i) = ( field(k,j,i) + dt * ( flux(k,j,i-1) - flux(k,j,i) + compressionTerm(k,j,i) ) ) 
+                        fld(k,j,i) = fld(k,j,i) + dt * ( flux(k,j,i-1) - flux(k,j,i) + comprTerm(k,j,i) )
                     END DO 
                 END DO 
             END DO
@@ -699,7 +754,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3-nrv, jj-3+nlv
                     DO k = 3, kk-2
-                        field(k,j,i) = ( field(k,j,i) + dt * ( flux(k,j-1,i) - flux(k,j,i) + compressionTerm(k,j,i) ) )
+                        fld(k,j,i) = fld(k,j,i) + dt * ( flux(k,j-1,i) - flux(k,j,i) + comprTerm(k,j,i) )
                     END DO 
                 END DO 
             END DO
@@ -707,7 +762,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3-nbw, kk-3+ntw
-                        field(k,j,i) = ( field(k,j,i) + dt * ( flux(k-1,j,i) - flux(k,j,i) + compressionTerm(k,j,i) ) )
+                        fld(k,j,i) = fld(k,j,i) + dt * ( flux(k-1,j,i) - flux(k,j,i) + comprTerm(k,j,i) )
                     END DO 
                 END DO 
             END DO
@@ -717,22 +772,23 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE update_field_stag(kk, jj, ii, component, splitDir, field, flux, compressionTerm, & 
-            dt, nfro, nbac, nrgt, nlft, nbot, ntop)
+    SUBROUTINE update_field_stag(kk, jj, ii, q, splitDir, flux, comprTerm, & 
+            dt, nfro, nbac, nrgt, nlft, nbot, ntop, fld)
     !----------------------------------------------------------------
     !   What it does:
-    !   
+    !   Update the input field with corresponding fluxes and 
+    !   compression term for the three staggered girds.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: component
+        INTEGER(intk), INTENT(in) :: q
         INTEGER(intk), INTENT(in) :: splitDir
-        REAL(realk), INTENT(inout) :: field(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: flux(kk, jj, ii, 3)
-        REAL(realk), INTENT(in) :: compressionTerm(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: comprTerm(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: dt
         INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        REAL(realk), INTENT(inout) :: fld(kk, jj, ii, 3)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -762,7 +818,7 @@ CONTAINS
             DO i = 3-nfu, ii-3+nbu
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        field(k,j,i,component) = ( field(k,j,i,component) + dt * ( flux(k,j,i-1,component) - flux(k,j,i,component) + compressionTerm(k,j,i,component) ) ) 
+                        fld(k,j,i,q) = fld(k,j,i,q) + dt * ( flux(k,j,i-1,q) - flux(k,j,i,q) + comprTerm(k,j,i,q) )
                     END DO 
                 END DO 
             END DO
@@ -770,7 +826,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3-nrv, jj-3+nlv
                     DO k = 3, kk-2
-                        field(k,j,i,component) = ( field(k,j,i,component) + dt * ( flux(k,j-1,i,component) - flux(k,j,i,component) + compressionTerm(k,j,i,component) ) )
+                        fld(k,j,i,q) = fld(k,j,i,q) + dt * ( flux(k,j-1,i,q) - flux(k,j,i,q) + comprTerm(k,j,i,q) )
                     END DO 
                 END DO 
             END DO
@@ -778,7 +834,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3-nbw, kk-3+ntw
-                        field(k,j,i,component) = ( field(k,j,i,component) + dt * ( flux(k-1,j,i,component) - flux(k,j,i,component) + compressionTerm(k,j,i,component) ) )
+                        fld(k,j,i,q) = fld(k,j,i,q) + dt * ( flux(k-1,j,i,q) - flux(k,j,i,q) + comprTerm(k,j,i,q) )
                     END DO 
                 END DO 
             END DO
@@ -791,8 +847,8 @@ CONTAINS
     SUBROUTINE clip_volume_fraction_field(kk, ii, jj, vff, tol)
     !----------------------------------------------------------------
     !   What it does:
-    !   This subroutine ensures that the volume fraction field vff stays
-    !   within its bounds of [0,1].
+    !   This subroutine ensures that the volume fraction field vff 
+    !   stays within its bounds of [0,1].
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -819,7 +875,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_density_flux(kk, jj, ii, component, flux, fluxComp, rho1, rho2, densityFlux)
+    SUBROUTINE compute_density_flux(kk, jj, ii, q, flux, fluxComp, rho1, rho2, densityFlux)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine computes the density fluxes using the volume
@@ -828,7 +884,7 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: component
+        INTEGER(intk), INTENT(in) :: q
         REAL(realk), INTENT(in) :: flux(kk, jj, ii, 3), fluxComp(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: rho1, rho2
         REAL(realk), INTENT(inout) :: densityFlux(kk, jj, ii, 3)
@@ -839,7 +895,7 @@ CONTAINS
         DO i = 1, ii
             DO j = 1, jj
                 DO k = 1, kk
-                    densityFlux(k,j,i,component) = rho1 * flux(k,j,i,component) + rho2 * fluxComp(k,j,i,component)
+                    densityFlux(k,j,i,q) = rho1 * flux(k,j,i,q) + rho2 * fluxComp(k,j,i,q)
                 END DO
             END DO
         END DO
@@ -878,7 +934,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compression_term_wrapper_pres(kk, jj, ii, splitDir, u, v, w, vff, ddx, ddy, ddz, compressionTerm, propertyFluid1, propertyFluid2)
+    SUBROUTINE compression_term_wrapper_pres(kk, jj, ii, splitDir, u, v, w, vff, ddx, ddy, ddz, comprTerm, propertyFluid1, propertyFluid2)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -889,27 +945,27 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: splitDir
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii), vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(out) :: compressionTerm(kk, jj, ii)
+        REAL(realk), INTENT(out) :: comprTerm(kk, jj, ii)
         REAL(realk), INTENT(in), OPTIONAL :: propertyFluid1, propertyFluid2
 
         ! Local variables
         REAL(realk) :: strainRate(kk, jj, ii)
-        REAL(realk) :: nonDirectionalCompressionCoefficient(kk, jj, ii)
+        REAL(realk) :: nonDirComprCoeff(kk, jj, ii)
 
         CALL compute_normal_strain_rate(kk, jj, ii, splitDir, u, v, w, ddx, ddy, ddz, strainRate)
-        CALL compute_non_directional_compression_coeffiecient(kk, jj, ii, nonDirectionalCompressionCoefficient, vff)
+        CALL comp_nondir_compr_coeff(kk, jj, ii, vff, nonDirComprCoeff)
 
         IF ( .NOT. PRESENT(propertyFluid1) .AND. .NOT. PRESENT(propertyFluid2) ) THEN
-            compressionTerm = nonDirectionalCompressionCoefficient * strainRate
+            comprTerm = nonDirComprCoeff * strainRate
         ELSE IF ( PRESENT(propertyFluid1) .AND. PRESENT(propertyFluid2) ) THEN
-            compressionTerm = ( nonDirectionalCompressionCoefficient * propertyFluid1 + ( 1.0_realk - nonDirectionalCompressionCoefficient ) * propertyFluid2 ) * strainRate
+            comprTerm = ( nonDirComprCoeff * propertyFluid1 + ( 1.0_realk - nonDirComprCoeff ) * propertyFluid2 ) * strainRate
         END IF
 
     END SUBROUTINE compression_term_wrapper_pres
 
     !================================================================
 
-    SUBROUTINE compression_term_wrapper_stag(kk, jj, ii, component, splitDir, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, compressionTerm, propertyFluid1, propertyFluid2)
+    SUBROUTINE compression_term_wrapper_stag(kk, jj, ii, q, splitDir, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, comprTerm, propertyFluid1, propertyFluid2)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -917,32 +973,32 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: component
+        INTEGER(intk), INTENT(in) :: q
         INTEGER(intk), INTENT(in) :: splitDir
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii), vff(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(out) :: compressionTerm(kk, jj, ii, 3)
+        REAL(realk), INTENT(out) :: comprTerm(kk, jj, ii, 3)
         REAL(realk), INTENT(in), OPTIONAL :: propertyFluid1, propertyFluid2
 
         ! Local variables
         REAL(realk) :: strainRate(kk, jj, ii, 3)
-        REAL(realk) :: nonDirectionalCompressionCoefficient(kk, jj, ii, 3)
+        REAL(realk) :: nonDirComprCoeff(kk, jj, ii, 3)
 
-        CALL compute_normal_strain_rate(kk, jj, ii, component, splitDir, u, v, w, dx, dy, dz, ddx, ddy, ddz, strainRate)
-        CALL compute_non_directional_compression_coeffiecient(kk, jj, ii, component, nonDirectionalCompressionCoefficient, vff)
+        CALL compute_normal_strain_rate(kk, jj, ii, q, splitDir, u, v, w, dx, dy, dz, ddx, ddy, ddz, strainRate)
+        CALL comp_nondir_compr_coeff(kk, jj, ii, q, vff, nonDirComprCoeff)
 
         IF ( .NOT. PRESENT(propertyFluid1) .OR. .NOT. PRESENT(propertyFluid2) ) THEN
-            compressionTerm(:,:,:,component) = nonDirectionalCompressionCoefficient(:,:,:,component) * strainRate(:,:,:,component)
+            comprTerm(:,:,:,q) = nonDirComprCoeff(:,:,:,q) * strainRate(:,:,:,q)
         ELSE IF ( PRESENT(propertyFluid1) .AND. PRESENT(propertyFluid2) ) THEN
-            compressionTerm(:,:,:,component) = ( nonDirectionalCompressionCoefficient(:,:,:,component) * propertyFluid1 + ( 1.0_realk - nonDirectionalCompressionCoefficient(:,:,:,component) ) * propertyFluid2 ) * strainRate(:,:,:,component)
+            comprTerm(:,:,:,q) = ( nonDirComprCoeff(:,:,:,q) * propertyFluid1 + ( 1.0_realk - nonDirComprCoeff(:,:,:,q) ) * propertyFluid2 ) * strainRate(:,:,:,q)
         END IF
 
     END SUBROUTINE compression_term_wrapper_stag
 
     !================================================================
 
-    SUBROUTINE multiphase_split_advection(uo_f, vo_f, wo_f, u_f, v_f, w_f, ut_f, vt_f, wt_f, &
+    SUBROUTINE multiphase_solve(uo_f, vo_f, wo_f, u_f, v_f, w_f, ut_f, vt_f, wt_f, &
         vff_f, p_f, g_f, d_f, dtrki, itstep)
     !----------------------------------------------------------------
     !   What it does:
@@ -969,7 +1025,9 @@ CONTAINS
         ! Local variables
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
         TYPE(field_t), POINTER :: rdx_f, rdy_f, rdz_f, rddx_f, rddy_f, rddz_f
-        TYPE(field_t), POINTER :: normx_f, normy_f, normz_f, alpha_f
+        TYPE(field_t), POINTER :: normx_f, normy_f, normz_f, alpha_f, vffiStag_f, vffjStag_f, vffkStag_f
+        TYPE(field_t), POINTER :: normxiStag_f, normyiStag_f, normziStag_f, alphaiStag_f
+        TYPE(field_t), POINTER :: normxjStag_f, normyjStag_f, normzjStag_f, alphajStag_f
         REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: uo, vo, wo
         REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: u, v, w
         REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: ut, vt, wt
@@ -979,6 +1037,9 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:)
         REAL(realk), POINTER, CONTIGUOUS :: rddx(:), rddy(:), rddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: normxField(:,:,:), normyField(:,:,:), normzField(:,:,:), alphaField(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: normxiStagField(:,:,:), normyiStagField(:,:,:), alphaiStagField(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: normxjStagField(:,:,:), normyjStagField(:,:,:), alphajStagField(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: vffiStagField(:,:,:), vffjStagField(:,:,:), vffkStagField(:,:,:)
         INTEGER(intk) :: advSeq(3)
         INTEGER(intk) :: i, igrid, l, q, splitDir
         INTEGER(intk) :: kk, jj, ii
@@ -989,14 +1050,14 @@ CONTAINS
         REAL(realk), ALLOCATABLE :: alpha(:,:,:), alphaStag(:,:,:,:)
         LOGICAL, ALLOCATABLE :: isInterface(:,:,:), isInterfaceStag(:,:,:,:)
         LOGICAL, ALLOCATABLE :: isNearInterface(:,:,:), isNearInterfaceStag(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: vffStag(:,:,:,:), vffOld(:,:,:), VffStagOld(:,:,:,:)
+        REAL(realk), ALLOCATABLE :: vffStag(:,:,:,:)
         REAL(realk), ALLOCATABLE :: densityFieldStag(:,:,:,:), densityFieldStagOld(:,:,:,:)
         REAL(realk), ALLOCATABLE :: vffFlux(:,:,:), vffFluxStag(:,:,:,:)
         REAL(realk), ALLOCATABLE :: complementvffFlux(:,:,:), complementvffFluxStag(:,:,:,:)
         REAL(realk), ALLOCATABLE :: densityFieldFluxStag(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: vffCompressionTerm(:,:,:)
-        REAL(realk), ALLOCATABLE :: densityCompressionTermStag(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: uNew(:,:,:), vNew(:,:,:), wNew(:,:,:)
+        REAL(realk), ALLOCATABLE :: vffCompressionTerm(:,:,:), vffCompressionTermStag(:,:,:,:)
+        REAL(realk), ALLOCATABLE :: densityCompressionTermStag(:,:,:,:), compSum(:,:,:,:)
+        REAL(realk), ALLOCATABLE :: mom(:,:,:,:), nonDirComprCoeffStag(:,:,:,:), strainRateStag(:,:,:,:)
 
         ! Set all the output to zero everywhere before we start!
         uo_f = 0.0_realk
@@ -1022,8 +1083,19 @@ CONTAINS
         CALL get_field(normx_f, "NORMX")
         CALL get_field(normy_f, "NORMY")
         CALL get_field(normz_f, "NORMZ")
-
         CALL get_field(alpha_f, "ALPHA")
+        CALL get_field(normxiStag_f, "NORMXiStag")
+        CALL get_field(normyiStag_f, "NORMYiStag")
+        CALL get_field(normziStag_f, "NORMZiStag")
+        CALL get_field(alphaiStag_f, "ALPHAiStag")
+        CALL get_field(normxjStag_f, "NORMXjStag")
+        CALL get_field(normyjStag_f, "NORMYjStag")
+        CALL get_field(normzjStag_f, "NORMZjStag")
+        CALL get_field(alphajStag_f, "ALPHAjStag")
+
+        CALL get_field(vffiStag_f, "VFFiStag")
+        CALL get_field(vffjStag_f, "VFFjStag")
+        CALL get_field(vffkStag_f, "VFFkStag")
 
         DO i = 1, nmygrids
             igrid = mygrids(i)
@@ -1064,6 +1136,15 @@ CONTAINS
             CALL normy_f%get_ptr(normyField, igrid)
             CALL normz_f%get_ptr(normzField, igrid)
             CALL alpha_f%get_ptr(alphaField, igrid)
+            CALL normxiStag_f%get_ptr(normxiStagField, igrid)
+            CALL normyiStag_f%get_ptr(normyiStagField, igrid)
+            CALL alphaiStag_f%get_ptr(alphaiStagField, igrid)
+            CALL normxjStag_f%get_ptr(normxjStagField, igrid)
+            CALL normyjStag_f%get_ptr(normyjStagField, igrid)
+            CALL alphajStag_f%get_ptr(alphajStagField, igrid)
+            CALL vffiStag_f%get_ptr(vffiStagField, igrid)
+            CALL vffjStag_f%get_ptr(vffjStagField, igrid)
+            CALL vffkStag_f%get_ptr(vffkStagField, igrid)
 
             CALL rddx_f%get_ptr(rddx, igrid)
             CALL rddy_f%get_ptr(rddy, igrid)
@@ -1087,8 +1168,6 @@ CONTAINS
             IF (.NOT. ALLOCATED(isNearInterfaceStag)) ALLOCATE(isNearInterfaceStag(kk,jj,ii,3))
 
             IF (.NOT. ALLOCATED(vffStag)) ALLOCATE(vffStag(kk,jj,ii,3))
-            IF (.NOT. ALLOCATED(vffStagOld)) ALLOCATE(vffStagOld(kk,jj,ii,3))
-            IF (.NOT. ALLOCATED(vffOld)) ALLOCATE(vffOld(kk,jj,ii))
 
             IF (.NOT. ALLOCATED(densityFieldStag)) ALLOCATE(densityFieldStag(kk,jj,ii,3))
             IF (.NOT. ALLOCATED(densityFieldStagOld)) ALLOCATE(densityFieldStagOld(kk,jj,ii,3))
@@ -1104,67 +1183,116 @@ CONTAINS
             IF (.NOT. ALLOCATED(vffCompressionTerm)) ALLOCATE(vffCompressionTerm(kk,jj,ii))
 
             IF (.NOT. ALLOCATED(densityCompressionTermStag)) ALLOCATE(densityCompressionTermStag(kk,jj,ii,3))
-
-            IF (.NOT. ALLOCATED(uNew)) ALLOCATE(uNew(kk,jj,ii))
-            IF (.NOT. ALLOCATED(vNew)) ALLOCATE(vNew(kk,jj,ii))
-            IF (.NOT. ALLOCATED(wNew)) ALLOCATE(wNew(kk,jj,ii))
+            IF (.NOT. ALLOCATED(vffCompressionTermStag)) ALLOCATE(vffCompressionTermStag(kk,jj,ii,3))
+            IF (.NOT. ALLOCATED(compSum)) ALLOCATE(compSum(kk,jj,ii,3))
+            IF (.NOT. ALLOCATED(mom)) ALLOCATE(mom(kk,jj,ii,3))
+            IF (.NOT. ALLOCATED(nonDirComprCoeffStag)) ALLOCATE(nonDirComprCoeffStag(kk,jj,ii,3))
+            IF (.NOT. ALLOCATED(strainRateStag)) ALLOCATE(strainRateStag(kk,jj,ii,3))
 
             CALL get_advection_sequence(itstep, advSeq)
             CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
 
-            DO q = 1, 3             ! Loop over staggered components u, v and w
-                
+            DO q = 1, 3
+
                 CALL staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
                 CALL interface_reconstruction_wrapper(kk, jj, ii, q, vffStag, dx, dy, dz, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
                 CALL compute_material_property_field(kk, jj, ii, q, densityFieldStag, vffStag, rho1, rho2)
-
+                CALL comp_nondir_compr_coeff(kk, jj, ii, q, vffStag, nonDirComprCoeffStag)
+    
             END DO
 
-            densityFieldStagOld = densityFieldStag
-            vffOld = vff
-            vffStagOld = vffStag
-
-            DO l = 1, 3             ! Loop over dimensions x, y and z for split-advection
+            mom(:,:,:,1) = u(:,:,:) * densityFieldStag(:,:,:,1)
+            mom(:,:,:,2) = v(:,:,:) * densityFieldStag(:,:,:,2)
+            mom(:,:,:,3) = w(:,:,:) * densityFieldStag(:,:,:,3) 
+            
+            DO l = 1, 3
 
                 splitDir = advSeq(l)
 
+                DO q = 1, 3
+                    CALL compute_flux(kk, jj, ii, q, splitDir, vffStag, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop, vffFluxStag, complementvffFluxStag)
+                    CALL compute_density_flux(kk, jj, ii, q, vffFluxStag, complementvffFluxStag, rho1, rho2, densityFieldFluxStag)
+                    CALL comp_normal_strain_rate_stag(kk, jj, ii, q, splitDir, mom(:,:,:,1) / densityFieldStag(:,:,:,1), mom(:,:,:,2) / densityFieldStag(:,:,:,2), mom(:,:,:,3) / densityFieldStag(:,:,:,3), dx, dy, dz, ddx, ddy, ddz, strainRateStag)                   
+                    densityCompressionTermStag = ( nonDirComprCoeffStag * rho1 + ( 1.0_realk - nonDirComprCoeffStag ) * rho2 ) * strainRateStag
+                    CALL multiphase_momentum_advection(kk, jj, ii, q, splitDir, mom, densityFieldStag, densityFieldFluxStag, densityCompressionTermStag, dtrki, dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, nfro, nbac, nrgt, nlft, nbot, ntop)
+                    vffCompressionTermStag = nonDirComprCoeffStag * strainRateStag
+                    CALL update_field(kk, jj, ii, q, splitDir, vffFluxStag, vffCompressionTermStag, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop, vffStag)
+                    CALL clip_volume_fraction_field(kk, ii, jj, vffStag(:,:,:,q), tol)
+                    CALL compute_material_property_field(kk, jj, ii, q, densityFieldStag, vffStag, rho1, rho2)
+
+                    IF ( q == 1 ) THEN
+                        CALL comp_velocity(kk, jj, ii, q, mom, densityFieldStag, tol, u)
+                    ELSE IF ( q == 2 ) THEN
+                        CALL comp_velocity(kk, jj, ii, q, mom, densityFieldStag, tol, v)
+                    ELSE IF ( q == 3 ) THEN
+                        CALL comp_velocity(kk, jj, ii, q, mom, densityFieldStag, tol, w)
+                    END IF
+
+                    CALL interface_reconstruction_wrapper(kk, jj, ii, q, vffStag, dx, dy, dz, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)                    
+                END DO
+
                 CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
-                CALL compute_flux(kk, jj, ii, splitDir, vffFlux, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop)                
-                CALL compression_term_wrapper(kk, jj, ii, splitDir, u, v, w, vffOld, ddx, ddy, ddz, vffCompressionTerm)
-                CALL update_field(kk, jj, ii, splitDir, vff, vffFlux, vffCompressionTerm, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
+                CALL compute_flux(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop, vffFlux)                
+                CALL compression_term_wrapper(kk, jj, ii, splitDir, u, v, w, vff, ddx, ddy, ddz, vffCompressionTerm)
+                CALL update_field(kk, jj, ii, splitDir, vffFlux, vffCompressionTerm, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop, vff)
                 CALL clip_volume_fraction_field(kk, ii, jj, vff, tol) 
 
-                DO q = 1, 3         ! Loop over staggered components u, v and w
-                    
-                    CALL compute_flux(kk, jj, ii, q, splitDir, vffFluxStag, complementvffFluxStag, vffStag, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop)
-                    CALL compute_density_flux(kk, jj, ii, q, vffFluxStag, complementvffFluxStag, rho1, rho2, densityFieldFluxStag)
-                    CALL compression_term_wrapper(kk, jj, ii, q, splitDir, u, v, w, vffStagOld, dx, dy, dz, ddx, ddy, ddz, densityCompressionTermStag, rho1, rho2)
-                    CALL update_field(kk, jj, ii, q, splitDir, densityFieldStag, densityFieldFluxStag, densityCompressionTermStag, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop)
-                    CALL multiphase_advect_momentum(kk, jj, ii, q, splitDir, u, v, w, uNew, vNew, wNew, densityFieldFluxStag, &
-                        densityCompressionTermStag, densityFieldStagOld, densityFieldStag, &
-                        isNearInterfaceStag, dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
-                        nfro, nbac, nrgt, nlft, nbot, ntop)
-
-                END DO
             END DO
-            u(3:-3,3:-3,3:-3) = uNew(3:-3,3:-3,3:-3)
-            v(3:-3,3:-3,3:-3) = vNew(3:-3,3:-3,3:-3)
-            w(3:-3,3:-3,3:-3) = wNew(3:-3,3:-3,3:-3)
         END DO
 
         normxField = normx
         normyField = normy
         normzField = normz
         alphaField = alpha
+        normxiStagField = normxStag(:,:,:,1)
+        normxjStagField = normxStag(:,:,:,2)
+        normyiStagField = normyStag(:,:,:,1)
+        normyjStagField = normyStag(:,:,:,2)
+        alphaiStagField = alphaStag(:,:,:,1)
+        alphajStagField = alphaStag(:,:,:,2)
+        vffiStagField = vffStag(:,:,:,1)
+        vffjStagField = vffStag(:,:,:,2)
+        vffkStagField = vffStag(:,:,:,3)
 
-    END SUBROUTINE multiphase_split_advection
+    END SUBROUTINE multiphase_solve
 
     !================================================================
 
-    SUBROUTINE multiphase_advect_momentum(kk, jj, ii, component, splitDir, u, v, w, uNew, vNew, wNew, densityFieldFluxStag, &
-        densityCompressionTermStag, densityFieldStagOld, densityFieldStag, &
-        isNearInterfaceStag, dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
-        nfro, nbac, nrgt, nlft, nbot, ntop)
+    SUBROUTINE comp_velocity(kk, jj, ii, q, mom, densityFieldStag, tol, velocity)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: q
+        REAL(realk), INTENT(in) :: mom(kk, jj, ii, 3), densityFieldStag(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: tol
+        REAL(realk), INTENT(out) :: velocity(kk,jj,ii)
+
+        ! Local variables
+        INTEGER(intk) :: i, j, k
+    
+        DO i = 1, ii
+            DO j = 1, jj
+                DO k = 1, kk
+                    IF (densityFieldStag(k,j,i,q) > tol) THEN
+                        velocity(k,j,i) = mom(k,j,i,q) / densityFieldStag(k,j,i,q)
+                    ELSE
+                        velocity(k,j,i) = 0.0_realk
+                    END IF
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE
+
+    !================================================================
+
+    SUBROUTINE multiphase_momentum_advection(kk, jj, ii, q, splitDir, mom, densityFieldStag, densityFieldFluxStag, &
+                        densityCompressionTermStag, dt, dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
+                        nfro, nbac, nrgt, nlft, nbot, ntop)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -1173,13 +1301,12 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: splitDir
-        INTEGER(intk), INTENT(in) :: component
-        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-        REAL(realk), INTENT(out) :: uNew(kk, jj, ii), vNew(kk, jj, ii), wNew(kk, jj, ii)
-        REAL(realk), INTENT(in) :: densityFieldStagOld(kk, jj, ii, 3), densityFieldFluxStag(kk, jj, ii, 3) 
-        REAL(realk), INTENT(in) :: densityCompressionTermStag(kk, jj, ii, 3)
+        INTEGER(intk), INTENT(in) :: q
+        REAL(realk), INTENT(inout) :: mom(kk, jj, ii, 3)
         REAL(realk), INTENT(in) :: densityFieldStag(kk, jj, ii, 3)
-        LOGICAL, INTENT(in) :: isNearInterfaceStag(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: densityFieldFluxStag(kk, jj, ii, 3) 
+        REAL(realk), INTENT(in) :: densityCompressionTermStag(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: dt
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
@@ -1189,14 +1316,11 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: nbu, nfu, nrv, nlv, nbw, ntw
+        REAL(realk) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk) :: advrE(kk, jj, ii), advrW(kk, jj, ii), advrN(kk, jj, ii), advrS(kk, jj, ii), advrT(kk, jj, ii), advrB(kk, jj, ii)
         REAL(realk) :: adveE(kk, jj, ii), adveW(kk, jj, ii), adveN(kk, jj, ii), adveS(kk, jj, ii), adveT(kk, jj, ii), adveB(kk, jj, ii)
         REAL(realk) :: iStag, jStag, kStag
         REAL(realk) :: velocity(kk, jj, ii)
-        REAL(realk) :: dVelocity, dMomentum
-
-        ! return
-        ! WRITE(*,*) "Mom. Adv. Running"
 
         nfu = 0
         nbu = 0
@@ -1218,79 +1342,255 @@ CONTAINS
         IF (nbot == 3) nbw = 1
         IF (ntop == 3) ntw = 1
 
-        IF ( component == 1 ) THEN
+        IF ( q == 1 ) THEN
             iStag = 1.0_realk
             jStag = 0.0_realk
             kStag = 0.0_realk
-            velocity = u
-        ELSE IF ( component == 2 ) THEN
+            velocity = mom(:,:,:,q) / densityFieldStag(:,:,:,q)
+        ELSE IF ( q == 2 ) THEN
             iStag = 0.0_realk
             jStag = 1.0_realk
             kStag = 0.0_realk
-            velocity = v
-        ELSE IF ( component == 3 ) THEN
+            velocity = mom(:,:,:,q) / densityFieldStag(:,:,:,q)
+        ELSE IF ( q == 3 ) THEN
             iStag = 0.0_realk
             jStag = 0.0_realk
             kStag = 1.0_realk
-            velocity = w
+            velocity = mom(:,:,:,q) / densityFieldStag(:,:,:,q)
         END IF
 
+        u = mom(:,:,:,1) / densityFieldStag(:,:,:,1)
+        v = mom(:,:,:,2) / densityFieldStag(:,:,:,2)
+        w = mom(:,:,:,3) / densityFieldStag(:,:,:,3)
+        
         CALL comp_advr_centr(kk, jj, ii, u, v, w, iStag, jStag, kStag, advrE, advrW, advrN, advrS, advrT, advrB)
         CALL comp_adve_quick(kk, jj, ii, velocity, advrE, advrW, advrN, advrS, advrT, advrB, adveE, adveW, adveN, adveS, adveT, adveB)
 
         IF ( splitDir == 1 ) THEN
-            DO i = 3-nfu, ii-3+nbu
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        IF ( isNearInterfaceStag(k,j,i,component) ) THEN
-                            dMomentum = - ( adveE(k,j,i) * densityFieldFluxStag(k,j,i,component) - adveW(k,j,i) * densityFieldFluxStag(k,j,i-1,component) ) + velocity(k,j,i) * densityCompressionTermStag(k,j,i,component)
-                            velocity(k,j,i) = 1.0_realk / densityFieldStag(k,j,i,component) * ( densityFieldStagOld(k,j,i,component) * velocity(k,j,i) + dMomentum )
-                        ELSE
-                            dVelocity = - ( ( adveE(k,j,i) * advrE(k,j,i) - adveW(k,j,i) * advrW(k,j,i) ) * rdx(i) )
-                            velocity(k,j,i) = velocity(k,j,i) + dVelocity
-                        END IF
+            DO i = 4-nfu, ii-4+nbu
+                DO j = 4, jj-3
+                    DO k = 4, kk-4
+                        mom(k,j,i,q) = mom(k,j,i,q) - dt * ( adveE(k,j,i) * densityFieldFluxStag(k,j,i,q) - adveW(k,j,i) * densityFieldFluxStag(k,j,i-1,q) - velocity(k,j,i) * densityCompressionTermStag(k,j,i,q) )
                     END DO
                 END DO
             END DO
         ELSE IF ( splitDir == 2 ) THEN
-            DO i = 3, ii-2
-                DO j = 3-nrv, jj-3+nlv
-                    DO k = 3, kk-2
-                        IF ( isNearInterfaceStag(k,j,i,component) ) THEN
-                            dMomentum = - ( adveN(k,j,i) * densityFieldFluxStag(k,j,i,component) - adveS(k,j,i) * densityFieldFluxStag(k,j-1,i,component) ) + velocity(k,j,i) * densityCompressionTermStag(k,j,i,component)
-                            velocity(k,j,i) = 1.0_realk / densityFieldStag(k,j,i,component) * ( densityFieldStagOld(k,j,i,component) * velocity(k,j,i) + dMomentum )
-                        ELSE
-                            dVelocity = - ( ( adveN(k,j,i) * advrN(k,j,i) - adveS(k,j,i) * advrS(k,j,i) ) * rdy(j) )
-                            velocity(k,j,i) = velocity(k,j,i) + dVelocity
-                        END IF
+            DO i = 4, ii-3
+                DO j = 4-nrv, jj-4+nlv
+                    DO k = 4, kk-3
+                        mom(k,j,i,q) = mom(k,j,i,q) - dt * ( adveN(k,j,i) * densityFieldFluxStag(k,j,i,q) - adveS(k,j,i) * densityFieldFluxStag(k,j-1,i,q) - velocity(k,j,i) * densityCompressionTermStag(k,j,i,q) )
                     END DO
                 END DO
             END DO
         ELSE IF ( splitDir == 3 ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3-nbw, kk-3+ntw
-                        IF ( isNearInterfaceStag(k,j,i,component) ) THEN
-                            dMomentum = - ( adveT(k,j,i) * densityFieldFluxStag(k,j,i,component) - adveB(k,j,i) * densityFieldFluxStag(k-1,j,i,component) ) + velocity(k,j,i) * densityCompressionTermStag(k,j,i,component)
-                            velocity(k,j,i) = 1.0_realk / densityFieldStag(k,j,i,component) * ( densityFieldStagOld(k,j,i,component) * velocity(k,j,i) + dMomentum )
-                        ELSE
-                            dVelocity = - ( ( adveT(k,j,i) * advrT(k,j,i) - adveB(k,j,i) * advrB(k,j,i) ) * rdz(k) )
-                            velocity(k,j,i) = velocity(k,j,i) + dVelocity
-                        END IF
+            DO i = 4, ii-3
+                DO j = 4, jj-3
+                    DO k = 4-nbw, kk-4+ntw
+                        mom(k,j,i,q) = mom(k,j,i,q) - dt * ( adveT(k,j,i) * densityFieldFluxStag(k,j,i,q) - adveB(k,j,i) * densityFieldFluxStag(k-1,j,i,q) - velocity(k,j,i) * densityCompressionTermStag(k,j,i,q) )
                     END DO
                 END DO
             END DO
         END IF
 
-        IF ( component == 1 ) THEN
-            uNew = velocity
-        ELSE IF ( component == 2 ) THEN
-            vNew = velocity
-        ELSE IF ( component == 3 ) THEN
-            wNew = velocity
-        END IF
+    END SUBROUTINE multiphase_momentum_advection
 
-    END SUBROUTINE multiphase_advect_momentum
+    !================================================================
+
+    ! SUBROUTINE multiphase_momentum_diffusion(kk, jj, ii, uo, vo, wo, u, v, w, g, &
+    !         dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
+    !         nfro, nbac, nrgt, nlft, nbot, ntop, densityFieldiStag, densityFieldjStag, densityFieldkStag)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !    
+    ! !----------------------------------------------------------------
+    
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
+    !     REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), &
+    !         wo(kk, jj, ii)
+    !     REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+    !     REAL(realk), INTENT(in) :: g(kk, jj, ii)
+    !     REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+    !     REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+    !     REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
+    !     REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
+    !     INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+    !     REAL(realk), INTENT(in) :: densityFieldiStag(kk, jj, ii), densityFieldjStag(kk, jj, ii), densityFieldkStag(kk, jj, ii)
+
+    !     ! Local variables
+    !     INTEGER(intk) :: k, j, i
+    !     INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
+    !     REAL(realk) :: ge, gw, gn, gs, gt, gb
+    !     REAL(realk) :: tauxxe, tauxxw, tauyxn, tauyxs, tauzxt, tauzxb
+    !     REAL(realk) :: tauxye, tauxyw, tauyyn, tauyys, tauzyt, tauzyb
+    !     REAL(realk) :: tauxze, tauxzw, tauyzn, tauyzs, tauzzt, tauzzb
+    !     REAL(realk) :: duo, dvo, dwo
+
+    !     nfu = 0
+    !     nbu = 0
+    !     nrv = 0
+    !     nlv = 0
+    !     nbw = 0
+    !     ntw = 0
+
+    !     ! CON = 7
+    !     IF (nbac == 7) nbu = 1
+    !     IF (nlft == 7) nlv = 1
+    !     IF (ntop == 7) ntw = 1
+
+    !     ! OP1 = 3
+    !     IF (nfro == 3) nfu = 1
+    !     IF (nbac == 3) nbu = 1
+    !     IF (nrgt == 3) nrv = 1
+    !     IF (nlft == 3) nlv = 1
+    !     IF (nbot == 3) nbw = 1
+    !     IF (ntop == 3) ntw = 1
+
+    !     ! CALL swcle3d(kk, jj, ii, uo, vo, wo, u, v, w, &
+    !     !     ddx, ddy, ddz, nfro, nbac, nrgt, nlft, nbot, ntop)
+
+    !     DO i = 3-nfu, ii-3+nbu
+    !         DO j = 3, jj-2
+    !             DO k = 3, kk-2
+    !                 ! Face values of dynamic viscosity on u-momentum cell
+    !                 ! Harmonic mean for a more physical treatment at interfaces
+    !                 ge = g(k, j, i+1)
+    !                 gw = g(k, j, i)
+    !                 gn = g(k, j, i)*g(k, j+1, i) &
+    !                     / MAX(g(k, j, i) + g(k, j+1, i), MIN(gmol1,gmol2)) &
+    !                     + g(k, j, i+1)*g(k, j+1, i+1) &
+    !                     / MAX(g(k, j, i+1) + g(k, j+1, i+1), MIN(gmol1,gmol2))
+    !                 gs = g(k, j-1, i)*g(k, j, i) &
+    !                     / MAX(g(k, j-1, i) + g(k, j, i), MIN(gmol1,gmol2)) &
+    !                     + g(k, j-1, i+1)*g(k, j, i+1) &
+    !                     / MAX(g(k, j-1, i+1) + g(k, j, i+1), MIN(gmol1,gmol2))
+    !                 gt = g(k, j, i)*g(k+1, j, i) &
+    !                     / MAX(g(k, j, i) + g(k+1, j, i), MIN(gmol1,gmol2)) &
+    !                     + g(k, j, i+1)*g(k+1, j, i+1) &
+    !                     /MAX(g(k, j, i+1) + g(k+1, j, i+1), MIN(gmol1,gmol2))
+    !                 gb = g(k-1, j, i)*g(k, j, i) &
+    !                     / MAX(g(k-1, j, i) + g(k, j, i), MIN(gmol1,gmol2)) &
+    !                     + g(k-1, j, i+1)*g(k, j, i+1) &
+    !                     / MAX(g(k-1, j, i+1) + g(k, j, i+1), MIN(gmol1,gmol2))
+
+    !                 ! Normal stresses
+    !                 !             ---------------inner derivatives---------------
+    !                 tauxxe = ge * 2.0_realk * (u(k,j,i+1) - u(k,j,i)) * rddx(i+1)
+    !                 tauxxw = gw * 2.0_realk * (u(k,j,i) - u(k,j,i-1)) * rddx(i)
+
+    !                 ! Shear stresses
+    !                 !             ------------------------------inner derivatives------------------------------
+    !                 tauyxn = gn * ( (u(k,j+1,i) - u(k,j,i)) * rdy(j)   + (v(k,j,i+1) - v(k,j,i))     * rdx(i) )
+    !                 tauyxs = gs * ( (u(k,j,i) - u(k,j-1,i)) * rdy(j-1) + (v(k,j-1,i+1) - v(k,j-1,i)) * rdx(i) )
+    !                 tauzxt = gt * ( (u(k+1,j,i) - u(k,j,i)) * rdz(k)   + (w(k,j,i+1) - w(k,j,i))     * rdx(i) )
+    !                 tauzxb = gb * ( (u(k,j,i) - u(k-1,j,i)) * rdz(k-1) + (w(k-1,j,i+1) - w(k-1,j,i)) * rdx(i) )
+
+    !                 ! Change due to diffusion
+    !                 !                                  ---------------------------------------outer derivatives----------------------------------------
+    !                 duo = 1/densityFieldiStag(k,j,i) * ( ( tauxxe - tauxxw ) * rdx(i) + ( tauyxn - tauyxs ) * rddy(j) + ( tauzxt - tauzxb ) * rddz(k) )
+
+    !                 ! Addition
+    !                 uo(k, j, i) = uo(k, j, i) + duo
+    !             END DO
+    !         END DO
+    !     END DO
+
+    !     DO i = 3, ii-2
+    !         DO j = 3-nrv, jj-3+nlv
+    !             DO k = 3, kk-2
+    !                 ! Face values of dynamic viscosity on v-momentum cell
+    !                 ! Harmonic mean for a more physical treatment at interfaces
+    !                 ge = g(k, j, i)*g(k, j, i+1) &
+    !                     / MAX(g(k, j, i) + g(k, j, i+1), MIN(gmol1,gmol2)) &
+    !                     + g(k, j+1, i)*g(k, j+1, i+1) &
+    !                     / MAX(g(k, j+1, i) + g(k, j+1, i+1), MIN(gmol1,gmol2))
+    !                 gw = g(k, j, i-1)*g(k, j, i) &
+    !                     / MAX(g(k, j, i-1) + g(k, j, i), MIN(gmol1,gmol2)) &
+    !                     + g(k, j+1, i-1)*g(k, j+1, i) &
+    !                     / MAX(g(k, j+1, i-1) + g(k, j+1, i), MIN(gmol1,gmol2))
+    !                 gn = g(k, j+1, i)
+    !                 gs = g(k, j, i)
+    !                 gt = g(k, j, i)*g(k+1, j, i) &
+    !                     / MAX(g(k, j, i) + g(k+1, j, i), MIN(gmol1,gmol2)) &
+    !                     + g(k, j+1, i)*g(k+1, j+1, i) &
+    !                     / MAX(g(k, j+1, i) + g(k+1, j+1, i), MIN(gmol1,gmol2))
+    !                 gb = g(k-1, j, i)*g(k, j, i) &
+    !                     / MAX(g(k-1, j, i) + g(k, j, i), MIN(gmol1,gmol2)) &
+    !                     + g(k-1, j+1, i)*g(k, j+1, i) &
+    !                     / MAX(g(k-1, j+1, i) + g(k, j+1, i), MIN(gmol1,gmol2))
+
+    !                 ! Shear stresses
+    !                 !             ------------------------------inner derivatives------------------------------
+    !                 tauxye = ge * ( (u(k,j+1,i) - u(k,j,i))     * rdy(j) + (v(k,j,i+1) - v(k,j,i)) * rdx(i)   )
+    !                 tauxyw = gw * ( (u(k,j+1,i-1) - u(k,j,i-1)) * rdy(j) + (v(k,j,i) - v(k,j,i-1)) * rdx(i-1) )
+
+    !                 ! Normal stresses
+    !                 !             ---------------inner derivatives---------------
+    !                 tauyyn = gn * 2.0_realk * (v(k,j+1,i) - v(k,j,i)) * rddy(j+1)
+    !                 tauyys = gs * 2.0_realk * (v(k,j,i) - v(k,j-1,i)) * rddy(j)
+                    
+    !                 ! Shear stresses
+    !                 !             ------------------------------inner derivatives------------------------------
+    !                 tauzyt = gt * ( (v(k+1,j,i) - v(k,j,i)) * rdz(k)   + (w(k,j+1,i) - w(k,j,i))     * rdy(j) )
+    !                 tauzyb = gb * ( (v(k,j,i) - v(k-1,j,i)) * rdz(k-1) + (w(k-1,j+1,i) - w(k-1,j,i)) * rdy(j) )
+
+    !                 ! Change due to diffusion
+    !                 !                                  ---------------------------------------outer derivatives----------------------------------------
+    !                 dvo = 1/densityFieldjStag(k,j,i) * ( ( tauxye - tauxyw ) * rddx(i) + ( tauyyn - tauyys ) * rdy(j) + ( tauzyt - tauzyb ) * rddz(k) )
+
+    !                 ! Addition
+    !                 vo(k, j, i) = vo(k, j, i) + dvo
+    !             END DO
+    !         END DO
+    !     END DO
+
+    !     DO i = 3, ii-2
+    !         DO j = 3, jj-2
+    !             DO k = 3-nbw, kk-3+ntw
+    !                 ! Face values of dynamic viscosity on w-momentum cell
+    !                 ! Harmonic mean for a more physical treatment at interfaces
+    !                 ge = g(k, j, i)*g(k, j, i+1) &
+    !                     / MAX(g(k, j, i) + g(k, j, i+1), MIN(gmol1,gmol2)) &
+    !                     + g(k+1, j, i)*g(k+1, j, i+1) &
+    !                     / MAX(g(k+1, j, i) + g(k+1, j, i+1), MIN(gmol1,gmol2))
+    !                 gw = g(k, j, i-1)*g(k, j, i) &
+    !                     / MAX(g(k, j, i-1) + g(k, j, i), MIN(gmol1,gmol2)) &
+    !                     + g(k+1, j, i-1)*g(k+1, j, i) &
+    !                     / MAX(g(k+1, j, i-1) + g(k+1, j, i), MIN(gmol1,gmol2))
+    !                 gn = g(k, j, i)*g(k, j+1, i) &
+    !                     / MAX(g(k, j, i) + g(k, j+1, i), MIN(gmol1,gmol2)) &
+    !                     + g(k+1, j, i)*g(k+1, j+1, i) &
+    !                     / MAX(g(k+1, j, i) + g(k+1, j+1, i), MIN(gmol1,gmol2))
+    !                 gs = g(k, j-1, i)*g(k, j, i) &
+    !                     / MAX(g(k, j-1, i) + g(k, j, i), MIN(gmol1,gmol2)) &
+    !                     + g(k+1, j-1, i)*g(k+1, j, i) &
+    !                     / MAX(g(k+1, j-1, i) + g(k+1, j, i), MIN(gmol1,gmol2))
+    !                 gt = g(k+1, j, i)
+    !                 gb = g(k, j, i)
+
+    !                 ! Shear stresses
+    !                 !             ------------------------------inner derivatives------------------------------
+    !                 tauxze = ge * ( (u(k+1,j,i) - u(k,j,i))     * rdz(k) + (w(k,j,i+1) - w(k,j,i)) * rdx(i)   )
+    !                 tauxzw = gw * ( (u(k+1,j,i-1) - u(k,j,i-1)) * rdz(k) + (w(k,j,i) - w(k,j,i-1)) * rdx(i-1) )
+    !                 tauyzn = gn * ( (v(k+1,j,i) - v(k,j,i))     * rdz(k) + (w(k,j+1,i) - w(k,j,i)) * rdy(j)   )
+    !                 tauyzs = gs * ( (v(k+1,j-1,i) - v(k,j-1,i)) * rdz(k) + (w(k,j,i) - w(k,j-1,i)) * rdy(j-1) )
+                    
+    !                 ! Normal stresses
+    !                 !             ---------------inner derivatives---------------
+    !                 tauzzt = gt * 2.0_realk * (w(k+1,j,i) - w(k,j,i)) * rddz(k+1)
+    !                 tauzzb = gb * 2.0_realk * (w(k,j,i) - w(k-1,j,i)) * rddz(k)
+
+    !                 ! Change due to diffusion
+    !                 !                                  ---------------------------------------outer derivatives----------------------------------------
+    !                 dwo = 1/densityFieldkStag(k,j,i) * ( ( tauxze - tauxzw ) * rddx(i) + ( tauyzn - tauyzs ) * rddy(j) + ( tauzzt - tauzzb ) * rdz(k) )
+
+    !                 ! Addition
+    !                 wo(k, j, i) = wo(k, j, i) + dwo
+    !             END DO
+    !         END DO
+    !     END DO 
+
+    ! END SUBROUTINE multiphase_momentum_diffusion
 
     !================================================================
 
@@ -1301,8 +1601,8 @@ CONTAINS
     !   What it does:
     !   QUICK interpolation to compute the advected veloctiy
     !   (advectee) on staggered grid cells.
-    !   adve = advected component (advectee)
-    !   advr = advecting component (advector)
+    !   adve = advected q (advectee)
+    !   advr = advecting q (advector)
     !   An indicator function is used to avoid if-statements within
     !   loops.
     !   
@@ -1370,7 +1670,7 @@ CONTAINS
     !   What it does:
     !   Central difference to compute the advecting velocity
     !   (advector) on staggered grid cells.
-    !   advr = advecting component (advector)
+    !   advr = advecting q (advector)
     !   
     !   Source: 
     !   T. Arrufat et al., “A mass-momentum consistent, 

@@ -128,7 +128,7 @@ CONTAINS
         DO i = 1, ii
             DO j = 1, jj
                 DO k = 1, kk
-                    propertyField(k,j,i,component) = propertyFluid1 * vff(k,j,i,component) + propertyFluid2 * ( 1.0_realk - vff(k,j,i,component) )
+                    propertyField(k,j,i,component) = propertyFluid1 * vff(k,j,i,component) + propertyFluid2 * max( 1.0_realk - vff(k,j,i,component), 0.0_realk )
                 END DO
             END DO
         END DO
