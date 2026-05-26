@@ -21,36 +21,27 @@ MODULE multiphase_vof_transport_mod
     USE multiphase_plic_mod, ONLY: track_interface, compute_normal_vector, compute_alpha, compute_cell_proportion, compute_iStag_vff, compute_jStag_vff, compute_kStag_vff, interface_reconstruction_wrapper, staggered_fractions_wrapper
     USE rungekutta_mod, ONLY: rk_2n_t
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
-    USE multiphase_material_mod, ONLY: compute_material_property_field
+    USE multiphase_material_mod, ONLY: comp_material_property_field
+    USE multiphasecore_mod, ONLY: mom_multiphase
     
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: init_multiphase_vof_transport, finish_multiphase_vof_transport, compute_flux, compute_density_flux, get_advection_sequence, compression_term_wrapper, update_field, clip_volume_fraction_field, multiphase_solve
+    PUBLIC :: init_multiphase_vof_transport, finish_multiphase_vof_transport, multiphase_solve
 
-    INTERFACE compute_normal_strain_rate
-        MODULE PROCEDURE comp_normal_strain_rate_pres
-        MODULE PROCEDURE comp_normal_strain_rate_stag
-    END INTERFACE
+    ! INTERFACE compute_normal_strain_rate
+    !     MODULE PROCEDURE comp_normal_strain_rate_pres
+    !     MODULE PROCEDURE comp_normal_strain_rate_stag
+    ! END INTERFACE
 
-    INTERFACE compression_term_wrapper
-        MODULE PROCEDURE compression_term_wrapper_pres
-        MODULE PROCEDURE compression_term_wrapper_stag
-    END INTERFACE
+    ! INTERFACE update_field
+    !     MODULE PROCEDURE update_field_pres
+    !     MODULE PROCEDURE update_field_stag
+    ! END INTERFACE
 
-    INTERFACE comp_nondir_compr_coeff
-        MODULE PROCEDURE comp_nondir_compr_coeff_pres
-        MODULE PROCEDURE comp_nondir_compr_coeff_stag
-    END INTERFACE
-
-    INTERFACE update_field
-        MODULE PROCEDURE update_field_pres
-        MODULE PROCEDURE update_field_stag
-    END INTERFACE
-
-    INTERFACE compute_flux
+    INTERFACE comp_flux
         MODULE PROCEDURE comp_flux_pres
-        MODULE PROCEDURE compute_flux_stag
+        MODULE PROCEDURE comp_flux_stag
     END INTERFACE
 
 CONTAINS
@@ -81,114 +72,114 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_normal_strain_rate_pres(kk, jj, ii, splitDir, &
-    u, v, w, ddx, ddy, ddz, strainRate)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   Computation of the normal strain rates dependend on the 
-    !   directional split. 
-    !----------------------------------------------------------------
+    ! SUBROUTINE comp_normal_strain_rate_pres(kk, jj, ii, splitDir, &
+    ! u, v, w, ddx, ddy, ddz, strainRate)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !   Computation of the normal strain rates dependend on the 
+    ! !   directional split. 
+    ! !----------------------------------------------------------------
 
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: splitDir
-        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(out) :: strainRate(kk, jj, ii)
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
+    !     INTEGER(intk), INTENT(in) :: splitDir
+    !     REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+    !     REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+    !     REAL(realk), INTENT(out) :: strainRate(kk, jj, ii)
 
-        ! Local variables
-        INTEGER(intk) :: k, j, i
+    !     ! Local variables
+    !     INTEGER(intk) :: k, j, i
 
-        IF ( splitDir == 1 ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        strainRate(k,j,i) = ( u(k,j,i) - u(k,j,i-1) ) / ddx(i)
-                    END DO
-                END DO
-            END DO
-        ELSE IF ( splitDir == 2 ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        strainRate(k,j,i) = ( v(k,j,i) - v(k,j-1,i) ) / ddy(j)
-                    END DO
-                END DO
-            END DO
-        ELSE IF ( splitDir == 3 ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        strainRate(k,j,i) = ( w(k,j,i) - w(k-1,j,i) ) / ddz(k)
-                    END DO
-                END DO
-            END DO
-        END IF
+    !     IF ( splitDir == 1 ) THEN
+    !         DO i = 3, ii-2
+    !             DO j = 3, jj-2
+    !                 DO k = 3, kk-2
+    !                     strainRate(k,j,i) = ( u(k,j,i) - u(k,j,i-1) ) / ddx(i)
+    !                 END DO
+    !             END DO
+    !         END DO
+    !     ELSE IF ( splitDir == 2 ) THEN
+    !         DO i = 3, ii-2
+    !             DO j = 3, jj-2
+    !                 DO k = 3, kk-2
+    !                     strainRate(k,j,i) = ( v(k,j,i) - v(k,j-1,i) ) / ddy(j)
+    !                 END DO
+    !             END DO
+    !         END DO
+    !     ELSE IF ( splitDir == 3 ) THEN
+    !         DO i = 3, ii-2
+    !             DO j = 3, jj-2
+    !                 DO k = 3, kk-2
+    !                     strainRate(k,j,i) = ( w(k,j,i) - w(k-1,j,i) ) / ddz(k)
+    !                 END DO
+    !             END DO
+    !         END DO
+    !     END IF
 
-    END SUBROUTINE comp_normal_strain_rate_pres
+    ! END SUBROUTINE comp_normal_strain_rate_pres
 
-    !================================================================
+    ! !================================================================
 
-    SUBROUTINE comp_normal_strain_rate_stag(kk, jj, ii, q, splitDir, &
-        u, v, w, dx, dy, dz, ddx, ddy, ddz, strainRate)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   Computation of the normal strain rates dependend on the 
-    !   directional split for the three staggered grids.
-    !----------------------------------------------------------------
+    ! SUBROUTINE comp_normal_strain_rate_stag(kk, jj, ii, q, splitDir, &
+    !     u, v, w, dx, dy, dz, ddx, ddy, ddz, strainRate)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !   Computation of the normal strain rates dependend on the 
+    ! !   directional split for the three staggered grids.
+    ! !----------------------------------------------------------------
 
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii, q, splitDir
-        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(out) :: strainRate(kk, jj, ii, 3)
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: kk, jj, ii, q, splitDir
+    !     REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+    !     REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+    !     REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+    !     REAL(realk), INTENT(out) :: strainRate(kk, jj, ii, 3)
 
-        ! Local variables
-        INTEGER(intk) :: k, j, i
-        REAL(realk) :: advrE(kk, jj, ii), advrW(kk, jj, ii)
-        REAL(realk) :: advrN(kk, jj, ii), advrS(kk, jj, ii)
-        REAL(realk) :: advrT(kk, jj, ii), advrB(kk, jj, ii)
-        REAL(realk) :: iStag, jStag, kStag
-        REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
+    !     ! Local variables
+    !     INTEGER(intk) :: k, j, i
+    !     REAL(realk) :: advrE(kk, jj, ii), advrW(kk, jj, ii)
+    !     REAL(realk) :: advrN(kk, jj, ii), advrS(kk, jj, ii)
+    !     REAL(realk) :: advrT(kk, jj, ii), advrB(kk, jj, ii)
+    !     REAL(realk) :: iStag, jStag, kStag
+    !     REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
 
-        CALL get_component_specifics(kk, jj, ii, q, dx=dx, dy=dy, dz=dz, &
-            ddx=ddx, ddy=ddy, ddz=ddz, iStag=iStag, jStag=jStag, kStag=kStag, &
-            deltaX=deltaX, deltaY=deltaY, deltaZ=deltaZ)
-        CALL comp_advr_centr(kk, jj, ii, u, v, w, iStag, jStag, kStag, &
-            advrE, advrW, advrN, advrS, advrT, advrB)
+    !     CALL get_component_specifics(kk, jj, ii, q, dx=dx, dy=dy, dz=dz, &
+    !         ddx=ddx, ddy=ddy, ddz=ddz, iStag=iStag, jStag=jStag, kStag=kStag, &
+    !         deltaX=deltaX, deltaY=deltaY, deltaZ=deltaZ)
+    !     CALL comp_advr_centr(kk, jj, ii, u, v, w, iStag, jStag, kStag, &
+    !         advrE, advrW, advrN, advrS, advrT, advrB)
 
-        IF ( splitDir == 1 ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        strainRate(k,j,i,q) = ( advrE(k,j,i) - advrW(k,j,i) ) / deltaX(i)
-                    END DO
-                END DO
-            END DO
-        ELSE IF ( splitDir == 2 ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        strainRate(k,j,i,q) = ( advrN(k,j,i) - advrS(k,j,i) ) / deltaY(j)
-                    END DO
-                END DO
-            END DO
-        ELSE IF ( splitDir == 3 ) THEN 
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        strainRate(k,j,i,q) = ( advrT(k,j,i) - advrB(k,j,i) ) / deltaZ(k)                 
-                    END DO
-                END DO
-            END DO
-        END IF
+    !     IF ( splitDir == 1 ) THEN
+    !         DO i = 3, ii-2
+    !             DO j = 3, jj-2
+    !                 DO k = 3, kk-2
+    !                     strainRate(k,j,i,q) = ( advrE(k,j,i) - advrW(k,j,i) ) / deltaX(i)
+    !                 END DO
+    !             END DO
+    !         END DO
+    !     ELSE IF ( splitDir == 2 ) THEN
+    !         DO i = 3, ii-2
+    !             DO j = 3, jj-2
+    !                 DO k = 3, kk-2
+    !                     strainRate(k,j,i,q) = ( advrN(k,j,i) - advrS(k,j,i) ) / deltaY(j)
+    !                 END DO
+    !             END DO
+    !         END DO
+    !     ELSE IF ( splitDir == 3 ) THEN 
+    !         DO i = 3, ii-2
+    !             DO j = 3, jj-2
+    !                 DO k = 3, kk-2
+    !                     strainRate(k,j,i,q) = ( advrT(k,j,i) - advrB(k,j,i) ) / deltaZ(k)                 
+    !                 END DO
+    !             END DO
+    !         END DO
+    !     END IF
 
-    END SUBROUTINE comp_normal_strain_rate_stag
+    ! END SUBROUTINE comp_normal_strain_rate_stag
     
     !================================================================
 
-    SUBROUTINE comp_nondir_compr_coeff_pres(kk, jj, ii, vff, nonDirComprCoeff)
+    SUBROUTINE comp_cWY(kk, jj, ii, vff, cWY)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the nondirectional compression coefficient c for 
@@ -210,74 +201,28 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(out) :: nonDirComprCoeff(kk, jj, ii)
+        REAL(realk), INTENT(out) :: cWY(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
 
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
+        DO i = 1, ii
+            DO j = 1, jj
+                DO k = 1, kk
                     IF ( vff(k,j,i) > 0.5_realk ) THEN
-                        nonDirComprCoeff(k,j,i) = 1.0_realk
+                        cWY(k,j,i) = 1.0_realk
                     ELSE
-                        nonDirComprCoeff(k,j,i) = 0.0_realk
+                        cWY(k,j,i) = 0.0_realk
                     END IF
                 END DO
             END DO
         END DO
 
-    END SUBROUTINE comp_nondir_compr_coeff_pres
+    END SUBROUTINE comp_cWY
 
     !================================================================
 
-    SUBROUTINE comp_nondir_compr_coeff_stag(kk, jj, ii, q, vff, nonDirComprCoeff)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   Computes the nondirectional compression coefficient c for 
-    !   Weymouth and Yue's advection scheme for the three staggered
-    !   grids.
-    !
-    !   Source:
-    !   T. Arrufat et al., “A mass-momentum consistent, 
-    !   Volume-of-Fluid method for incompressible flow on staggered 
-    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
-    !   doi: 10.1016/j.compfluid.2020.104785.
-    !   
-    !   G. D. Weymouth and D. K.-P. Yue, “Conservative 
-    !   Volume-of-Fluid method for free-surface simulations on 
-    !   Cartesian-grids,” Journal of Computational Physics, vol. 229,
-    !   no. 8, pp. 2853–2865, Apr. 2010, 
-    !   doi: 10.1016/j.jcp.2009.12.018.
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: q
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii, 3)
-        REAL(realk), INTENT(out) :: nonDirComprCoeff(kk, jj, ii, 3)
-
-        ! Local variables
-        INTEGER(intk) :: k, j, i
-
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
-                    IF ( vff(k,j,i,q) > 0.5_realk ) THEN
-                        nonDirComprCoeff(k,j,i,q) = 1.0_realk
-                    ELSE
-                        nonDirComprCoeff(k,j,i,q) = 0.0_realk
-                    END IF
-                END DO
-            END DO
-        END DO
-
-    END SUBROUTINE comp_nondir_compr_coeff_stag
-
-    !================================================================
-
-    SUBROUTINE comp_flux_pres(kk, jj, ii, splitDir, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, & 
-        nfro, nbac, nrgt, nlft, nbot, ntop, fieldFlux)
+    SUBROUTINE comp_flux_pres(kk, jj, ii, splitDir, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, fieldFlux)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the volume fraction fluxes depending on the current
@@ -297,36 +242,14 @@ CONTAINS
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol
-        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
         REAL(realk), INTENT(out) :: fieldFlux(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
-        INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
         REAL(realk) :: flux, fluxedProp, fluxWidth, fluxAlpha
 
-        nfu = 0
-        nbu = 0
-        nrv = 0
-        nlv = 0
-        nbw = 0
-        ntw = 0
-
-        ! CON = 7
-        IF (nbac == 7) nbu = 1
-        IF (nlft == 7) nlv = 1
-        IF (ntop == 7) ntw = 1
-
-        ! OP1 = 3
-        IF (nfro == 3) nfu = 1
-        IF (nbac == 3) nbu = 1
-        IF (nrgt == 3) nrv = 1
-        IF (nlft == 3) nlv = 1
-        IF (nbot == 3) nbw = 1
-        IF (ntop == 3) ntw = 1
-
         IF ( splitDir == 1 ) THEN 
-            DO i = 3-nfu, ii-3+nbu
+            DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3, kk-2
                         IF ( u(k,j,i) > tol ) THEN
@@ -423,7 +346,7 @@ CONTAINS
             END DO
         ELSE IF ( splitDir == 2 ) THEN 
             DO i = 3, ii-2
-                DO j = 3-nrv, jj-3+nlv
+                DO j = 3, jj-2
                     DO k = 3, kk-2
                         IF ( v(k,j,i) > tol ) THEN
                             IF ( isInterface(k,j,i) ) THEN
@@ -462,7 +385,7 @@ CONTAINS
         ELSE IF ( splitDir == 3 ) THEN
             DO i = 3, ii-2
                 DO j = 3, jj-2
-                    DO k = 3-nbw, kk-3+ntw
+                    DO k = 3, kk-2
                         IF ( w(k,j,i) > tol ) THEN
                             IF ( isInterface(k,j,i) ) THEN
                                 ! See explanation above.
@@ -503,8 +426,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE compute_flux_stag(kk, jj, ii, q, splitDir, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, & 
-        nfro, nbac, nrgt, nlft, nbot, ntop, fieldFlux, complementFieldFlux)
+    SUBROUTINE comp_flux_stag(kk, jj, ii, q, splitDir, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, fieldFlux)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the volume fraction fluxes depending on the current
@@ -514,48 +436,26 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: q
+        INTEGER(intk), INTENT(in) :: kk, jj, ii, q
         INTEGER(intk), INTENT(in) :: splitDir
-        REAL(realk), INTENT(in) :: field(kk, jj, ii, 3)
-        LOGICAL, INTENT(in) :: isInterface(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: field(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isInterface(kk, jj, ii)
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-        REAL(realk), INTENT(in) :: alpha(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
         REAL(realk), INTENT(in) :: dt
-        REAL(realk), INTENT(in) :: normx(kk, jj, ii, 3), normy(kk, jj, ii, 3), normz(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol
-        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
-        REAL(realk), INTENT(inout) :: fieldFlux(kk, jj, ii, 3), complementFieldFlux(kk, jj, ii, 3)
+        REAL(realk), INTENT(inout) :: fieldFlux(kk, jj, ii)
 
         ! Local variables
         REAL(realk) :: iStag, jStag, kStag
         REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
         INTEGER(intk) :: k, j, i
-        INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
         REAL(realk) :: flux, complementFlux, fluxedProp, fluxWidth, fluxAlpha
         REAL(realk) :: advrE(kk, jj, ii), advrW(kk, jj, ii), advrN(kk, jj, ii), advrS(kk, jj, ii), advrT(kk, jj, ii), advrB(kk, jj, ii)
-
-        nfu = 0
-        nbu = 0
-        nrv = 0
-        nlv = 0
-        nbw = 0
-        ntw = 0
-
-        ! CON = 7
-        IF (nbac == 7) nbu = 1
-        IF (nlft == 7) nlv = 1
-        IF (ntop == 7) ntw = 1
-
-        ! OP1 = 3
-        IF (nfro == 3) nfu = 1
-        IF (nbac == 3) nbu = 1
-        IF (nrgt == 3) nrv = 1
-        IF (nlft == 3) nlv = 1
-        IF (nbot == 3) nbw = 1
-        IF (ntop == 3) ntw = 1
+        REAL(realk) :: complementFieldFlux(kk, jj, ii)
 
         CALL get_component_specifics(kk, jj, ii, q, dx=dx, dy=dy, dz=dz, &
             ddx=ddx, ddy=ddy, ddz=ddz, iStag=iStag, jStag=jStag, kStag=kStag, &
@@ -564,458 +464,387 @@ CONTAINS
             advrE, advrW, advrN, advrS, advrT, advrB)
 
         IF ( splitDir == 1 ) THEN
-            DO i = 3-nfu, ii-3+nbu
+            DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3, kk-2
                         IF ( advrE(k,j,i) > tol ) THEN
-                            IF ( isInterface(k,j,i,q) ) THEN
+                            IF ( isInterface(k,j,i) ) THEN
                                 ! See explanation above.
                                 fluxWidth = abs( advrE(k,j,i) ) * dt
-                                fluxAlpha = alpha(k,j,i,q) - normx(k,j,i,q) * ( deltaX(i) - fluxWidth )
+                                fluxAlpha = alpha(k,j,i) - normx(k,j,i) * ( deltaX(i)/2.0_realk - fluxWidth )
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i,q), fluxWidth, ddy(j), ddz(k), normx(k,j,i,q), normy(k,j,i,q), normz(k,j,i,q), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i), fluxWidth, ddy(j), ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
                                 
                                 flux = fluxedProp  * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
                                 complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
                             ELSE
                                 ! See explanation above.
-                                flux = field(k,j,i,q) * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
-                                complementFlux = max( 1.0_realk - field(k,j,i,q), 0.0_realk ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
+                                flux = field(k,j,i) * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
+                                complementFlux = max( 1.0_realk - field(k,j,i), 0.0_realk ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
                             END IF
                         ELSE IF ( advrE(k,j,i) < -tol ) THEN
-                            IF ( isInterface(k,j,i+1,q) ) THEN
+                            IF ( isInterface(k,j,i+1) ) THEN
                                 ! See explanation above.
                                 fluxWidth = abs( advrE(k,j,i) ) * dt
-                                fluxAlpha = alpha(k,j,i+1,q)
+                                fluxAlpha = alpha(k,j,i+1) - normx(k,j,i+1) * deltaX(i+1)/2.0_realk
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i+1,q), fluxWidth, ddy(j), ddz(k), normx(k,j,i+1,q), normy(k,j,i+1,q), normz(k,j,i+1,q), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i+1), fluxWidth, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
 
                                 flux = fluxedProp * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
                                 complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
                             ELSE
                                 ! See explanation above.
-                                flux = field(k,j,i+1,q) * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
-                                complementFlux = max( 1.0_realk - field(k,j,i+1,q), 0.0_realk ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
+                                flux = field(k,j,i+1) * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
+                                complementFlux = max( 1.0_realk - field(k,j,i+1), 0.0_realk ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
                             END IF
                         ELSE
                             ! See explanation above.
                             flux = 0.0_realk
                             complementFlux = 0.0_realk
                         END IF
-                        fieldFlux(k,j,i,q) = sign( 1.0_realk, advrE(k,j,i) ) * flux / dt
-                        complementFieldFlux(k,j,i,q) = sign( 1.0_realk, advrE(k,j,i) ) * complementFlux / dt
+                        fieldFlux(k,j,i) = sign( 1.0_realk, advrE(k,j,i) ) * flux / dt
+                        complementFieldFlux(k,j,i) = sign( 1.0_realk, advrE(k,j,i) ) * complementFlux / dt
                     END DO
                 END DO
             END DO
         ELSE IF ( splitDir == 2 ) THEN
             DO i = 3, ii-2
-                DO j = 3-nrv, jj-3+nlv
+                DO j = 3, jj-2
                     DO k = 3, kk-2
                         IF ( advrN(k,j,i) > tol ) THEN
-                            IF ( isInterface(k,j,i,q) ) THEN
+                            IF ( isInterface(k,j,i) ) THEN
                                 ! See explanation above.
                                 fluxWidth = abs( advrN(k,j,i) ) * dt
-                                fluxAlpha = alpha(k,j,i,q) - normy(k,j,i,q) * ( deltaY(j) - fluxWidth )
+                                fluxAlpha = alpha(k,j,i) - normy(k,j,i) * ( deltaY(j)/2.0_realk - fluxWidth )
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i,q), ddx(i), fluxWidth, ddz(k), normx(k,j,i,q), normy(k,j,i,q), normz(k,j,i,q), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i), ddx(i), fluxWidth, ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
 
                                 flux = fluxedProp * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
                                 complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
                             ELSE
                                 ! See explanation above.
-                                flux = field(k,j,i,q) * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
-                                complementFlux = max( 1.0_realk - field(k,j,i,q), 0.0_realk ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
+                                flux = field(k,j,i) * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
+                                complementFlux = max( 1.0_realk - field(k,j,i), 0.0_realk ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
                             END IF
                         ELSE IF ( advrN(k,j,i) < -tol ) THEN
-                            IF ( isInterface(k,j+1,i,q) ) THEN
+                            IF ( isInterface(k,j+1,i) ) THEN
                                 ! See explanation above.
                                 fluxWidth = abs( advrN(k,j,i) ) * dt
-                                fluxAlpha = alpha(k,j+1,i,q)
+                                fluxAlpha = alpha(k,j+1,i) - normy(k,j+1,i) * deltaY(j+1)/2.0_realk
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j+1,i,q), ddx(i), fluxWidth, ddz(k), normx(k,j+1,i,q), normy(k,j+1,i,q), normz(k,j+1,i,q), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j+1,i), ddx(i), fluxWidth, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
 
                                 flux = fluxedProp * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
                                 complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
                             ELSE
                                 ! See explanation above.
-                                flux = field(k,j+1,i,q) * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
-                                complementFlux = max( 1.0_realk - field(k,j+1,i,q), 0.0_realk ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
+                                flux = field(k,j+1,i) * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
+                                complementFlux = max( 1.0_realk - field(k,j+1,i), 0.0_realk ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
                             END IF
                         ELSE
                             ! See explanation above.
                             flux = 0.0_realk
                             complementFlux = 0.0_realk
                         END IF
-                        fieldFlux(k,j,i,q) = sign( 1.0_realk, advrN(k,j,i) ) * flux / dt
-                        complementFieldFlux(k,j,i,q) = sign( 1.0_realk, advrN(k,j,i) ) * complementFlux / dt
+                        fieldFlux(k,j,i) = sign( 1.0_realk, advrN(k,j,i) ) * flux / dt
+                        complementFieldFlux(k,j,i) = sign( 1.0_realk, advrN(k,j,i) ) * complementFlux / dt
                     END DO
                 END DO
             END DO
         ELSE IF ( splitDir == 3 ) THEN
             DO i = 3, ii-2
                 DO j = 3, jj-2
-                    DO k = 3-nbw, kk-3+ntw
+                    DO k = 3, kk-2
                         IF ( advrT(k,j,i) > tol ) THEN
-                            IF ( isInterface(k,j,i,q) ) THEN
+                            IF ( isInterface(k,j,i) ) THEN
                                 ! See explanation above.
                                 fluxWidth = abs( advrT(k,j,i) ) * dt
-                                fluxAlpha = alpha(k,j,i,q) - normz(k,j,i,q) * ( deltaZ(k) - fluxWidth )
+                                fluxAlpha = alpha(k,j,i) - normz(k,j,i) * ( deltaZ(k)/2.0_realk - fluxWidth )
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i,q), ddx(i), ddy(j), fluxWidth, normx(k,j,i,q), normy(k,j,i,q), normz(k,j,i,q), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i), ddx(i), ddy(j), fluxWidth, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
 
                                 flux = fluxedProp * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
                                 complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
                             ELSE
                                 ! See explanation above.
-                                flux = field(k,j,i,q) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
-                                complementFlux = max( 1.0_realk - field(k,j,i,q), 0.0_realk ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
+                                flux = field(k,j,i) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
+                                complementFlux = max( 1.0_realk - field(k,j,i), 0.0_realk ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
                             END IF
                         ELSE IF ( advrT(k,j,i) < -tol ) THEN
-                            IF ( isInterface(k+1,j,i,q) ) THEN
+                            IF ( isInterface(k+1,j,i) ) THEN
                                 ! See explanation above.
                                 fluxWidth = abs( advrT(k,j,i) ) * dt
-                                fluxAlpha = alpha(k+1,j,i,q)
+                                fluxAlpha = alpha(k+1,j,i) - normz(k+1,j,i) * deltaZ(k+1)/2.0_realk
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k+1,j,i,q), ddx(i), ddy(j), fluxWidth, normx(k+1,j,i,q), normy(k+1,j,i,q), normz(k+1,j,i,q), tol)
+                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k+1,j,i), ddx(i), ddy(j), fluxWidth, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
 
                                 flux = fluxedProp * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
                                 complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
                             ELSE
                                 ! See explanation above.
-                                flux = field(k+1,j,i,q) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
-                                complementFlux = max( 1.0_realk - field(k+1,j,i,q), 0.0_realk ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
+                                flux = field(k+1,j,i) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
+                                complementFlux = max( 1.0_realk - field(k+1,j,i), 0.0_realk ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
                             END IF
                         ELSE
                             ! See explanation above.
                             flux = 0.0_realk
                             complementFLux = 0.0_realk
                         END IF
-                        fieldFlux(k,j,i,q) = sign( 1.0_realk, advrT(k,j,i) ) * flux / dt
-                        complementFieldFlux(k,j,i,q) = sign( 1.0_realk, advrT(k,j,i) ) * complementFlux / dt
+                        fieldFlux(k,j,i) = sign( 1.0_realk, advrT(k,j,i) ) * flux / dt
+                        complementFieldFlux(k,j,i) = sign( 1.0_realk, advrT(k,j,i) ) * complementFlux / dt
                     END DO
                 END DO
             END DO
         END IF
 
-    END SUBROUTINE compute_flux_stag
+    END SUBROUTINE comp_flux_stag
 
     !================================================================
 
-    SUBROUTINE update_field_pres(kk, jj, ii, splitDir, flux, comprTerm, & 
-            dt, nfro, nbac, nrgt, nlft, nbot, ntop, fld)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   Update the input field with corresponding fluxes and 
-    !   compression term.
-    !----------------------------------------------------------------
+    ! SUBROUTINE update_field_pres(kk, jj, ii, splitDir, flux, comprTerm, & 
+    !         dt, nfro, nbac, nrgt, nlft, nbot, ntop, fld)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !   Update the input field with corresponding fluxes and 
+    ! !   compression term.
+    ! !----------------------------------------------------------------
 
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: splitDir
-        REAL(realk), INTENT(in) :: flux(kk, jj, ii)
-        REAL(realk), INTENT(in) :: comprTerm(kk, jj, ii)
-        REAL(realk), INTENT(in) :: dt
-        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
-        REAL(realk), INTENT(inout) :: fld(kk, jj, ii)
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
+    !     INTEGER(intk), INTENT(in) :: splitDir
+    !     REAL(realk), INTENT(in) :: flux(kk, jj, ii)
+    !     REAL(realk), INTENT(in) :: comprTerm(kk, jj, ii)
+    !     REAL(realk), INTENT(in) :: dt
+    !     INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+    !     REAL(realk), INTENT(inout) :: fld(kk, jj, ii)
 
-        ! Local variables
-        INTEGER(intk) :: k, j, i
-        INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
+    !     ! Local variables
+    !     INTEGER(intk) :: k, j, i
+    !     INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
 
-        nfu = 0
-        nbu = 0
-        nrv = 0
-        nlv = 0
-        nbw = 0
-        ntw = 0
+    !     nfu = 0
+    !     nbu = 0
+    !     nrv = 0
+    !     nlv = 0
+    !     nbw = 0
+    !     ntw = 0
 
-        ! CON = 7
-        IF (nbac == 7) nbu = 1
-        IF (nlft == 7) nlv = 1
-        IF (ntop == 7) ntw = 1
+    !     ! CON = 7
+    !     IF (nbac == 7) nbu = 1
+    !     IF (nlft == 7) nlv = 1
+    !     IF (ntop == 7) ntw = 1
 
-        ! OP1 = 3
-        IF (nfro == 3) nfu = 1
-        IF (nbac == 3) nbu = 1
-        IF (nrgt == 3) nrv = 1
-        IF (nlft == 3) nlv = 1
-        IF (nbot == 3) nbw = 1
-        IF (ntop == 3) ntw = 1
+    !     ! OP1 = 3
+    !     IF (nfro == 3) nfu = 1
+    !     IF (nbac == 3) nbu = 1
+    !     IF (nrgt == 3) nrv = 1
+    !     IF (nlft == 3) nlv = 1
+    !     IF (nbot == 3) nbw = 1
+    !     IF (ntop == 3) ntw = 1
         
-        IF ( splitDir == 1 ) THEN 
-            DO i = 3-nfu, ii-3+nbu
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        fld(k,j,i) = fld(k,j,i) + dt * ( flux(k,j,i-1) - flux(k,j,i) + comprTerm(k,j,i) )
-                    END DO 
-                END DO 
-            END DO
-        ELSEIF ( splitDir == 2 ) THEN
-            DO i = 3, ii-2
-                DO j = 3-nrv, jj-3+nlv
-                    DO k = 3, kk-2
-                        fld(k,j,i) = fld(k,j,i) + dt * ( flux(k,j-1,i) - flux(k,j,i) + comprTerm(k,j,i) )
-                    END DO 
-                END DO 
-            END DO
-        ELSEIF ( splitDir == 3 ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3-nbw, kk-3+ntw
-                        fld(k,j,i) = fld(k,j,i) + dt * ( flux(k-1,j,i) - flux(k,j,i) + comprTerm(k,j,i) )
-                    END DO 
-                END DO 
-            END DO
-        END IF
+    !     IF ( splitDir == 1 ) THEN 
+    !         DO i = 3-nfu, ii-3+nbu
+    !             DO j = 3, jj-2
+    !                 DO k = 3, kk-2
+    !                     fld(k,j,i) = fld(k,j,i) + dt * ( flux(k,j,i-1) - flux(k,j,i) + comprTerm(k,j,i) )
+    !                 END DO 
+    !             END DO 
+    !         END DO
+    !     ELSEIF ( splitDir == 2 ) THEN
+    !         DO i = 3, ii-2
+    !             DO j = 3-nrv, jj-3+nlv
+    !                 DO k = 3, kk-2
+    !                     fld(k,j,i) = fld(k,j,i) + dt * ( flux(k,j-1,i) - flux(k,j,i) + comprTerm(k,j,i) )
+    !                 END DO 
+    !             END DO 
+    !         END DO
+    !     ELSEIF ( splitDir == 3 ) THEN
+    !         DO i = 3, ii-2
+    !             DO j = 3, jj-2
+    !                 DO k = 3-nbw, kk-3+ntw
+    !                     fld(k,j,i) = fld(k,j,i) + dt * ( flux(k-1,j,i) - flux(k,j,i) + comprTerm(k,j,i) )
+    !                 END DO 
+    !             END DO 
+    !         END DO
+    !     END IF
 
-    END SUBROUTINE update_field_pres
+    ! END SUBROUTINE update_field_pres
 
-    !================================================================
+    ! !================================================================
 
-    SUBROUTINE update_field_stag(kk, jj, ii, q, splitDir, flux, comprTerm, & 
-            dt, nfro, nbac, nrgt, nlft, nbot, ntop, fld)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   Update the input field with corresponding fluxes and 
-    !   compression term for the three staggered girds.
-    !----------------------------------------------------------------
+    ! SUBROUTINE update_field_stag(kk, jj, ii, q, splitDir, flux, comprTerm, & 
+    !         dt, nfro, nbac, nrgt, nlft, nbot, ntop, fld)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !   Update the input field with corresponding fluxes and 
+    ! !   compression term for the three staggered girds.
+    ! !----------------------------------------------------------------
 
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: q
-        INTEGER(intk), INTENT(in) :: splitDir
-        REAL(realk), INTENT(in) :: flux(kk, jj, ii, 3)
-        REAL(realk), INTENT(in) :: comprTerm(kk, jj, ii, 3)
-        REAL(realk), INTENT(in) :: dt
-        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
-        REAL(realk), INTENT(inout) :: fld(kk, jj, ii, 3)
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
+    !     INTEGER(intk), INTENT(in) :: q
+    !     INTEGER(intk), INTENT(in) :: splitDir
+    !     REAL(realk), INTENT(in) :: flux(kk, jj, ii, 3)
+    !     REAL(realk), INTENT(in) :: comprTerm(kk, jj, ii, 3)
+    !     REAL(realk), INTENT(in) :: dt
+    !     INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+    !     REAL(realk), INTENT(inout) :: fld(kk, jj, ii, 3)
 
-        ! Local variables
-        INTEGER(intk) :: k, j, i
-        INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
+    !     ! Local variables
+    !     INTEGER(intk) :: k, j, i
+    !     INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
 
-        nfu = 0
-        nbu = 0
-        nrv = 0
-        nlv = 0
-        nbw = 0
-        ntw = 0
+    !     nfu = 0
+    !     nbu = 0
+    !     nrv = 0
+    !     nlv = 0
+    !     nbw = 0
+    !     ntw = 0
 
-        ! CON = 7
-        IF (nbac == 7) nbu = 1
-        IF (nlft == 7) nlv = 1
-        IF (ntop == 7) ntw = 1
+    !     ! CON = 7
+    !     IF (nbac == 7) nbu = 1
+    !     IF (nlft == 7) nlv = 1
+    !     IF (ntop == 7) ntw = 1
 
-        ! OP1 = 3
-        IF (nfro == 3) nfu = 1
-        IF (nbac == 3) nbu = 1
-        IF (nrgt == 3) nrv = 1
-        IF (nlft == 3) nlv = 1
-        IF (nbot == 3) nbw = 1
-        IF (ntop == 3) ntw = 1
+    !     ! OP1 = 3
+    !     IF (nfro == 3) nfu = 1
+    !     IF (nbac == 3) nbu = 1
+    !     IF (nrgt == 3) nrv = 1
+    !     IF (nlft == 3) nlv = 1
+    !     IF (nbot == 3) nbw = 1
+    !     IF (ntop == 3) ntw = 1
         
-        IF ( splitDir == 1 ) THEN 
-            DO i = 3-nfu, ii-3+nbu
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        fld(k,j,i,q) = fld(k,j,i,q) + dt * ( flux(k,j,i-1,q) - flux(k,j,i,q) + comprTerm(k,j,i,q) )
-                    END DO 
-                END DO 
-            END DO
-        ELSEIF ( splitDir == 2 ) THEN
-            DO i = 3, ii-2
-                DO j = 3-nrv, jj-3+nlv
-                    DO k = 3, kk-2
-                        fld(k,j,i,q) = fld(k,j,i,q) + dt * ( flux(k,j-1,i,q) - flux(k,j,i,q) + comprTerm(k,j,i,q) )
-                    END DO 
-                END DO 
-            END DO
-        ELSEIF ( splitDir == 3 ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3-nbw, kk-3+ntw
-                        fld(k,j,i,q) = fld(k,j,i,q) + dt * ( flux(k-1,j,i,q) - flux(k,j,i,q) + comprTerm(k,j,i,q) )
-                    END DO 
-                END DO 
-            END DO
-        END IF
+    !     IF ( splitDir == 1 ) THEN 
+    !         DO i = 3-nfu, ii-3+nbu
+    !             DO j = 3, jj-2
+    !                 DO k = 3, kk-2
+    !                     fld(k,j,i,q) = fld(k,j,i,q) + dt * ( flux(k,j,i-1,q) - flux(k,j,i,q) + comprTerm(k,j,i,q) )
+    !                 END DO 
+    !             END DO 
+    !         END DO
+    !     ELSEIF ( splitDir == 2 ) THEN
+    !         DO i = 3, ii-2
+    !             DO j = 3-nrv, jj-3+nlv
+    !                 DO k = 3, kk-2
+    !                     fld(k,j,i,q) = fld(k,j,i,q) + dt * ( flux(k,j-1,i,q) - flux(k,j,i,q) + comprTerm(k,j,i,q) )
+    !                 END DO 
+    !             END DO 
+    !         END DO
+    !     ELSEIF ( splitDir == 3 ) THEN
+    !         DO i = 3, ii-2
+    !             DO j = 3, jj-2
+    !                 DO k = 3-nbw, kk-3+ntw
+    !                     fld(k,j,i,q) = fld(k,j,i,q) + dt * ( flux(k-1,j,i,q) - flux(k,j,i,q) + comprTerm(k,j,i,q) )
+    !                 END DO 
+    !             END DO 
+    !         END DO
+    !     END IF
 
-    END SUBROUTINE update_field_stag
+    ! END SUBROUTINE update_field_stag
 
-    !================================================================
+    ! !================================================================
 
-    SUBROUTINE clip_volume_fraction_field(kk, ii, jj, vff, tol)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   This subroutine ensures that the volume fraction field vff 
-    !   stays within its bounds of [0,1].
-    !----------------------------------------------------------------
+    ! SUBROUTINE clip_volume_fraction_field(kk, ii, jj, vff, tol)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !   This subroutine ensures that the volume fraction field vff 
+    ! !   stays within its bounds of [0,1].
+    ! !----------------------------------------------------------------
 
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(in) :: tol
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
+    !     REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
+    !     REAL(realk), INTENT(in) :: tol
 
-        ! Local variables
-        INTEGER(intk) :: k, j, i
+    !     ! Local variables
+    !     INTEGER(intk) :: k, j, i
         
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
-                    IF ( vff(k,j,i) < tol ) THEN
-                        vff(k,j,i) = 0.0_realk
-                    ELSE IF ( vff(k,j,i) > 1.0_realk - tol ) THEN
-                        vff(k,j,i) = 1.0_realk
-                    END IF
-                END DO
-            END DO
-        END DO
+    !     DO i = 3, ii-2
+    !         DO j = 3, jj-2
+    !             DO k = 3, kk-2
+    !                 IF ( vff(k,j,i) < tol ) THEN
+    !                     vff(k,j,i) = 0.0_realk
+    !                 ELSE IF ( vff(k,j,i) > 1.0_realk - tol ) THEN
+    !                     vff(k,j,i) = 1.0_realk
+    !                 END IF
+    !             END DO
+    !         END DO
+    !     END DO
 
-    END SUBROUTINE clip_volume_fraction_field
+    ! END SUBROUTINE clip_volume_fraction_field
 
-    !================================================================
+    ! !================================================================
 
-    SUBROUTINE compute_density_flux(kk, jj, ii, q, flux, fluxComp, rho1, rho2, densityFlux)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   The subroutine computes the density fluxes using the volume
-    !   fraction field fluxes and their complements.
-    !----------------------------------------------------------------
+    ! SUBROUTINE compute_density_flux(kk, jj, ii, q, flux, fluxComp, rho1, rho2, densityFlux)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !   The subroutine computes the density fluxes using the volume
+    ! !   fraction field fluxes and their complements.
+    ! !----------------------------------------------------------------
 
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: q
-        REAL(realk), INTENT(in) :: flux(kk, jj, ii, 3), fluxComp(kk, jj, ii, 3)
-        REAL(realk), INTENT(in) :: rho1, rho2
-        REAL(realk), INTENT(inout) :: densityFlux(kk, jj, ii, 3)
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
+    !     INTEGER(intk), INTENT(in) :: q
+    !     REAL(realk), INTENT(in) :: flux(kk, jj, ii, 3), fluxComp(kk, jj, ii, 3)
+    !     REAL(realk), INTENT(in) :: rho1, rho2
+    !     REAL(realk), INTENT(inout) :: densityFlux(kk, jj, ii, 3)
 
-        ! Local variables
-        INTEGER(intk) :: k, j, i
+    !     ! Local variables
+    !     INTEGER(intk) :: k, j, i
         
-        DO i = 1, ii
-            DO j = 1, jj
-                DO k = 1, kk
-                    densityFlux(k,j,i,q) = rho1 * flux(k,j,i,q) + rho2 * fluxComp(k,j,i,q)
-                END DO
-            END DO
-        END DO
+    !     DO i = 1, ii
+    !         DO j = 1, jj
+    !             DO k = 1, kk
+    !                 densityFlux(k,j,i,q) = rho1 * flux(k,j,i,q) + rho2 * fluxComp(k,j,i,q)
+    !             END DO
+    !         END DO
+    !     END DO
 
-    END SUBROUTINE compute_density_flux
+    ! END SUBROUTINE compute_density_flux
 
-    !================================================================
+    ! !================================================================
     
-    SUBROUTINE get_advection_sequence(iteration, advSeq)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   
-    !----------------------------------------------------------------
+    ! SUBROUTINE get_advection_sequence(iteration, advSeq)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !   
+    ! !----------------------------------------------------------------
 
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: iteration
-        INTEGER(intk), INTENT(inout) :: advSeq(3)
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: iteration
+    !     INTEGER(intk), INTENT(inout) :: advSeq(3)
 
-        ! Local variables
-        INTEGER(intk) :: permutationIndex
+    !     ! Local variables
+    !     INTEGER(intk) :: permutationIndex
 
-        ! permutationIndex only changes in a new time-step
-        permutationIndex = mod(iteration-1, 3)
+    !     ! permutationIndex only changes in a new time-step
+    !     permutationIndex = mod(iteration-1, 3)
 
-        ! Select permutation of split advection
-        SELECT CASE (permutationIndex)
-            CASE (0)
-                advSeq = [1, 2, 3]
-            CASE (1)
-                advSeq = [3, 1, 2]
-            CASE (2)
-                advSeq = [2, 3, 1]
-        END SELECT
+    !     ! Select permutation of split advection
+    !     SELECT CASE (permutationIndex)
+    !         CASE (0)
+    !             advSeq = [1, 2, 3]
+    !         CASE (1)
+    !             advSeq = [3, 1, 2]
+    !         CASE (2)
+    !             advSeq = [2, 3, 1]
+    !     END SELECT
 
-    END SUBROUTINE get_advection_sequence
-
-    !================================================================
-
-    SUBROUTINE compression_term_wrapper_pres(kk, jj, ii, splitDir, u, v, w, vff, ddx, ddy, ddz, comprTerm, propertyFluid1, propertyFluid2)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: splitDir
-        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii), vff(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(out) :: comprTerm(kk, jj, ii)
-        REAL(realk), INTENT(in), OPTIONAL :: propertyFluid1, propertyFluid2
-
-        ! Local variables
-        REAL(realk) :: strainRate(kk, jj, ii)
-        REAL(realk) :: nonDirComprCoeff(kk, jj, ii)
-
-        CALL compute_normal_strain_rate(kk, jj, ii, splitDir, u, v, w, ddx, ddy, ddz, strainRate)
-        CALL comp_nondir_compr_coeff(kk, jj, ii, vff, nonDirComprCoeff)
-
-        IF ( .NOT. PRESENT(propertyFluid1) .AND. .NOT. PRESENT(propertyFluid2) ) THEN
-            comprTerm = nonDirComprCoeff * strainRate
-        ELSE IF ( PRESENT(propertyFluid1) .AND. PRESENT(propertyFluid2) ) THEN
-            comprTerm = ( nonDirComprCoeff * propertyFluid1 + ( 1.0_realk - nonDirComprCoeff ) * propertyFluid2 ) * strainRate
-        END IF
-
-    END SUBROUTINE compression_term_wrapper_pres
+    ! END SUBROUTINE get_advection_sequence
 
     !================================================================
 
-    SUBROUTINE compression_term_wrapper_stag(kk, jj, ii, q, splitDir, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, comprTerm, propertyFluid1, propertyFluid2)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: q
-        INTEGER(intk), INTENT(in) :: splitDir
-        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii), vff(kk, jj, ii, 3)
-        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(out) :: comprTerm(kk, jj, ii, 3)
-        REAL(realk), INTENT(in), OPTIONAL :: propertyFluid1, propertyFluid2
-
-        ! Local variables
-        REAL(realk) :: strainRate(kk, jj, ii, 3)
-        REAL(realk) :: nonDirComprCoeff(kk, jj, ii, 3)
-
-        CALL compute_normal_strain_rate(kk, jj, ii, q, splitDir, u, v, w, dx, dy, dz, ddx, ddy, ddz, strainRate)
-        CALL comp_nondir_compr_coeff(kk, jj, ii, q, vff, nonDirComprCoeff)
-
-        IF ( .NOT. PRESENT(propertyFluid1) .OR. .NOT. PRESENT(propertyFluid2) ) THEN
-            comprTerm(:,:,:,q) = nonDirComprCoeff(:,:,:,q) * strainRate(:,:,:,q)
-        ELSE IF ( PRESENT(propertyFluid1) .AND. PRESENT(propertyFluid2) ) THEN
-            comprTerm(:,:,:,q) = ( nonDirComprCoeff(:,:,:,q) * propertyFluid1 + ( 1.0_realk - nonDirComprCoeff(:,:,:,q) ) * propertyFluid2 ) * strainRate(:,:,:,q)
-        END IF
-
-    END SUBROUTINE compression_term_wrapper_stag
-
-    !================================================================
-
-    SUBROUTINE multiphase_solve(uo_f, vo_f, wo_f, u_f, v_f, w_f, ut_f, vt_f, wt_f, &
-        vff_f, p_f, g_f, d_f, dtrki, itstep)
+    SUBROUTINE multiphase_solve(u_f, v_f, w_f, f_f, p_f, g_f, d_f, dtrki, itstep)
     !----------------------------------------------------------------
     !   What it does:
     !    
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        TYPE(field_t), INTENT(inout) :: uo_f
-        TYPE(field_t), INTENT(inout) :: vo_f
-        TYPE(field_t), INTENT(inout) :: wo_f
-        TYPE(field_t), INTENT(in) :: u_f
-        TYPE(field_t), INTENT(in) :: v_f
-        TYPE(field_t), INTENT(in) :: w_f
-        TYPE(field_t), INTENT(in) :: ut_f
-        TYPE(field_t), INTENT(in) :: vt_f
-        TYPE(field_t), INTENT(in) :: wt_f
-        TYPE(field_t), INTENT(in) :: vff_f
+        TYPE(field_t), INTENT(inout) :: u_f
+        TYPE(field_t), INTENT(inout) :: v_f
+        TYPE(field_t), INTENT(inout) :: w_f
+        TYPE(field_t), INTENT(in) :: f_f
         TYPE(field_t), INTENT(in) :: p_f
         TYPE(field_t), INTENT(in) :: g_f
         TYPE(field_t), INTENT(in) :: d_f
@@ -1023,79 +852,60 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: itstep
 
         ! Local variables
+        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: u, v, w
+        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: vff, p, g, d
+
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
         TYPE(field_t), POINTER :: rdx_f, rdy_f, rdz_f, rddx_f, rddy_f, rddz_f
-        TYPE(field_t), POINTER :: normx_f, normy_f, normz_f, alpha_f, vffiStag_f, vffjStag_f, vffkStag_f
-        TYPE(field_t), POINTER :: normxiStag_f, normyiStag_f, normziStag_f, alphaiStag_f
-        TYPE(field_t), POINTER :: normxjStag_f, normyjStag_f, normzjStag_f, alphajStag_f
-        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: uo, vo, wo
-        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: u, v, w
-        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: ut, vt, wt
-        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: vff, p, g, d
-        REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
-        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
-        REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:)
-        REAL(realk), POINTER, CONTIGUOUS :: rddx(:), rddy(:), rddz(:)
-        REAL(realk), POINTER, CONTIGUOUS :: normxField(:,:,:), normyField(:,:,:), normzField(:,:,:), alphaField(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: normxiStagField(:,:,:), normyiStagField(:,:,:), alphaiStagField(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: normxjStagField(:,:,:), normyjStagField(:,:,:), alphajStagField(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: vffiStagField(:,:,:), vffjStagField(:,:,:), vffkStagField(:,:,:)
-        INTEGER(intk) :: advSeq(3)
-        INTEGER(intk) :: i, igrid, l, q, splitDir
-        INTEGER(intk) :: kk, jj, ii
+        TYPE(field_t), POINTER :: vffiStag_f, vffjStag_f, vffkStag_f
+        TYPE(field_t), POINTER :: diStag_f, djStag_f, dkStag_f
+        TYPE(field_t), POINTER :: normx_f, normy_f, normz_f
+        TYPE(field_t), POINTER :: normxiStag_f, normyiStag_f, normziStag_f
+        TYPE(field_t), POINTER :: normxjStag_f, normyjStag_f, normzjStag_f
+        TYPE(field_t), POINTER :: normxkStag_f, normykStag_f, normzkStag_f
+        TYPE(field_t), POINTER :: alpha_f
+        TYPE(field_t), POINTER :: alphaiStag_f, alphajStag_f, alphakStag_f
+
+        REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:), ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:), rddx(:), rddy(:), rddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: vffiStag(:,:,:), vffjStag(:,:,:), vffkStag(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: diStag(:,:,:), djStag(:,:,:), dkStag(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: normxiStag(:,:,:), normyiStag(:,:,:), normziStag(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: normxjStag(:,:,:), normyjStag(:,:,:), normzjStag(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: normxkStag(:,:,:), normykStag(:,:,:), normzkStag(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: alphaiStag(:,:,:), alphajStag(:,:,:), alphakStag(:,:,:)
+
+        INTEGER(intk) :: i, igrid
+        INTEGER(intk) :: kk, jj, ii, q
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        REAL(realk), ALLOCATABLE :: vffStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: dStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: normxStag(:,:,:), normyStag(:,:,:), normzStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: alphaStag(:,:,:)
+        LOGICAL, ALLOCATABLE :: isInterface(:,:,:)
+        LOGICAL, ALLOCATABLE :: isInterfaceStag(:,:,:)
+        LOGICAL, ALLOCATABLE :: isNearInterface(:,:,:)
+        LOGICAL, ALLOCATABLE :: isNearInterfaceStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: vffFlux(:,:,:), mom(:,:,:), cWY(:,:,:), veloWY(:,:,:)
+        
         REAL(realk), PARAMETER :: tol = 1.0E-15_realk
-        REAL(realk), ALLOCATABLE :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
-        REAL(realk), ALLOCATABLE :: normxStag(:,:,:,:), normyStag(:,:,:,:), normzStag(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: alpha(:,:,:), alphaStag(:,:,:,:)
-        LOGICAL, ALLOCATABLE :: isInterface(:,:,:), isInterfaceStag(:,:,:,:)
-        LOGICAL, ALLOCATABLE :: isNearInterface(:,:,:), isNearInterfaceStag(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: vffStag(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: densityFieldStag(:,:,:,:), densityFieldStagOld(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: vffFlux(:,:,:), vffFluxStag(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: complementvffFlux(:,:,:), complementvffFluxStag(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: densityFieldFluxStag(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: vffCompressionTerm(:,:,:), vffCompressionTermStag(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: densityCompressionTermStag(:,:,:,:), compSum(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: mom(:,:,:,:), nonDirComprCoeffStag(:,:,:,:), strainRateStag(:,:,:,:)
 
-        ! Set all the output to zero everywhere before we start!
-        uo_f = 0.0_realk
-        vo_f = 0.0_realk
-        wo_f = 0.0_realk
+        CALL get_field(dx_f, "DX"); CALL get_field(dy_f, "DY"); CALL get_field(dz_f, "DZ")
+        CALL get_field(ddx_f, "DDX"); CALL get_field(ddy_f, "DDY"); CALL get_field(ddz_f, "DDZ")
 
-        CALL get_field(dx_f, "DX")
-        CALL get_field(dy_f, "DY")
-        CALL get_field(dz_f, "DZ")
+        CALL get_field(rdx_f, "RDX"); CALL get_field(rdy_f, "RDY"); CALL get_field(rdz_f, "RDZ")
+        CALL get_field(rddx_f, "RDDX"); CALL get_field(rddy_f, "RDDY"); CALL get_field(rddz_f, "RDDZ")
 
-        CALL get_field(ddx_f, "DDX")
-        CALL get_field(ddy_f, "DDY")
-        CALL get_field(ddz_f, "DDZ")
-
-        CALL get_field(rdx_f, "RDX")
-        CALL get_field(rdy_f, "RDY")
-        CALL get_field(rdz_f, "RDZ")
-
-        CALL get_field(rddx_f, "RDDX")
-        CALL get_field(rddy_f, "RDDY")
-        CALL get_field(rddz_f, "RDDZ")
-
-        CALL get_field(normx_f, "NORMX")
-        CALL get_field(normy_f, "NORMY")
-        CALL get_field(normz_f, "NORMZ")
+        CALL get_field(vffiStag_f, "VFFiStag"); CALL get_field(vffjStag_f, "VFFjStag"); CALL get_field(vffkStag_f, "VFFkStag")
+        CALL get_field(diStag_f, "DiStag"); CALL get_field(djStag_f, "DjStag"); CALL get_field(dkStag_f, "DkStag")
+        CALL get_field(normx_f, "NORMX"); CALL get_field(normy_f, "NORMY"); CALL get_field(normz_f, "NORMZ")
+        CALL get_field(normxiStag_f, "NORMXiStag"); CALL get_field(normyiStag_f, "NORMYiStag"); CALL get_field(normziStag_f, "NORMZiStag")
+        CALL get_field(normxjStag_f, "NORMXjStag"); CALL get_field(normyjStag_f, "NORMYjStag"); CALL get_field(normzjStag_f, "NORMZjStag")
+        CALL get_field(normxkStag_f, "NORMXkStag"); CALL get_field(normykStag_f, "NORMYkStag"); CALL get_field(normzkStag_f, "NORMZkStag")
         CALL get_field(alpha_f, "ALPHA")
-        CALL get_field(normxiStag_f, "NORMXiStag")
-        CALL get_field(normyiStag_f, "NORMYiStag")
-        CALL get_field(normziStag_f, "NORMZiStag")
-        CALL get_field(alphaiStag_f, "ALPHAiStag")
-        CALL get_field(normxjStag_f, "NORMXjStag")
-        CALL get_field(normyjStag_f, "NORMYjStag")
-        CALL get_field(normzjStag_f, "NORMZjStag")
-        CALL get_field(alphajStag_f, "ALPHAjStag")
-
-        CALL get_field(vffiStag_f, "VFFiStag")
-        CALL get_field(vffjStag_f, "VFFjStag")
-        CALL get_field(vffkStag_f, "VFFkStag")
+        CALL get_field(alphaiStag_f, "ALPHAiStag"); CALL get_field(alphajStag_f, "ALPHAjStag"); CALL get_field(alphakStag_f, "ALPHAkStag")
 
         DO i = 1, nmygrids
             igrid = mygrids(i)
@@ -1103,162 +913,169 @@ CONTAINS
             CALL get_mgdims(kk, jj, ii, igrid)
             CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
 
-            CALL uo_f%get_ptr(uo, igrid)
-            CALL vo_f%get_ptr(vo, igrid)
-            CALL wo_f%get_ptr(wo, igrid)
-
             CALL u_f%get_ptr(u, igrid)
             CALL v_f%get_ptr(v, igrid)
             CALL w_f%get_ptr(w, igrid)
-
-            CALL ut_f%get_ptr(ut, igrid)
-            CALL vt_f%get_ptr(vt, igrid)
-            CALL wt_f%get_ptr(wt, igrid)
-
-            CALL vff_f%get_ptr(vff, igrid)
+            CALL f_f%get_ptr(vff, igrid)
             CALL p_f%get_ptr(p, igrid)
             CALL g_f%get_ptr(g, igrid)
             CALL d_f%get_ptr(d, igrid)
 
-            CALL dx_f%get_ptr(dx, igrid)
-            CALL dy_f%get_ptr(dy, igrid)
-            CALL dz_f%get_ptr(dz, igrid)
+            CALL dx_f%get_ptr(dx, igrid); CALL dy_f%get_ptr(dy, igrid); CALL dz_f%get_ptr(dz, igrid)
+            CALL ddx_f%get_ptr(ddx, igrid); CALL ddy_f%get_ptr(ddy, igrid); CALL ddz_f%get_ptr(ddz, igrid)
 
-            CALL ddx_f%get_ptr(ddx, igrid)
-            CALL ddy_f%get_ptr(ddy, igrid)
-            CALL ddz_f%get_ptr(ddz, igrid)
+            CALL rdx_f%get_ptr(rdx, igrid); CALL rdy_f%get_ptr(rdy, igrid); CALL rdz_f%get_ptr(rdz, igrid)
+            CALL rddx_f%get_ptr(rddx, igrid); CALL rddy_f%get_ptr(rddy, igrid); CALL rddz_f%get_ptr(rddz, igrid)
 
-            CALL rdx_f%get_ptr(rdx, igrid)
-            CALL rdy_f%get_ptr(rdy, igrid)
-            CALL rdz_f%get_ptr(rdz, igrid)
+            CALL vffiStag_f%get_ptr(vffiStag, igrid); CALL vffjStag_f%get_ptr(vffjStag, igrid); CALL vffkStag_f%get_ptr(vffkStag, igrid)
+            CALL diStag_f%get_ptr(diStag, igrid); CALL djStag_f%get_ptr(djStag, igrid); CALL dkStag_f%get_ptr(dkStag, igrid)
+            CALL normx_f%get_ptr(normx, igrid); CALL normy_f%get_ptr(normy, igrid); CALL normz_f%get_ptr(normz, igrid)
+            CALL normxiStag_f%get_ptr(normxiStag, igrid); CALL normyiStag_f%get_ptr(normyiStag, igrid); CALL normziStag_f%get_ptr(normziStag, igrid)
+            CALL normxjStag_f%get_ptr(normxjStag, igrid); CALL normyjStag_f%get_ptr(normyjStag, igrid); CALL normzjStag_f%get_ptr(normzjStag, igrid)
+            CALL normxkStag_f%get_ptr(normxkStag, igrid); CALL normykStag_f%get_ptr(normykStag, igrid); CALL normzkStag_f%get_ptr(normzkStag, igrid)
+            CALL alpha_f%get_ptr(alpha, igrid)
+            CALL alphaiStag_f%get_ptr(alphaiStag, igrid); CALL alphajStag_f%get_ptr(alphajStag, igrid); CALL alphakStag_f%get_ptr(alphakStag, igrid)
 
-            CALL normx_f%get_ptr(normxField, igrid)
-            CALL normy_f%get_ptr(normyField, igrid)
-            CALL normz_f%get_ptr(normzField, igrid)
-            CALL alpha_f%get_ptr(alphaField, igrid)
-            CALL normxiStag_f%get_ptr(normxiStagField, igrid)
-            CALL normyiStag_f%get_ptr(normyiStagField, igrid)
-            CALL alphaiStag_f%get_ptr(alphaiStagField, igrid)
-            CALL normxjStag_f%get_ptr(normxjStagField, igrid)
-            CALL normyjStag_f%get_ptr(normyjStagField, igrid)
-            CALL alphajStag_f%get_ptr(alphajStagField, igrid)
-            CALL vffiStag_f%get_ptr(vffiStagField, igrid)
-            CALL vffjStag_f%get_ptr(vffjStagField, igrid)
-            CALL vffkStag_f%get_ptr(vffkStagField, igrid)
-
-            CALL rddx_f%get_ptr(rddx, igrid)
-            CALL rddy_f%get_ptr(rddy, igrid)
-            CALL rddz_f%get_ptr(rddz, igrid)
-
-            IF (.NOT. ALLOCATED(normx))     ALLOCATE(normx(kk,jj,ii))
-            IF (.NOT. ALLOCATED(normy))     ALLOCATE(normy(kk,jj,ii))
-            IF (.NOT. ALLOCATED(normz))     ALLOCATE(normz(kk,jj,ii))
-
-            IF (.NOT. ALLOCATED(normxStag)) ALLOCATE(normxStag(kk,jj,ii,3))
-            IF (.NOT. ALLOCATED(normyStag)) ALLOCATE(normyStag(kk,jj,ii,3))
-            IF (.NOT. ALLOCATED(normzStag)) ALLOCATE(normzStag(kk,jj,ii,3))
-
-            IF (.NOT. ALLOCATED(alpha))     ALLOCATE(alpha(kk,jj,ii))
-            IF (.NOT. ALLOCATED(alphaStag)) ALLOCATE(alphaStag(kk,jj,ii,3))
-
-            IF (.NOT. ALLOCATED(isInterface))     ALLOCATE(isInterface(kk,jj,ii))
-            IF (.NOT. ALLOCATED(isInterfaceStag)) ALLOCATE(isInterfaceStag(kk,jj,ii,3))
-
+            IF (.NOT. ALLOCATED(vffStag))             ALLOCATE(vffStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(dStag))               ALLOCATE(dStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normxStag))           ALLOCATE(normxStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normyStag))           ALLOCATE(normyStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(normzStag))           ALLOCATE(normzStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(alphaStag))           ALLOCATE(alphaStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(isInterface))         ALLOCATE(isInterface(kk,jj,ii))
+            IF (.NOT. ALLOCATED(isInterfaceStag))     ALLOCATE(isInterfaceStag(kk,jj,ii))
             IF (.NOT. ALLOCATED(isNearInterface))     ALLOCATE(isNearInterface(kk,jj,ii))
-            IF (.NOT. ALLOCATED(isNearInterfaceStag)) ALLOCATE(isNearInterfaceStag(kk,jj,ii,3))
-
-            IF (.NOT. ALLOCATED(vffStag)) ALLOCATE(vffStag(kk,jj,ii,3))
-
-            IF (.NOT. ALLOCATED(densityFieldStag)) ALLOCATE(densityFieldStag(kk,jj,ii,3))
-            IF (.NOT. ALLOCATED(densityFieldStagOld)) ALLOCATE(densityFieldStagOld(kk,jj,ii,3))
-
-            IF (.NOT. ALLOCATED(vffFlux)) ALLOCATE(vffFlux(kk,jj,ii))
-            IF (.NOT. ALLOCATED(vffFluxStag)) ALLOCATE(vffFluxStag(kk,jj,ii,3))
+            IF (.NOT. ALLOCATED(isNearInterfaceStag)) ALLOCATE(isNearInterfaceStag(kk,jj,ii))
+            IF (.NOT. ALLOCATED(vffFlux))             ALLOCATE(vffFlux(kk,jj,ii))
+            IF (.NOT. ALLOCATED(mom))                 ALLOCATE(mom(kk,jj,ii))
+            IF (.NOT. ALLOCATED(cWY))                 ALLOCATE(cWY(kk,jj,ii))
+            IF (.NOT. ALLOCATED(veloWY))              ALLOCATE(veloWY(kk,jj,ii))
             
-            IF (.NOT. ALLOCATED(complementvffFlux)) ALLOCATE(complementvffFlux(kk,jj,ii))
-            IF (.NOT. ALLOCATED(complementvffFluxStag)) ALLOCATE(complementvffFluxStag(kk,jj,ii,3))
+            IF ( mom_multiphase == "RUDMAN" ) THEN
 
-            IF (.NOT. ALLOCATED(densityFieldFluxStag)) ALLOCATE(densityFieldFluxStag(kk,jj,ii,3))
-
-            IF (.NOT. ALLOCATED(vffCompressionTerm)) ALLOCATE(vffCompressionTerm(kk,jj,ii))
-
-            IF (.NOT. ALLOCATED(densityCompressionTermStag)) ALLOCATE(densityCompressionTermStag(kk,jj,ii,3))
-            IF (.NOT. ALLOCATED(vffCompressionTermStag)) ALLOCATE(vffCompressionTermStag(kk,jj,ii,3))
-            IF (.NOT. ALLOCATED(compSum)) ALLOCATE(compSum(kk,jj,ii,3))
-            IF (.NOT. ALLOCATED(mom)) ALLOCATE(mom(kk,jj,ii,3))
-            IF (.NOT. ALLOCATED(nonDirComprCoeffStag)) ALLOCATE(nonDirComprCoeffStag(kk,jj,ii,3))
-            IF (.NOT. ALLOCATED(strainRateStag)) ALLOCATE(strainRateStag(kk,jj,ii,3))
-
-            CALL get_advection_sequence(itstep, advSeq)
-            CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
-
-            DO q = 1, 3
-
-                CALL staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
-                CALL interface_reconstruction_wrapper(kk, jj, ii, q, vffStag, dx, dy, dz, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
-                CALL compute_material_property_field(kk, jj, ii, q, densityFieldStag, vffStag, rho1, rho2)
-                CALL comp_nondir_compr_coeff(kk, jj, ii, q, vffStag, nonDirComprCoeffStag)
-    
-            END DO
-
-            mom(:,:,:,1) = u(:,:,:) * densityFieldStag(:,:,:,1)
-            mom(:,:,:,2) = v(:,:,:) * densityFieldStag(:,:,:,2)
-            mom(:,:,:,3) = w(:,:,:) * densityFieldStag(:,:,:,3) 
-            
-            DO l = 1, 3
-
-                splitDir = advSeq(l)
-
+                CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+                
                 DO q = 1, 3
-                    CALL compute_flux(kk, jj, ii, q, splitDir, vffStag, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop, vffFluxStag, complementvffFluxStag)
-                    CALL compute_density_flux(kk, jj, ii, q, vffFluxStag, complementvffFluxStag, rho1, rho2, densityFieldFluxStag)
-                    CALL comp_normal_strain_rate_stag(kk, jj, ii, q, splitDir, mom(:,:,:,1) / densityFieldStag(:,:,:,1), mom(:,:,:,2) / densityFieldStag(:,:,:,2), mom(:,:,:,3) / densityFieldStag(:,:,:,3), dx, dy, dz, ddx, ddy, ddz, strainRateStag)                   
-                    densityCompressionTermStag = ( nonDirComprCoeffStag * rho1 + ( 1.0_realk - nonDirComprCoeffStag ) * rho2 ) * strainRateStag
-                    CALL multiphase_momentum_advection(kk, jj, ii, q, splitDir, mom, densityFieldStag, densityFieldFluxStag, densityCompressionTermStag, dtrki, dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, nfro, nbac, nrgt, nlft, nbot, ntop)
-                    vffCompressionTermStag = nonDirComprCoeffStag * strainRateStag
-                    CALL update_field(kk, jj, ii, q, splitDir, vffFluxStag, vffCompressionTermStag, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop, vffStag)
-                    CALL clip_volume_fraction_field(kk, ii, jj, vffStag(:,:,:,q), tol)
-                    CALL compute_material_property_field(kk, jj, ii, q, densityFieldStag, vffStag, rho1, rho2)
 
-                    IF ( q == 1 ) THEN
-                        CALL comp_velocity(kk, jj, ii, q, mom, densityFieldStag, tol, u)
-                    ELSE IF ( q == 2 ) THEN
-                        CALL comp_velocity(kk, jj, ii, q, mom, densityFieldStag, tol, v)
-                    ELSE IF ( q == 3 ) THEN
-                        CALL comp_velocity(kk, jj, ii, q, mom, densityFieldStag, tol, w)
+                    vffStag = 0.0_realk; normxStag = 0.0_realk; normyStag = 0.0_realk; normzStag = 0.0_realk
+                    alphaStag = 0.0_realk; isInterfaceStag = .False.; isNearInterfaceStag = .False.
+                    dStag = 0.0_realk; mom = 0.0_realk; cWY = 0.0_realk; vffFlux = 0.0_realk
+                    
+                    CALL staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
+                    CALL interface_reconstruction_wrapper(kk, jj, ii, vffStag, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
+                    CALL comp_material_property_field(kk, jj, ii, vffStag, rho1, rho2, dStag)
+                    CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
+                    CALL comp_cWY(kk, jj, ii, vffStag, cWY)
+
+                    IF ( MOD(itstep, 3) == 0 ) THEN ! z, x, y
+                        
+                        CALL comp_flux(kk, jj, ii, q, 3, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux)
+                        CALL adv_vof(kk, jj, ii, q, 3, vffFlux, cWY, veloWY, dtrki, vffStag)
+                        
+                        CALL comp_flux(kk, jj, ii, q, 1, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux)
+                        CALL adv_vof(kk, jj, ii, q, 1, vffFlux, cWY, veloWY, dtrki, vffStag)
+
+                        CALL comp_flux(kk, jj, ii, q, 2, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux)
+                        CALL adv_vof(kk, jj, ii, q, 2, vffFlux, cWY, veloWY, dtrki, vffStag)
+
+                    ELSE IF ( MOD(itstep, 3) == 1 ) THEN ! y, z, x
+                        
+                        CALL comp_flux(kk, jj, ii, q, 2, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux)
+                        CALL adv_vof(kk, jj, ii, q, 2, vffFlux, cWY, veloWY, dtrki, vffStag)
+
+                        CALL comp_flux(kk, jj, ii, q, 3, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux)
+                        CALL adv_vof(kk, jj, ii, q, 3, vffFlux, cWY, veloWY, dtrki, vffStag)
+                        
+                        CALL comp_flux(kk, jj, ii, q, 1, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux)
+                        CALL adv_vof(kk, jj, ii, q, 1, vffFlux, cWY, veloWY, dtrki, vffStag)
+
+                    ELSE IF ( MOD(itstep, 3) == 2 ) THEN ! x, y, z
+                                                
+                        CALL comp_flux(kk, jj, ii, q, 1, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux)
+                        CALL adv_vof(kk, jj, ii, q, 1, vffFlux, cWY, veloWY, dtrki, vffStag)
+
+                        CALL comp_flux(kk, jj, ii, q, 2, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux)
+                        CALL adv_vof(kk, jj, ii, q, 2, vffFlux, cWY, veloWY, dtrki, vffStag)
+
+                        CALL comp_flux(kk, jj, ii, q, 3, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux)
+                        CALL adv_vof(kk, jj, ii, q, 3, vffFlux, cWY, veloWY, dtrki, vffStag)
+
                     END IF
 
-                    CALL interface_reconstruction_wrapper(kk, jj, ii, q, vffStag, dx, dy, dz, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)                    
+                    IF ( q == 1 ) THEN
+                        vffiStag = vffStag
+                        diStag = dStag
+                        normxiStag = normxStag
+                        normyiStag = normyStag
+                        normziStag = normzStag
+                        alphaiStag = alphaStag
+                    ELSE IF ( q == 2 ) THEN
+                        vffjStag = vffStag
+                        djStag = dStag
+                        normxjStag = normxStag
+                        normyjStag = normyStag
+                        normzjStag = normzStag
+                        alphajStag = alphaStag
+                    ELSE IF ( q == 3 ) THEN
+                        vffkStag = vffStag
+                        dkStag = dStag
+                        normxkStag = normxStag
+                        normykStag = normyStag
+                        normzkStag = normzStag
+                        alphakStag = alphaStag
+                    END IF
+
                 END DO
 
-                CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface)
-                CALL compute_flux(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, nfro, nbac, nrgt, nlft, nbot, ntop, vffFlux)                
-                CALL compression_term_wrapper(kk, jj, ii, splitDir, u, v, w, vff, ddx, ddy, ddz, vffCompressionTerm)
-                CALL update_field(kk, jj, ii, splitDir, vffFlux, vffCompressionTerm, dtrki, nfro, nbac, nrgt, nlft, nbot, ntop, vff)
-                CALL clip_volume_fraction_field(kk, ii, jj, vff, tol) 
+                CALL comp_cWY(kk, jj, ii, vff, cWY)
 
-            END DO
+                IF ( MOD(itstep, 3) == 0 ) THEN ! z, x, y
+                    
+                    CALL comp_flux(kk, jj, ii, 3, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                    CALL adv_vof(kk, jj, ii, q, 3, vffFlux, cWY, veloWY, dtrki, vff)
+                    
+                    CALL comp_flux(kk, jj, ii, 1, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                    CALL adv_vof(kk, jj, ii, q, 1, vffFlux, cWY, veloWY, dtrki, vff)
+
+                    CALL comp_flux(kk, jj, ii, 2, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                    CALL adv_vof(kk, jj, ii, q, 2, vffFlux, cWY, veloWY, dtrki, vff)
+
+                ELSE IF ( MOD(itstep, 3) == 1 ) THEN ! y, z, x
+                    
+                    CALL comp_flux(kk, jj, ii, 2, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                    CALL adv_vof(kk, jj, ii, q, 2, vffFlux, cWY, veloWY, dtrki, vff)
+
+                    CALL comp_flux(kk, jj, ii, 3, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                    CALL adv_vof(kk, jj, ii, q, 3, vffFlux, cWY, veloWY, dtrki, vff)
+                    
+                    CALL comp_flux(kk, jj, ii, 1, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                    CALL adv_vof(kk, jj, ii, q, 1, vffFlux, cWY, veloWY, dtrki, vff)
+
+                ELSE IF ( MOD(itstep, 3) == 2 ) THEN ! x, y, z
+                                            
+                    CALL comp_flux(kk, jj, ii, 1, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                    CALL adv_vof(kk, jj, ii, q, 1, vffFlux, cWY, veloWY, dtrki, vff)
+
+                    CALL comp_flux(kk, jj, ii, 2, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                    CALL adv_vof(kk, jj, ii, q, 2, vffFlux, cWY, veloWY, dtrki, vff)
+
+                    CALL comp_flux(kk, jj, ii, 3, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                    CALL adv_vof(kk, jj, ii, q, 3, vffFlux, cWY, veloWY, dtrki, vff)
+
+                END IF
+
+            ELSE IF ( mom_multiphase == "ARRUFAT" ) THEN
+                WRITE(*,*) "Not yet implemented!"
+                continue
+            END IF
+
         END DO
-
-        normxField = normx
-        normyField = normy
-        normzField = normz
-        alphaField = alpha
-        normxiStagField = normxStag(:,:,:,1)
-        normxjStagField = normxStag(:,:,:,2)
-        normyiStagField = normyStag(:,:,:,1)
-        normyjStagField = normyStag(:,:,:,2)
-        alphaiStagField = alphaStag(:,:,:,1)
-        alphajStagField = alphaStag(:,:,:,2)
-        vffiStagField = vffStag(:,:,:,1)
-        vffjStagField = vffStag(:,:,:,2)
-        vffkStagField = vffStag(:,:,:,3)
 
     END SUBROUTINE multiphase_solve
 
     !================================================================
 
-    SUBROUTINE comp_velocity(kk, jj, ii, q, mom, densityFieldStag, tol, velocity)
+    SUBROUTINE adv_vof(kk, jj, ii, q, splitDir, vffFlux, cWY, veloWY, dtrki, vff)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -1266,33 +1083,30 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: q
-        REAL(realk), INTENT(in) :: mom(kk, jj, ii, 3), densityFieldStag(kk, jj, ii, 3)
-        REAL(realk), INTENT(in) :: tol
-        REAL(realk), INTENT(out) :: velocity(kk,jj,ii)
+        INTEGER(intk), INTENT(in) :: q, splitDir
+        REAL(realk), INTENT(in) :: vffFlux(:,:,:)
+        REAL(realk), INTENT(in) :: cWY(:,:,:), veloWY(:,:,:)
+        REAL(realk), INTENT(in) :: dtrki
+        REAL(realk), INTENT(inout) :: vff(:,:,:)
 
         ! Local variables
         INTEGER(intk) :: i, j, k
-    
-        DO i = 1, ii
-            DO j = 1, jj
-                DO k = 1, kk
-                    IF (densityFieldStag(k,j,i,q) > tol) THEN
-                        velocity(k,j,i) = mom(k,j,i,q) / densityFieldStag(k,j,i,q)
-                    ELSE
-                        velocity(k,j,i) = 0.0_realk
-                    END IF
+        INTEGER(intk) :: i0, j0, k0
+
+        CALL get_component_specifics(kk, jj, ii, q=q, i0=i0, j0=j0, k0=k0)
+        WRITE(*,*) i0, j0, k0
+
+        DO i = 2, ii-1
+            DO j = 2, jj-1
+                DO k = 2, kk-1
+                    vff(k,j,i) = vff(k,j,i) - dtrki * ( vffFlux(k,j,i) - vffFlux(k-i0,j-j0,i-k0) ) + dtrki * cWY(k,j,i)
                 END DO
             END DO
         END DO
 
-    END SUBROUTINE
+    END SUBROUTINE adv_vof
 
-    !================================================================
-
-    SUBROUTINE multiphase_momentum_advection(kk, jj, ii, q, splitDir, mom, densityFieldStag, densityFieldFluxStag, &
-                        densityCompressionTermStag, dt, dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
-                        nfro, nbac, nrgt, nlft, nbot, ntop)
+    SUBROUTINE comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -1300,99 +1114,164 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: splitDir
         INTEGER(intk), INTENT(in) :: q
-        REAL(realk), INTENT(inout) :: mom(kk, jj, ii, 3)
-        REAL(realk), INTENT(in) :: densityFieldStag(kk, jj, ii, 3)
-        REAL(realk), INTENT(in) :: densityFieldFluxStag(kk, jj, ii, 3) 
-        REAL(realk), INTENT(in) :: densityCompressionTermStag(kk, jj, ii, 3)
-        REAL(realk), INTENT(in) :: dt
-        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
-        REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
-        INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        REAL(realk), INTENT(in) :: dStag(kk, jj, ii)
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(out) :: mom(kk,jj,ii)
 
         ! Local variables
-        INTEGER(intk) :: k, j, i
-        INTEGER(intk) :: nbu, nfu, nrv, nlv, nbw, ntw
-        REAL(realk) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-        REAL(realk) :: advrE(kk, jj, ii), advrW(kk, jj, ii), advrN(kk, jj, ii), advrS(kk, jj, ii), advrT(kk, jj, ii), advrB(kk, jj, ii)
-        REAL(realk) :: adveE(kk, jj, ii), adveW(kk, jj, ii), adveN(kk, jj, ii), adveS(kk, jj, ii), adveT(kk, jj, ii), adveB(kk, jj, ii)
-        REAL(realk) :: iStag, jStag, kStag
-        REAL(realk) :: velocity(kk, jj, ii)
+        INTEGER(intk) :: i, j, k
+        REAL(realk) :: veloFld(kk, jj, ii)
 
-        nfu = 0
-        nbu = 0
-        nrv = 0
-        nlv = 0
-        nbw = 0
-        ntw = 0
+        CALL get_component_specifics(kk, jj, ii, q=q, u=u, v=v, w=w, veloFld=veloFld)
 
-        ! CON = 7
-        IF (nbac == 7) nbu = 1
-        IF (nlft == 7) nlv = 1
-        IF (ntop == 7) ntw = 1
+        DO i = 1, ii
+            DO j = 1, jj
+                DO k = 1, kk
+                    mom(k,j,i) = veloFld(k,j,i) * dStag(k,j,i)
+                END DO
+            END DO
+        END DO
 
-        ! OP1 = 3
-        IF (nfro == 3) nfu = 1
-        IF (nbac == 3) nbu = 1
-        IF (nrgt == 3) nrv = 1
-        IF (nlft == 3) nlv = 1
-        IF (nbot == 3) nbw = 1
-        IF (ntop == 3) ntw = 1
+    END SUBROUTINE comp_momentum
 
-        IF ( q == 1 ) THEN
-            iStag = 1.0_realk
-            jStag = 0.0_realk
-            kStag = 0.0_realk
-            velocity = mom(:,:,:,q) / densityFieldStag(:,:,:,q)
-        ELSE IF ( q == 2 ) THEN
-            iStag = 0.0_realk
-            jStag = 1.0_realk
-            kStag = 0.0_realk
-            velocity = mom(:,:,:,q) / densityFieldStag(:,:,:,q)
-        ELSE IF ( q == 3 ) THEN
-            iStag = 0.0_realk
-            jStag = 0.0_realk
-            kStag = 1.0_realk
-            velocity = mom(:,:,:,q) / densityFieldStag(:,:,:,q)
-        END IF
+    !================================================================
 
-        u = mom(:,:,:,1) / densityFieldStag(:,:,:,1)
-        v = mom(:,:,:,2) / densityFieldStag(:,:,:,2)
-        w = mom(:,:,:,3) / densityFieldStag(:,:,:,3)
+    ! SUBROUTINE comp_velocity(kk, jj, ii, q, mom, densityFieldStag, tol, velocity)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !    
+    ! !----------------------------------------------------------------
+
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
+    !     INTEGER(intk), INTENT(in) :: q
+    !     REAL(realk), INTENT(in) :: mom(kk, jj, ii, 3), densityFieldStag(kk, jj, ii, 3)
+    !     REAL(realk), INTENT(in) :: tol
+    !     REAL(realk), INTENT(out) :: velocity(kk,jj,ii)
+
+    !     ! Local variables
+    !     INTEGER(intk) :: i, j, k
+    
+    !     DO i = 1, ii
+    !         DO j = 1, jj
+    !             DO k = 1, kk
+    !                 IF (densityFieldStag(k,j,i,q) > tol) THEN
+    !                     velocity(k,j,i) = mom(k,j,i,q) / densityFieldStag(k,j,i,q)
+    !                 ELSE
+    !                     velocity(k,j,i) = 0.0_realk
+    !                 END IF
+    !             END DO
+    !         END DO
+    !     END DO
+
+    ! END SUBROUTINE
+
+    ! !================================================================
+
+    ! SUBROUTINE multiphase_momentum_advection(kk, jj, ii, q, splitDir, mom, densityFieldStag, densityFieldFluxStag, &
+    !                     densityCompressionTermStag, dt, dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
+    !                     nfro, nbac, nrgt, nlft, nbot, ntop)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !    
+    ! !----------------------------------------------------------------
+
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
+    !     INTEGER(intk), INTENT(in) :: splitDir
+    !     INTEGER(intk), INTENT(in) :: q
+    !     REAL(realk), INTENT(inout) :: mom(kk, jj, ii, 3)
+    !     REAL(realk), INTENT(in) :: densityFieldStag(kk, jj, ii, 3)
+    !     REAL(realk), INTENT(in) :: densityFieldFluxStag(kk, jj, ii, 3) 
+    !     REAL(realk), INTENT(in) :: densityCompressionTermStag(kk, jj, ii, 3)
+    !     REAL(realk), INTENT(in) :: dt
+    !     REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+    !     REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+    !     REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
+    !     REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
+    !     INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+
+    !     ! Local variables
+    !     INTEGER(intk) :: k, j, i
+    !     INTEGER(intk) :: nbu, nfu, nrv, nlv, nbw, ntw
+    !     REAL(realk) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+    !     REAL(realk) :: advrE(kk, jj, ii), advrW(kk, jj, ii), advrN(kk, jj, ii), advrS(kk, jj, ii), advrT(kk, jj, ii), advrB(kk, jj, ii)
+    !     REAL(realk) :: adveE(kk, jj, ii), adveW(kk, jj, ii), adveN(kk, jj, ii), adveS(kk, jj, ii), adveT(kk, jj, ii), adveB(kk, jj, ii)
+    !     REAL(realk) :: iStag, jStag, kStag
+    !     REAL(realk) :: velocity(kk, jj, ii)
+
+    !     nfu = 0
+    !     nbu = 0
+    !     nrv = 0
+    !     nlv = 0
+    !     nbw = 0
+    !     ntw = 0
+
+    !     ! CON = 7
+    !     IF (nbac == 7) nbu = 1
+    !     IF (nlft == 7) nlv = 1
+    !     IF (ntop == 7) ntw = 1
+
+    !     ! OP1 = 3
+    !     IF (nfro == 3) nfu = 1
+    !     IF (nbac == 3) nbu = 1
+    !     IF (nrgt == 3) nrv = 1
+    !     IF (nlft == 3) nlv = 1
+    !     IF (nbot == 3) nbw = 1
+    !     IF (ntop == 3) ntw = 1
+
+    !     IF ( q == 1 ) THEN
+    !         iStag = 1.0_realk
+    !         jStag = 0.0_realk
+    !         kStag = 0.0_realk
+    !         velocity = mom(:,:,:,q) / densityFieldStag(:,:,:,q)
+    !     ELSE IF ( q == 2 ) THEN
+    !         iStag = 0.0_realk
+    !         jStag = 1.0_realk
+    !         kStag = 0.0_realk
+    !         velocity = mom(:,:,:,q) / densityFieldStag(:,:,:,q)
+    !     ELSE IF ( q == 3 ) THEN
+    !         iStag = 0.0_realk
+    !         jStag = 0.0_realk
+    !         kStag = 1.0_realk
+    !         velocity = mom(:,:,:,q) / densityFieldStag(:,:,:,q)
+    !     END IF
+
+    !     u = mom(:,:,:,1) / densityFieldStag(:,:,:,1)
+    !     v = mom(:,:,:,2) / densityFieldStag(:,:,:,2)
+    !     w = mom(:,:,:,3) / densityFieldStag(:,:,:,3)
         
-        CALL comp_advr_centr(kk, jj, ii, u, v, w, iStag, jStag, kStag, advrE, advrW, advrN, advrS, advrT, advrB)
-        CALL comp_adve_quick(kk, jj, ii, velocity, advrE, advrW, advrN, advrS, advrT, advrB, adveE, adveW, adveN, adveS, adveT, adveB)
+    !     CALL comp_advr_centr(kk, jj, ii, u, v, w, iStag, jStag, kStag, advrE, advrW, advrN, advrS, advrT, advrB)
+    !     CALL comp_adve_quick(kk, jj, ii, velocity, advrE, advrW, advrN, advrS, advrT, advrB, adveE, adveW, adveN, adveS, adveT, adveB)
 
-        IF ( splitDir == 1 ) THEN
-            DO i = 4-nfu, ii-4+nbu
-                DO j = 4, jj-3
-                    DO k = 4, kk-4
-                        mom(k,j,i,q) = mom(k,j,i,q) - dt * ( adveE(k,j,i) * densityFieldFluxStag(k,j,i,q) - adveW(k,j,i) * densityFieldFluxStag(k,j,i-1,q) - velocity(k,j,i) * densityCompressionTermStag(k,j,i,q) )
-                    END DO
-                END DO
-            END DO
-        ELSE IF ( splitDir == 2 ) THEN
-            DO i = 4, ii-3
-                DO j = 4-nrv, jj-4+nlv
-                    DO k = 4, kk-3
-                        mom(k,j,i,q) = mom(k,j,i,q) - dt * ( adveN(k,j,i) * densityFieldFluxStag(k,j,i,q) - adveS(k,j,i) * densityFieldFluxStag(k,j-1,i,q) - velocity(k,j,i) * densityCompressionTermStag(k,j,i,q) )
-                    END DO
-                END DO
-            END DO
-        ELSE IF ( splitDir == 3 ) THEN
-            DO i = 4, ii-3
-                DO j = 4, jj-3
-                    DO k = 4-nbw, kk-4+ntw
-                        mom(k,j,i,q) = mom(k,j,i,q) - dt * ( adveT(k,j,i) * densityFieldFluxStag(k,j,i,q) - adveB(k,j,i) * densityFieldFluxStag(k-1,j,i,q) - velocity(k,j,i) * densityCompressionTermStag(k,j,i,q) )
-                    END DO
-                END DO
-            END DO
-        END IF
+    !     IF ( splitDir == 1 ) THEN
+    !         DO i = 4-nfu, ii-4+nbu
+    !             DO j = 4, jj-3
+    !                 DO k = 4, kk-4
+    !                     mom(k,j,i,q) = mom(k,j,i,q) - dt * ( adveE(k,j,i) * densityFieldFluxStag(k,j,i,q) - adveW(k,j,i) * densityFieldFluxStag(k,j,i-1,q) - velocity(k,j,i) * densityCompressionTermStag(k,j,i,q) )
+    !                 END DO
+    !             END DO
+    !         END DO
+    !     ELSE IF ( splitDir == 2 ) THEN
+    !         DO i = 4, ii-3
+    !             DO j = 4-nrv, jj-4+nlv
+    !                 DO k = 4, kk-3
+    !                     mom(k,j,i,q) = mom(k,j,i,q) - dt * ( adveN(k,j,i) * densityFieldFluxStag(k,j,i,q) - adveS(k,j,i) * densityFieldFluxStag(k,j-1,i,q) - velocity(k,j,i) * densityCompressionTermStag(k,j,i,q) )
+    !                 END DO
+    !             END DO
+    !         END DO
+    !     ELSE IF ( splitDir == 3 ) THEN
+    !         DO i = 4, ii-3
+    !             DO j = 4, jj-3
+    !                 DO k = 4-nbw, kk-4+ntw
+    !                     mom(k,j,i,q) = mom(k,j,i,q) - dt * ( adveT(k,j,i) * densityFieldFluxStag(k,j,i,q) - adveB(k,j,i) * densityFieldFluxStag(k-1,j,i,q) - velocity(k,j,i) * densityCompressionTermStag(k,j,i,q) )
+    !                 END DO
+    !             END DO
+    !         END DO
+    !     END IF
 
-    END SUBROUTINE multiphase_momentum_advection
+    ! END SUBROUTINE multiphase_momentum_advection
 
     !================================================================
 
@@ -1594,73 +1473,73 @@ CONTAINS
 
     !================================================================
 
-    PURE SUBROUTINE comp_adve_quick(kk, jj, ii, adveField, &
-        advrE, advrW, advrN, advrS, advrT, advrB, &
-        adveE, adveW, adveN, adveS, adveT, adveB)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   QUICK interpolation to compute the advected veloctiy
-    !   (advectee) on staggered grid cells.
-    !   adve = advected q (advectee)
-    !   advr = advecting q (advector)
-    !   An indicator function is used to avoid if-statements within
-    !   loops.
-    !   
-    !   Source: 
-    !   T. Arrufat et al., “A mass-momentum consistent, 
-    !   Volume-of-Fluid method for incompressible flow on staggered 
-    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
-    !   doi: 10.1016/j.compfluid.2020.104785.
-    !----------------------------------------------------------------
+    ! PURE SUBROUTINE comp_adve_quick(kk, jj, ii, adveField, &
+    !     advrE, advrW, advrN, advrS, advrT, advrB, &
+    !     adveE, adveW, adveN, adveS, adveT, adveB)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !   QUICK interpolation to compute the advected veloctiy
+    ! !   (advectee) on staggered grid cells.
+    ! !   adve = advected q (advectee)
+    ! !   advr = advecting q (advector)
+    ! !   An indicator function is used to avoid if-statements within
+    ! !   loops.
+    ! !   
+    ! !   Source: 
+    ! !   T. Arrufat et al., “A mass-momentum consistent, 
+    ! !   Volume-of-Fluid method for incompressible flow on staggered 
+    ! !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
+    ! !   doi: 10.1016/j.compfluid.2020.104785.
+    ! !----------------------------------------------------------------
 
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: adveField(kk, jj, ii)
-        REAL(realk), INTENT(in) :: advrE(kk, jj, ii), advrW(kk, jj, ii)
-        REAL(realk), INTENT(in) :: advrN(kk, jj, ii), advrS(kk, jj, ii)
-        REAL(realk), INTENT(in) :: advrT(kk, jj, ii), advrB(kk, jj, ii)
-        REAL(realk), INTENT(out) :: adveE(kk, jj, ii), adveW(kk, jj, ii)
-        REAL(realk), INTENT(out) :: adveN(kk, jj, ii), adveS(kk, jj, ii)
-        REAL(realk), INTENT(out) :: adveT(kk, jj, ii), adveB(kk, jj, ii)
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
+    !     REAL(realk), INTENT(in) :: adveField(kk, jj, ii)
+    !     REAL(realk), INTENT(in) :: advrE(kk, jj, ii), advrW(kk, jj, ii)
+    !     REAL(realk), INTENT(in) :: advrN(kk, jj, ii), advrS(kk, jj, ii)
+    !     REAL(realk), INTENT(in) :: advrT(kk, jj, ii), advrB(kk, jj, ii)
+    !     REAL(realk), INTENT(out) :: adveE(kk, jj, ii), adveW(kk, jj, ii)
+    !     REAL(realk), INTENT(out) :: adveN(kk, jj, ii), adveS(kk, jj, ii)
+    !     REAL(realk), INTENT(out) :: adveT(kk, jj, ii), adveB(kk, jj, ii)
 
-        ! Loval variables
-        INTEGER(intk) :: k, j, i
-        REAL(realk) :: indE(2), indW(2), indN(2), indS(2), indT(2), indB(2)
+    !     ! Loval variables
+    !     INTEGER(intk) :: k, j, i
+    !     REAL(realk) :: indE(2), indW(2), indN(2), indS(2), indT(2), indB(2)
 
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
-                    indE(1) = merge(1.0_realk, 0.0_realk, advrE(k,j,i) >= 0.0_realk)
-                    indW(1) = merge(1.0_realk, 0.0_realk, advrW(k,j,i) >= 0.0_realk)
-                    indN(1) = merge(1.0_realk, 0.0_realk, advrN(k,j,i) >= 0.0_realk)
-                    indS(1) = merge(1.0_realk, 0.0_realk, advrS(k,j,i) >= 0.0_realk)
-                    indT(1) = merge(1.0_realk, 0.0_realk, advrT(k,j,i) >= 0.0_realk)
-                    indB(1) = merge(1.0_realk, 0.0_realk, advrB(k,j,i) >= 0.0_realk)
+    !     DO i = 3, ii-2
+    !         DO j = 3, jj-2
+    !             DO k = 3, kk-2
+    !                 indE(1) = merge(1.0_realk, 0.0_realk, advrE(k,j,i) >= 0.0_realk)
+    !                 indW(1) = merge(1.0_realk, 0.0_realk, advrW(k,j,i) >= 0.0_realk)
+    !                 indN(1) = merge(1.0_realk, 0.0_realk, advrN(k,j,i) >= 0.0_realk)
+    !                 indS(1) = merge(1.0_realk, 0.0_realk, advrS(k,j,i) >= 0.0_realk)
+    !                 indT(1) = merge(1.0_realk, 0.0_realk, advrT(k,j,i) >= 0.0_realk)
+    !                 indB(1) = merge(1.0_realk, 0.0_realk, advrB(k,j,i) >= 0.0_realk)
 
-                    indE(2) = 1.0_realk - indE(1)
-                    indW(2) = 1.0_realk - indW(1)
-                    indN(2) = 1.0_realk - indN(1)
-                    indS(2) = 1.0_realk - indS(1)
-                    indT(2) = 1.0_realk - indT(1)
-                    indB(2) = 1.0_realk - indB(1)
+    !                 indE(2) = 1.0_realk - indE(1)
+    !                 indW(2) = 1.0_realk - indW(1)
+    !                 indN(2) = 1.0_realk - indN(1)
+    !                 indS(2) = 1.0_realk - indS(1)
+    !                 indT(2) = 1.0_realk - indT(1)
+    !                 indB(2) = 1.0_realk - indB(1)
 
-                    adveE(k,j,i) = indE(1) * ( 0.75_realk * adveField(k,j,i) + 0.375_realk * adveField(k,j,i+1) - 0.125_realk * adveField(k,j,i-1) ) + &
-                                   indE(2) * ( 0.75_realk * adveField(k,j,i+1) + 0.375_realk * adveField(k,j,i) - 0.125_realk * adveField(k,j,i+2) )
-                    adveW(k,j,i) = indW(1) * ( 0.75_realk * adveField(k,j,i-1) + 0.375_realk * adveField(k,j,i) - 0.125_realk * adveField(k,j,i-2) ) + &
-                                   indW(2) * ( 0.75_realk * adveField(k,j,i) + 0.375_realk * adveField(k,j,i-1) - 0.125_realk * adveField(k,j,i+1) )
-                    adveN(k,j,i) = indN(1) * ( 0.75_realk * adveField(k,j,i) + 0.375_realk * adveField(k,j+1,i) - 0.125_realk * adveField(k,j-1,i) ) + &
-                                   indN(2) * ( 0.75_realk * adveField(k,j+1,i) + 0.375_realk * adveField(k,j,i) - 0.125_realk * adveField(k,j+2,i) )
-                    adveS(k,j,i) = indS(1) * ( 0.75_realk * adveField(k,j-1,i) + 0.375_realk * adveField(k,j,i) - 0.125_realk * adveField(k,j-2,i) ) + &
-                                   indS(2) * ( 0.75_realk * adveField(k,j,i) + 0.375_realk * adveField(k,j-1,i) - 0.125_realk * adveField(k,j+1,i) )
-                    adveT(k,j,i) = indT(1) * ( 0.75_realk * adveField(k,j,i) + 0.375_realk * adveField(k+1,j,i) - 0.125_realk * adveField(k-1,j,i) ) + &
-                                   indT(2) * ( 0.75_realk * adveField(k+1,j,i) + 0.375_realk * adveField(k,j,i) - 0.125_realk * adveField(k+2,j,i) )
-                    adveB(k,j,i) = indB(1) * ( 0.75_realk * adveField(k-1,j,i) + 0.375_realk * adveField(k,j,i) - 0.125_realk * adveField(k-2,j,i) ) + &
-                                   indB(2) * ( 0.75_realk * adveField(k,j,i) + 0.375_realk * adveField(k-1,j,i) - 0.125_realk * adveField(k+1,j,i) )
-                END DO
-            END DO
-        END DO
+    !                 adveE(k,j,i) = indE(1) * ( 0.75_realk * adveField(k,j,i) + 0.375_realk * adveField(k,j,i+1) - 0.125_realk * adveField(k,j,i-1) ) + &
+    !                                indE(2) * ( 0.75_realk * adveField(k,j,i+1) + 0.375_realk * adveField(k,j,i) - 0.125_realk * adveField(k,j,i+2) )
+    !                 adveW(k,j,i) = indW(1) * ( 0.75_realk * adveField(k,j,i-1) + 0.375_realk * adveField(k,j,i) - 0.125_realk * adveField(k,j,i-2) ) + &
+    !                                indW(2) * ( 0.75_realk * adveField(k,j,i) + 0.375_realk * adveField(k,j,i-1) - 0.125_realk * adveField(k,j,i+1) )
+    !                 adveN(k,j,i) = indN(1) * ( 0.75_realk * adveField(k,j,i) + 0.375_realk * adveField(k,j+1,i) - 0.125_realk * adveField(k,j-1,i) ) + &
+    !                                indN(2) * ( 0.75_realk * adveField(k,j+1,i) + 0.375_realk * adveField(k,j,i) - 0.125_realk * adveField(k,j+2,i) )
+    !                 adveS(k,j,i) = indS(1) * ( 0.75_realk * adveField(k,j-1,i) + 0.375_realk * adveField(k,j,i) - 0.125_realk * adveField(k,j-2,i) ) + &
+    !                                indS(2) * ( 0.75_realk * adveField(k,j,i) + 0.375_realk * adveField(k,j-1,i) - 0.125_realk * adveField(k,j+1,i) )
+    !                 adveT(k,j,i) = indT(1) * ( 0.75_realk * adveField(k,j,i) + 0.375_realk * adveField(k+1,j,i) - 0.125_realk * adveField(k-1,j,i) ) + &
+    !                                indT(2) * ( 0.75_realk * adveField(k+1,j,i) + 0.375_realk * adveField(k,j,i) - 0.125_realk * adveField(k+2,j,i) )
+    !                 adveB(k,j,i) = indB(1) * ( 0.75_realk * adveField(k-1,j,i) + 0.375_realk * adveField(k,j,i) - 0.125_realk * adveField(k-2,j,i) ) + &
+    !                                indB(2) * ( 0.75_realk * adveField(k,j,i) + 0.375_realk * adveField(k-1,j,i) - 0.125_realk * adveField(k+1,j,i) )
+    !             END DO
+    !         END DO
+    !     END DO
 
-    END SUBROUTINE comp_adve_quick
+    ! END SUBROUTINE comp_adve_quick
 
     !================================================================
 
@@ -1720,7 +1599,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE get_component_specifics(kk, jj, ii, q, u, v, w, &
-        dx, dy, dz, ddx, ddy, ddz, iStag, jStag, kStag, &
+        dx, dy, dz, ddx, ddy, ddz, i0, j0, k0, iStag, jStag, kStag, &
         deltaX, deltaY, deltaZ, veloFld)
     !----------------------------------------------------------------
     !   What it does:
@@ -1732,6 +1611,7 @@ CONTAINS
         REAL(realk), INTENT(in), OPTIONAL :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in), OPTIONAL :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in), OPTIONAL :: ddx(ii), ddy(jj), ddz(kk)
+        INTEGER(intk), INTENT(out), OPTIONAL :: i0, j0, k0
         REAL(realk), INTENT(out), OPTIONAL :: iStag, jStag, kStag
         REAL(realk), INTENT(out), OPTIONAL :: deltaX(ii), deltaY(jj), deltaZ(kk)
         REAL(realk), INTENT(out), OPTIONAL :: veloFld(kk, jj, ii)
@@ -1743,6 +1623,9 @@ CONTAINS
             IF ( PRESENT(iStag) ) iStag = 1.0_realk
             IF ( PRESENT(jStag) ) jStag = 0.0_realk
             IF ( PRESENT(kStag) ) kStag = 0.0_realk
+            IF ( PRESENT(i0) ) i0 = 1
+            IF ( PRESENT(j0) ) j0 = 0
+            IF ( PRESENT(k0) ) k0 = 0
             IF ( PRESENT(deltaX) ) deltaX = dx
             IF ( PRESENT(deltaY) ) deltaY = ddy
             IF ( PRESENT(deltaZ) ) deltaZ = ddz
@@ -1751,6 +1634,9 @@ CONTAINS
             IF ( PRESENT(iStag) ) iStag = 0.0_realk
             IF ( PRESENT(jStag) ) jStag = 1.0_realk
             IF ( PRESENT(kStag) ) kStag = 0.0_realk
+            IF ( PRESENT(i0) ) i0 = 0
+            IF ( PRESENT(j0) ) j0 = 1
+            IF ( PRESENT(k0) ) k0 = 0
             IF ( PRESENT(deltaX) ) deltaX = ddx
             IF ( PRESENT(deltaY) ) deltaY = dy
             IF ( PRESENT(deltaZ) ) deltaZ = ddz
@@ -1759,6 +1645,9 @@ CONTAINS
             IF ( PRESENT(iStag) ) iStag = 0.0_realk
             IF ( PRESENT(jStag) ) jStag = 0.0_realk
             IF ( PRESENT(kStag) ) kStag = 1.0_realk
+            IF ( PRESENT(i0) ) i0 = 0
+            IF ( PRESENT(j0) ) j0 = 0
+            IF ( PRESENT(k0) ) k0 = 1
             IF ( PRESENT(deltaX) ) deltaX = ddx
             IF ( PRESENT(deltaY) ) deltaY = ddy
             IF ( PRESENT(deltaZ) ) deltaZ = dz

@@ -30,12 +30,13 @@ MODULE multiphasecore_mod
     ! Control parameters
     LOGICAL, PROTECTED :: has_multiphase, solve_multiphase
     CHARACTER(len=6), PROTECTED :: test_multiphase
+    CHARACTER(len=6), PROTECTED :: mom_multiphase
 
     ! Physical parameters
     REAL(realk), PROTECTED :: rho1, rho2
     REAL(realk), PROTECTED :: gmol1, gmol2
 
-    PUBLIC :: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase, test_multiphase, rho1, rho2, gmol1, gmol2
+    PUBLIC :: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase, test_multiphase, mom_multiphase, rho1, rho2, gmol1, gmol2
 
 CONTAINS
 
@@ -48,12 +49,10 @@ CONTAINS
         TYPE(config_t) :: multiphaseconf
         INTEGER(intk), PARAMETER :: unitsd(7) = [1, -3, 0, 0, 0, 0, 0]
         INTEGER(intk), PARAMETER :: unitsvff(7) = [0, 0, 0, 0, 0, 0, 0]
-        INTEGER(intk), PARAMETER :: unitsphi(7) = [0, 1, 0, 0, 0, 0, 0]
         INTEGER(intk), PARAMETER :: unitsnorm(7) = [0, 0, 0, 0, 0, 0, 0]
         INTEGER(intk), PARAMETER :: unitsalpha(7) = [0, 1, 0, 0, 0, 0, 0]
         CHARACTER(len=*), PARAMETER :: descriptiond = "Density"
         CHARACTER(len=*), PARAMETER :: descriptionvff = "Volume fraction field"
-        CHARACTER(len=*), PARAMETER :: descriptionphi = "Level set function"
         CHARACTER(len=*), PARAMETER :: descriptionnorm = "Norm"
         CHARACTER(len=*), PARAMETER :: descriptionalpha = "Alpha"
 
@@ -74,6 +73,7 @@ CONTAINS
         ! Read steering input
         CALL multiphaseconf%get_value("/solve", solve_multiphase, .TRUE.)
         CALL multiphaseconf%get_value("/test", test_multiphase, "none")
+        CALL multiphaseconf%get_value("/momentum", mom_multiphase, "RUDMAN")
 
         ! Read densities
         CALL multiphaseconf%get_value("/rho1", rho1, 1.0_realk)
@@ -94,6 +94,12 @@ CONTAINS
         ! Initialize multiphase fields
         CALL set_field("D", description=descriptiond , units=unitsd, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("DiStag", description=descriptiond , units=unitsd, &
+            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("DjStag", description=descriptiond , units=unitsd, &
+            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("DkStag", description=descriptiond , units=unitsd, &
+            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("VFF", description=descriptionvff , units=unitsvff, &
             dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("VFFiStag", description=descriptionvff , units=unitsvff, &
@@ -102,15 +108,11 @@ CONTAINS
         dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("VFFkStag", description=descriptionvff , units=unitsvff, &
         dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("PHI", description=descriptionphi , units=unitsphi, &
-            dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("NORMX", description=descriptionnorm , units=unitsnorm, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("NORMY", description=descriptionnorm , units=unitsnorm, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("NORMZ", description=descriptionnorm , units=unitsnorm, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("ALPHA", description=descriptionalpha , units=unitsalpha, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("NORMXiStag", description=descriptionnorm , units=unitsnorm, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
@@ -118,15 +120,25 @@ CONTAINS
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("NORMZiStag", description=descriptionnorm , units=unitsnorm, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("ALPHAiStag", description=descriptionalpha , units=unitsalpha, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("NORMXjStag", description=descriptionnorm , units=unitsnorm, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("NORMYjStag", description=descriptionnorm , units=unitsnorm, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("NORMZjStag", description=descriptionnorm , units=unitsnorm, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("NORMXkStag", description=descriptionnorm , units=unitsnorm, &
+            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("NORMYkStag", description=descriptionnorm , units=unitsnorm, &
+            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("NORMZkStag", description=descriptionnorm , units=unitsnorm, &
+            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("ALPHA", description=descriptionalpha , units=unitsalpha, &
+            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("ALPHAiStag", description=descriptionalpha , units=unitsalpha, &
+            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("ALPHAjStag", description=descriptionalpha , units=unitsalpha, &
+            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("ALPHAkStag", description=descriptionalpha , units=unitsalpha, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
 
     END SUBROUTINE init_multiphasecore

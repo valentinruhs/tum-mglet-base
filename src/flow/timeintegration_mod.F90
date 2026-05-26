@@ -101,8 +101,7 @@ CONTAINS
                 CALL update_velocity(u, v, w, vff, itstep, dt)
             END IF
 
-            CALL multiphase_solve(uo, vo, wo, u, v, w, ut, vt, wt, &
-                vff, p, g, d, dtrki*dt, itstep)
+            CALL multiphase_solve(u, v, w, vff, p, g, d, dtrki*dt, itstep)
             
             ! CALL connect(layers=2, s1=vff, corners=.TRUE.)
         ELSE 
