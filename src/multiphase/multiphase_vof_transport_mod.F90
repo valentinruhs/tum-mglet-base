@@ -515,10 +515,12 @@ CONTAINS
         LOGICAL, ALLOCATABLE :: isInterfaceStag(:,:,:)
         LOGICAL, ALLOCATABLE :: isNearInterface(:,:,:)
         LOGICAL, ALLOCATABLE :: isNearInterfaceStag(:,:,:)
-        REAL(realk), ALLOCATABLE :: vffFlux(:,:,:), complVffFlux(:,:,:), mom(:,:,:), cWY(:,:,:)
-        REAL(realk), ALLOCATABLE :: advrE(:,:,:), advrN(:,:,:), advrT(:,:,:)
+        REAL(realk), ALLOCATABLE :: vffFlux(:,:,:), complVffFlux(:,:,:), mom(:,:,:), cWY(:,:,:), cWYStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: advrE(:,:,:), advrN(:,:,:), advrT(:,:,:), advrSplitDir(:,:,:,:)
+        REAL(realk), ALLOCATABLE :: uNew(:,:,:), vNew(:,:,:), wNew(:,:,:)
+        REAL(realk), ALLOCATABLE :: mom4D(:,:,:,:), vffStag4D(:,:,:,:)
         
-        REAL(realk), PARAMETER :: tol = 1.0E-8_realk
+        REAL(realk), PARAMETER :: tol = 1.0E-12_realk
 
         CALL get_field(dx_f, "DX"); CALL get_field(dy_f, "DY"); CALL get_field(dz_f, "DZ")
         CALL get_field(ddx_f, "DDX"); CALL get_field(ddy_f, "DDY"); CALL get_field(ddz_f, "DDZ")
@@ -578,9 +580,16 @@ CONTAINS
             IF (.NOT. ALLOCATED(complVffFlux))        ALLOCATE(complVffFlux(kk,jj,ii))
             IF (.NOT. ALLOCATED(mom))                 ALLOCATE(mom(kk,jj,ii))
             IF (.NOT. ALLOCATED(cWY))                 ALLOCATE(cWY(kk,jj,ii))
+            IF (.NOT. ALLOCATED(cWYStag))             ALLOCATE(cWYStag(kk,jj,ii))
             IF (.NOT. ALLOCATED(advrE))               ALLOCATE(advrE(kk,jj,ii))
             IF (.NOT. ALLOCATED(advrN))               ALLOCATE(advrN(kk,jj,ii))
             IF (.NOT. ALLOCATED(advrT))               ALLOCATE(advrT(kk,jj,ii))
+            IF (.NOT. ALLOCATED(advrSplitDir))        ALLOCATE(advrSplitDir(kk,jj,ii,3))
+            IF (.NOt. ALLOCATED(uNew))                ALLOCATE(uNew(kk,jj,ii))
+            IF (.NOt. ALLOCATED(vNew))                ALLOCATE(vNew(kk,jj,ii))
+            IF (.NOt. ALLOCATED(wNew))                ALLOCATE(wNew(kk,jj,ii))
+            IF (.NOt. ALLOCATED(mom4D))               ALLOCATE(mom4D(kk,jj,ii,3))
+            IF (.NOt. ALLOCATED(vffStag4D))           ALLOCATE(vffStag4D(kk,jj,ii,3))
             
             IF ( splitting_multiphase == "component-wise" ) THEN
 
@@ -598,16 +607,19 @@ CONTAINS
                     CALL interface_reconstruction_wrapper(kk, jj, ii, vffStag, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
                     CALL comp_material_property_field(kk, jj, ii, vffStag, rho1, rho2, dStag)
                     CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
-                    CALL comp_cWY(kk, jj, ii, vffStag, cWY)
+                    CALL comp_cWY(kk, jj, ii, vffStag, cWYStag)
                     CALL comp_advr_centr(kk, jj, ii, q, u, v, w, advrE, advrN, advrT)
+                    advrSplitDir(:,:,:,1) = advrE
+                    advrSplitDir(:,:,:,2) = advrN
+                    advrSplitDir(:,:,:,3) = advrT
 
                     DO l = 1, 3
 
                         splitDir = advSeq(l)
                                                 
-                        CALL comp_flux_stag(kk, jj, ii, q, splitDir, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                        CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, advrE, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
-                        CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWY, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
+                        CALL comp_flux_stag(kk, jj, ii, q, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
+                        CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWYStag, advrSplitDir(:,:,:,q), dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
+                        CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWYStag, advrE, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
 
                     END DO
                     
@@ -662,13 +674,47 @@ CONTAINS
                 CALL get_advection_sequence(itstep, advSeq)
                 CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
 
+                DO q = 1, 3
+
+                    CALL staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
+                    CALL interface_reconstruction_wrapper(kk, jj, ii, vffStag, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
+                    CALL comp_material_property_field(kk, jj, ii, vffStag, rho1, rho2, dStag)
+                    CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
+
+                    vffStag4D(:,:,:,q) = vffStag
+                    mom4D(:,:,:,q) = mom
+                    
+                END DO
+
+                CALL comp_cWY(kk, jj, ii, vff, cWY)
+
                 DO l = 1, 3
 
                     splitDir = advSeq(l)
 
                     DO q = 1, 3
 
+                        vffStag = vffStag4D(:,:,:,q)
+                        mom = mom4D(:,:,:,q)
+
+                        CALL comp_cWY(kk, jj, ii, vffStag, cWYStag)
+                        CALL comp_flux_stag(kk, jj, ii, q, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
+                        CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWYStag, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
+                        CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWYStag, advrE, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
+
+                        IF ( q == 1 ) THEN
+                            CALL comp_velocity(kk, jj, ii, q, vffStag, mom, u)
+                        ELSE IF ( q == 2 ) THEN
+                            CALL comp_velocity(kk, jj, ii, q, vffStag, mom, v)
+                        ELSE IF ( q == 3 ) THEN
+                            CALL comp_velocity(kk, jj, ii, q, vffStag, mom, w)
+                        END IF
+
                     END DO
+
+                    CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+                    CALL comp_flux_cent(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                    CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, w, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
 
                 END DO
 
@@ -910,7 +956,7 @@ CONTAINS
 
         ! Local variables
         INTEGER(intk) :: k, j, i
-
+        return
         DO i = 1, ii
             DO j = 1, jj
                 DO k = 1, kk
@@ -941,8 +987,8 @@ CONTAINS
 
         ! Local variables
         INTEGER(intk) :: k, j, i
-        REAL(realk) :: div
-        LOGICAL :: isSolenoidal(kk, jj, ii)
+        REAL(realk) :: div(kk, jj, ii)
+        LOGICAL :: isSolenoidal
 
         isSolenoidal = .TRUE.
 
@@ -950,20 +996,17 @@ CONTAINS
             DO j = 3, jj-2
                 DO k = 3, kk-2
 
-                    div = ( u(k,j,i+1) - u(k,j,i) ) / dx(i) + &
-                          ( v(k,j+1,i) - v(k,j,i) ) / dy(j) + &
-                          ( w(k+1,j,i) - w(k,j,i) ) / dz(k)
-
-                    IF ( div > tol ) THEN
-                        isSolenoidal(k,j,i) = .FALSE.
-                    END IF
+                    div(k,j,i) = ( u(k,j,i+1) - u(k,j,i) ) / dx(i) + &
+                                 ( v(k,j+1,i) - v(k,j,i) ) / dy(j) + &
+                                 ( w(k+1,j,i) - w(k,j,i) ) / dz(k)
 
                 END DO
             END DO
         END DO
 
-        IF ( ANY(.NOT. isSolenoidal) ) THEN
-            WRITE(*,*) "Warning: velocity field is not solenoidal!"
+        IF ( SUM(div) > tol ) THEN
+            isSolenoidal = .FALSE.
+            WRITE(*,*) "Warning: velocity field is not solenoidal! Max. val. div: ", maxval(div)
         END IF
 
     END SUBROUTINE check_solenoidality

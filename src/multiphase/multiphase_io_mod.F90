@@ -196,7 +196,7 @@ CONTAINS
                         DO k = 2, kk-1
                             u(k,j,i) = ( psi(k,j,i) - psi(k,j-1,i) ) / ddy(j)
                             v(k,j,i) = - ( psi(k,j,i) - psi(k,j,i-1) ) / ddx(i)
-                            w(k,j,i) = 0.0_realk 
+                            w(k,j,i) = 0.0_realk
                         END DO
                     END DO
                 END DO   

@@ -33,7 +33,7 @@
     	"solve": true,
 	"test": "CylAdC",
 	"splitting" : "component-wise",
-	"rho1" : 1.0,
+	"rho1" : 1000.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.000001,
 	"gmol2" : 0.000001
