@@ -22,27 +22,12 @@ MODULE multiphase_vof_transport_mod
     USE rungekutta_mod, ONLY: rk_2n_t
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
     USE multiphase_material_mod, ONLY: comp_material_property_field
-    USE multiphasecore_mod, ONLY: mom_multiphase
+    USE multiphasecore_mod, ONLY: splitting_multiphase
     
     IMPLICIT NONE
     PRIVATE 
 
     PUBLIC :: init_multiphase_vof_transport, finish_multiphase_vof_transport, multiphase_solve
-
-    ! INTERFACE compute_normal_strain_rate
-    !     MODULE PROCEDURE comp_normal_strain_rate_pres
-    !     MODULE PROCEDURE comp_normal_strain_rate_stag
-    ! END INTERFACE
-
-    ! INTERFACE update_field
-    !     MODULE PROCEDURE update_field_pres
-    !     MODULE PROCEDURE update_field_stag
-    ! END INTERFACE
-
-    INTERFACE comp_flux
-        MODULE PROCEDURE comp_flux_pres
-        MODULE PROCEDURE comp_flux_stag
-    END INTERFACE
 
 CONTAINS
 
@@ -72,157 +57,7 @@ CONTAINS
 
     !================================================================
 
-    ! SUBROUTINE comp_normal_strain_rate_pres(kk, jj, ii, splitDir, &
-    ! u, v, w, ddx, ddy, ddz, strainRate)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !   Computation of the normal strain rates dependend on the 
-    ! !   directional split. 
-    ! !----------------------------------------------------------------
-
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
-    !     INTEGER(intk), INTENT(in) :: splitDir
-    !     REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-    !     REAL(realk), INTENT(out) :: strainRate(kk, jj, ii)
-
-    !     ! Local variables
-    !     INTEGER(intk) :: k, j, i
-
-    !     IF ( splitDir == 1 ) THEN
-    !         DO i = 3, ii-2
-    !             DO j = 3, jj-2
-    !                 DO k = 3, kk-2
-    !                     strainRate(k,j,i) = ( u(k,j,i) - u(k,j,i-1) ) / ddx(i)
-    !                 END DO
-    !             END DO
-    !         END DO
-    !     ELSE IF ( splitDir == 2 ) THEN
-    !         DO i = 3, ii-2
-    !             DO j = 3, jj-2
-    !                 DO k = 3, kk-2
-    !                     strainRate(k,j,i) = ( v(k,j,i) - v(k,j-1,i) ) / ddy(j)
-    !                 END DO
-    !             END DO
-    !         END DO
-    !     ELSE IF ( splitDir == 3 ) THEN
-    !         DO i = 3, ii-2
-    !             DO j = 3, jj-2
-    !                 DO k = 3, kk-2
-    !                     strainRate(k,j,i) = ( w(k,j,i) - w(k-1,j,i) ) / ddz(k)
-    !                 END DO
-    !             END DO
-    !         END DO
-    !     END IF
-
-    ! END SUBROUTINE comp_normal_strain_rate_pres
-
-    ! !================================================================
-
-    ! SUBROUTINE comp_normal_strain_rate_stag(kk, jj, ii, q, splitDir, &
-    !     u, v, w, dx, dy, dz, ddx, ddy, ddz, strainRate)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !   Computation of the normal strain rates dependend on the 
-    ! !   directional split for the three staggered grids.
-    ! !----------------------------------------------------------------
-
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii, q, splitDir
-    !     REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
-    !     REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-    !     REAL(realk), INTENT(out) :: strainRate(kk, jj, ii, 3)
-
-    !     ! Local variables
-    !     INTEGER(intk) :: k, j, i
-    !     REAL(realk) :: advrE(kk, jj, ii), advrW(kk, jj, ii)
-    !     REAL(realk) :: advrN(kk, jj, ii), advrS(kk, jj, ii)
-    !     REAL(realk) :: advrT(kk, jj, ii), advrB(kk, jj, ii)
-    !     REAL(realk) :: iStag, jStag, kStag
-    !     REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
-
-    !     CALL get_component_specifics(kk, jj, ii, q, dx=dx, dy=dy, dz=dz, &
-    !         ddx=ddx, ddy=ddy, ddz=ddz, iStag=iStag, jStag=jStag, kStag=kStag, &
-    !         deltaX=deltaX, deltaY=deltaY, deltaZ=deltaZ)
-    !     CALL comp_advr_centr(kk, jj, ii, u, v, w, iStag, jStag, kStag, &
-    !         advrE, advrW, advrN, advrS, advrT, advrB)
-
-    !     IF ( splitDir == 1 ) THEN
-    !         DO i = 3, ii-2
-    !             DO j = 3, jj-2
-    !                 DO k = 3, kk-2
-    !                     strainRate(k,j,i,q) = ( advrE(k,j,i) - advrW(k,j,i) ) / deltaX(i)
-    !                 END DO
-    !             END DO
-    !         END DO
-    !     ELSE IF ( splitDir == 2 ) THEN
-    !         DO i = 3, ii-2
-    !             DO j = 3, jj-2
-    !                 DO k = 3, kk-2
-    !                     strainRate(k,j,i,q) = ( advrN(k,j,i) - advrS(k,j,i) ) / deltaY(j)
-    !                 END DO
-    !             END DO
-    !         END DO
-    !     ELSE IF ( splitDir == 3 ) THEN 
-    !         DO i = 3, ii-2
-    !             DO j = 3, jj-2
-    !                 DO k = 3, kk-2
-    !                     strainRate(k,j,i,q) = ( advrT(k,j,i) - advrB(k,j,i) ) / deltaZ(k)                 
-    !                 END DO
-    !             END DO
-    !         END DO
-    !     END IF
-
-    ! END SUBROUTINE comp_normal_strain_rate_stag
-    
-    !================================================================
-
-    SUBROUTINE comp_cWY(kk, jj, ii, vff, cWY)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   Computes the nondirectional compression coefficient c for 
-    !   Weymouth and Yue's advection scheme.
-    !
-    !   Source:
-    !   T. Arrufat et al., “A mass-momentum consistent, 
-    !   Volume-of-Fluid method for incompressible flow on staggered 
-    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
-    !   doi: 10.1016/j.compfluid.2020.104785.
-    !   
-    !   G. D. Weymouth and D. K.-P. Yue, “Conservative 
-    !   Volume-of-Fluid method for free-surface simulations on 
-    !   Cartesian-grids,” Journal of Computational Physics, vol. 229,
-    !   no. 8, pp. 2853–2865, Apr. 2010, 
-    !   doi: 10.1016/j.jcp.2009.12.018.
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(out) :: cWY(kk, jj, ii)
-
-        ! Local variables
-        INTEGER(intk) :: k, j, i
-
-        DO i = 1, ii
-            DO j = 1, jj
-                DO k = 1, kk
-                    IF ( vff(k,j,i) > 0.5_realk ) THEN
-                        cWY(k,j,i) = 1.0_realk
-                    ELSE
-                        cWY(k,j,i) = 0.0_realk
-                    END IF
-                END DO
-            END DO
-        END DO
-
-    END SUBROUTINE comp_cWY
-
-    !================================================================
-
-    SUBROUTINE comp_flux_pres(kk, jj, ii, splitDir, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, fieldFlux)
+    SUBROUTINE comp_flux_cent(kk, jj, ii, splitDir, field, isInterface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, fieldFlux)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the volume fraction fluxes depending on the current
@@ -422,7 +257,7 @@ CONTAINS
             END DO
         END IF
 
-    END SUBROUTINE comp_flux_pres
+    END SUBROUTINE comp_flux_cent
 
     !================================================================
 
@@ -595,237 +430,34 @@ CONTAINS
     END SUBROUTINE comp_flux_stag
 
     !================================================================
-
-    ! SUBROUTINE update_field_pres(kk, jj, ii, splitDir, flux, comprTerm, & 
-    !         dt, nfro, nbac, nrgt, nlft, nbot, ntop, fld)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !   Update the input field with corresponding fluxes and 
-    ! !   compression term.
-    ! !----------------------------------------------------------------
-
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
-    !     INTEGER(intk), INTENT(in) :: splitDir
-    !     REAL(realk), INTENT(in) :: flux(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: comprTerm(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: dt
-    !     INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
-    !     REAL(realk), INTENT(inout) :: fld(kk, jj, ii)
-
-    !     ! Local variables
-    !     INTEGER(intk) :: k, j, i
-    !     INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
-
-    !     nfu = 0
-    !     nbu = 0
-    !     nrv = 0
-    !     nlv = 0
-    !     nbw = 0
-    !     ntw = 0
-
-    !     ! CON = 7
-    !     IF (nbac == 7) nbu = 1
-    !     IF (nlft == 7) nlv = 1
-    !     IF (ntop == 7) ntw = 1
-
-    !     ! OP1 = 3
-    !     IF (nfro == 3) nfu = 1
-    !     IF (nbac == 3) nbu = 1
-    !     IF (nrgt == 3) nrv = 1
-    !     IF (nlft == 3) nlv = 1
-    !     IF (nbot == 3) nbw = 1
-    !     IF (ntop == 3) ntw = 1
-        
-    !     IF ( splitDir == 1 ) THEN 
-    !         DO i = 3-nfu, ii-3+nbu
-    !             DO j = 3, jj-2
-    !                 DO k = 3, kk-2
-    !                     fld(k,j,i) = fld(k,j,i) + dt * ( flux(k,j,i-1) - flux(k,j,i) + comprTerm(k,j,i) )
-    !                 END DO 
-    !             END DO 
-    !         END DO
-    !     ELSEIF ( splitDir == 2 ) THEN
-    !         DO i = 3, ii-2
-    !             DO j = 3-nrv, jj-3+nlv
-    !                 DO k = 3, kk-2
-    !                     fld(k,j,i) = fld(k,j,i) + dt * ( flux(k,j-1,i) - flux(k,j,i) + comprTerm(k,j,i) )
-    !                 END DO 
-    !             END DO 
-    !         END DO
-    !     ELSEIF ( splitDir == 3 ) THEN
-    !         DO i = 3, ii-2
-    !             DO j = 3, jj-2
-    !                 DO k = 3-nbw, kk-3+ntw
-    !                     fld(k,j,i) = fld(k,j,i) + dt * ( flux(k-1,j,i) - flux(k,j,i) + comprTerm(k,j,i) )
-    !                 END DO 
-    !             END DO 
-    !         END DO
-    !     END IF
-
-    ! END SUBROUTINE update_field_pres
-
-    ! !================================================================
-
-    ! SUBROUTINE update_field_stag(kk, jj, ii, q, splitDir, flux, comprTerm, & 
-    !         dt, nfro, nbac, nrgt, nlft, nbot, ntop, fld)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !   Update the input field with corresponding fluxes and 
-    ! !   compression term for the three staggered girds.
-    ! !----------------------------------------------------------------
-
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
-    !     INTEGER(intk), INTENT(in) :: q
-    !     INTEGER(intk), INTENT(in) :: splitDir
-    !     REAL(realk), INTENT(in) :: flux(kk, jj, ii, 3)
-    !     REAL(realk), INTENT(in) :: comprTerm(kk, jj, ii, 3)
-    !     REAL(realk), INTENT(in) :: dt
-    !     INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
-    !     REAL(realk), INTENT(inout) :: fld(kk, jj, ii, 3)
-
-    !     ! Local variables
-    !     INTEGER(intk) :: k, j, i
-    !     INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
-
-    !     nfu = 0
-    !     nbu = 0
-    !     nrv = 0
-    !     nlv = 0
-    !     nbw = 0
-    !     ntw = 0
-
-    !     ! CON = 7
-    !     IF (nbac == 7) nbu = 1
-    !     IF (nlft == 7) nlv = 1
-    !     IF (ntop == 7) ntw = 1
-
-    !     ! OP1 = 3
-    !     IF (nfro == 3) nfu = 1
-    !     IF (nbac == 3) nbu = 1
-    !     IF (nrgt == 3) nrv = 1
-    !     IF (nlft == 3) nlv = 1
-    !     IF (nbot == 3) nbw = 1
-    !     IF (ntop == 3) ntw = 1
-        
-    !     IF ( splitDir == 1 ) THEN 
-    !         DO i = 3-nfu, ii-3+nbu
-    !             DO j = 3, jj-2
-    !                 DO k = 3, kk-2
-    !                     fld(k,j,i,q) = fld(k,j,i,q) + dt * ( flux(k,j,i-1,q) - flux(k,j,i,q) + comprTerm(k,j,i,q) )
-    !                 END DO 
-    !             END DO 
-    !         END DO
-    !     ELSEIF ( splitDir == 2 ) THEN
-    !         DO i = 3, ii-2
-    !             DO j = 3-nrv, jj-3+nlv
-    !                 DO k = 3, kk-2
-    !                     fld(k,j,i,q) = fld(k,j,i,q) + dt * ( flux(k,j-1,i,q) - flux(k,j,i,q) + comprTerm(k,j,i,q) )
-    !                 END DO 
-    !             END DO 
-    !         END DO
-    !     ELSEIF ( splitDir == 3 ) THEN
-    !         DO i = 3, ii-2
-    !             DO j = 3, jj-2
-    !                 DO k = 3-nbw, kk-3+ntw
-    !                     fld(k,j,i,q) = fld(k,j,i,q) + dt * ( flux(k-1,j,i,q) - flux(k,j,i,q) + comprTerm(k,j,i,q) )
-    !                 END DO 
-    !             END DO 
-    !         END DO
-    !     END IF
-
-    ! END SUBROUTINE update_field_stag
-
-    ! !================================================================
-
-    ! SUBROUTINE clip_volume_fraction_field(kk, ii, jj, vff, tol)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !   This subroutine ensures that the volume fraction field vff 
-    ! !   stays within its bounds of [0,1].
-    ! !----------------------------------------------------------------
-
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
-    !     REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: tol
-
-    !     ! Local variables
-    !     INTEGER(intk) :: k, j, i
-        
-    !     DO i = 3, ii-2
-    !         DO j = 3, jj-2
-    !             DO k = 3, kk-2
-    !                 IF ( vff(k,j,i) < tol ) THEN
-    !                     vff(k,j,i) = 0.0_realk
-    !                 ELSE IF ( vff(k,j,i) > 1.0_realk - tol ) THEN
-    !                     vff(k,j,i) = 1.0_realk
-    !                 END IF
-    !             END DO
-    !         END DO
-    !     END DO
-
-    ! END SUBROUTINE clip_volume_fraction_field
-
-    ! !================================================================
-
-    ! SUBROUTINE compute_density_flux(kk, jj, ii, q, flux, fluxComp, rho1, rho2, densityFlux)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !   The subroutine computes the density fluxes using the volume
-    ! !   fraction field fluxes and their complements.
-    ! !----------------------------------------------------------------
-
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
-    !     INTEGER(intk), INTENT(in) :: q
-    !     REAL(realk), INTENT(in) :: flux(kk, jj, ii, 3), fluxComp(kk, jj, ii, 3)
-    !     REAL(realk), INTENT(in) :: rho1, rho2
-    !     REAL(realk), INTENT(inout) :: densityFlux(kk, jj, ii, 3)
-
-    !     ! Local variables
-    !     INTEGER(intk) :: k, j, i
-        
-    !     DO i = 1, ii
-    !         DO j = 1, jj
-    !             DO k = 1, kk
-    !                 densityFlux(k,j,i,q) = rho1 * flux(k,j,i,q) + rho2 * fluxComp(k,j,i,q)
-    !             END DO
-    !         END DO
-    !     END DO
-
-    ! END SUBROUTINE compute_density_flux
-
-    ! !================================================================
     
-    ! SUBROUTINE get_advection_sequence(iteration, advSeq)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !   
-    ! !----------------------------------------------------------------
+    PURE SUBROUTINE get_advection_sequence(iteration, advSeq)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
 
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: iteration
-    !     INTEGER(intk), INTENT(inout) :: advSeq(3)
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: iteration
+        INTEGER(intk), INTENT(inout) :: advSeq(3)
 
-    !     ! Local variables
-    !     INTEGER(intk) :: permutationIndex
+        ! Local variables
+        INTEGER(intk) :: permutationIndex
 
-    !     ! permutationIndex only changes in a new time-step
-    !     permutationIndex = mod(iteration-1, 3)
+        ! permutationIndex only changes in a new time-step
+        permutationIndex = mod(iteration-1, 3)
 
-    !     ! Select permutation of split advection
-    !     SELECT CASE (permutationIndex)
-    !         CASE (0)
-    !             advSeq = [1, 2, 3]
-    !         CASE (1)
-    !             advSeq = [3, 1, 2]
-    !         CASE (2)
-    !             advSeq = [2, 3, 1]
-    !     END SELECT
+        ! Select permutation of split advection
+        SELECT CASE (permutationIndex)
+            CASE (0)
+                advSeq = [1, 2, 3]
+            CASE (1)
+                advSeq = [3, 1, 2]
+            CASE (2)
+                advSeq = [2, 3, 1]
+        END SELECT
 
-    ! END SUBROUTINE get_advection_sequence
+    END SUBROUTINE get_advection_sequence
 
     !================================================================
 
@@ -873,7 +505,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: alphaiStag(:,:,:), alphajStag(:,:,:), alphakStag(:,:,:)
 
         INTEGER(intk) :: i, igrid
-        INTEGER(intk) :: kk, jj, ii, q
+        INTEGER(intk) :: kk, jj, ii, q, advSeq(3), l, splitDir
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
         REAL(realk), ALLOCATABLE :: vffStag(:,:,:)
         REAL(realk), ALLOCATABLE :: dStag(:,:,:)
@@ -950,10 +582,12 @@ CONTAINS
             IF (.NOT. ALLOCATED(advrN))               ALLOCATE(advrN(kk,jj,ii))
             IF (.NOT. ALLOCATED(advrT))               ALLOCATE(advrT(kk,jj,ii))
             
-            IF ( mom_multiphase == "RUDMAN" ) THEN
+            IF ( splitting_multiphase == "component-wise" ) THEN
 
+                CALL check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz, tol)
+                CALL get_advection_sequence(itstep, advSeq)
                 CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
-                
+
                 DO q = 1, 3
                     
                     vffStag = 0.0_realk; normxStag = 0.0_realk; normyStag = 0.0_realk; normzStag = 0.0_realk
@@ -966,51 +600,17 @@ CONTAINS
                     CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
                     CALL comp_cWY(kk, jj, ii, vffStag, cWY)
                     CALL comp_advr_centr(kk, jj, ii, q, u, v, w, advrE, advrN, advrT)
-                    
-                    IF ( MOD(itstep, 3) == 0 ) THEN ! z, x, y
-                        
-                        CALL comp_flux(kk, jj, ii, q, 3, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                        CALL adv_vof(kk, jj, ii, 3, vffFlux, cWY, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
-                        CALL adv_mom(kk, jj, ii, 3, vffStag, vffFlux, complVffFlux, cWY, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
-                        
-                        CALL comp_flux(kk, jj, ii, q, 1, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                        CALL adv_vof(kk, jj, ii, 1, vffFlux, cWY, advrE, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
-                        CALL adv_mom(kk, jj, ii, 1, vffStag, vffFlux, complVffFlux, cWY, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
 
-                        CALL comp_flux(kk, jj, ii, q, 2, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                        CALL adv_vof(kk, jj, ii, 2, vffFlux, cWY, advrN, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
-                        CALL adv_mom(kk, jj, ii, 2, vffStag, vffFlux, complVffFlux, cWY, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
+                    DO l = 1, 3
 
-                    ELSE IF ( MOD(itstep, 3) == 1 ) THEN ! y, z, x
-                        
-                        CALL comp_flux(kk, jj, ii, q, 2, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                        CALL adv_vof(kk, jj, ii, 2, vffFlux, cWY, advrN, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
-                        CALL adv_mom(kk, jj, ii, 2, vffStag, vffFlux, complVffFlux, cWY, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
-
-                        CALL comp_flux(kk, jj, ii, q, 3, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                        CALL adv_vof(kk, jj, ii, 3, vffFlux, cWY, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
-                        CALL adv_mom(kk, jj, ii, 3, vffStag, vffFlux, complVffFlux, cWY, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
-                        
-                        CALL comp_flux(kk, jj, ii, q, 1, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                        CALL adv_vof(kk, jj, ii, 1, vffFlux, cWY, advrE, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
-                        CALL adv_mom(kk, jj, ii, 1, vffStag, vffFlux, complVffFlux, cWY, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
-
-                    ELSE IF ( MOD(itstep, 3) == 2 ) THEN ! x, y, z
+                        splitDir = advSeq(l)
                                                 
-                        CALL comp_flux(kk, jj, ii, q, 1, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                        CALL adv_vof(kk, jj, ii, 1, vffFlux, cWY, advrE, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
-                        CALL adv_mom(kk, jj, ii, 1, vffStag, vffFlux, complVffFlux, cWY, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
+                        CALL comp_flux_stag(kk, jj, ii, q, splitDir, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
+                        CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, advrE, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
+                        CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWY, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
 
-                        CALL comp_flux(kk, jj, ii, q, 2, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                        CALL adv_vof(kk, jj, ii, 2, vffFlux, cWY, advrN, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
-                        CALL adv_mom(kk, jj, ii, 2, vffStag, vffFlux, complVffFlux, cWY, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
-
-                        CALL comp_flux(kk, jj, ii, q, 3, vff, isInterfaceStag, u, v, w, alphaStag, dtrki, normxStag, normyStag, normzStag, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                        CALL adv_vof(kk, jj, ii, 3, vffFlux, cWY, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
-                        CALL adv_mom(kk, jj, ii, 3, vffStag, vffFlux, complVffFlux, cWY, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
-
-                    END IF
-
+                    END DO
+                    
                     IF ( q == 1 ) THEN
                         CALL comp_velocity(kk, jj, ii, q, vffStag, mom, u)
                     ELSE IF ( q == 2 ) THEN
@@ -1043,58 +643,35 @@ CONTAINS
                     END IF
 
                 END DO
-                
-                cWY = 0.0_realk
 
                 CALL comp_cWY(kk, jj, ii, vff, cWY)
 
-                IF ( MOD(itstep, 3) == 0 ) THEN ! z, x, y
+                DO l = 1, 3
+
+                    splitDir = advSeq(l)
+
+                    CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+                    CALL comp_flux_cent(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                    CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, w, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
+
+                END DO
+
+            ELSE IF ( splitting_multiphase == "direction-wise" ) THEN
                 
-                    CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
-                    CALL comp_flux(kk, jj, ii, 3_intk, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                    CALL adv_vof(kk, jj, ii, 3_intk, vffFlux, cWY, w, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
-                    
-                    CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
-                    CALL comp_flux(kk, jj, ii, 1_intk, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                    CALL adv_vof(kk, jj, ii, 1_intk, vffFlux, cWY, u, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
+                CALL check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz, tol)
+                CALL get_advection_sequence(itstep, advSeq)
+                CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
 
-                    CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
-                    CALL comp_flux(kk, jj, ii, 2_intk, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                    CALL adv_vof(kk, jj, ii, 2_intk, vffFlux, cWY, v, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
+                DO l = 1, 3
 
-                ELSE IF ( MOD(itstep, 3) == 1 ) THEN ! y, z, x
-                    
-                    CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
-                    CALL comp_flux(kk, jj, ii, 2_intk, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                    CALL adv_vof(kk, jj, ii, 2_intk, vffFlux, cWY, v, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
+                    splitDir = advSeq(l)
 
-                    CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
-                    CALL comp_flux(kk, jj, ii, 3_intk, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                    CALL adv_vof(kk, jj, ii, 3_intk, vffFlux, cWY, w, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
-                    
-                    CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
-                    CALL comp_flux(kk, jj, ii, 1_intk, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                    CALL adv_vof(kk, jj, ii, 1_intk, vffFlux, cWY, u, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
+                    DO q = 1, 3
 
-                ELSE IF ( MOD(itstep, 3) == 2 ) THEN ! x, y, z
-                    
-                    CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
-                    CALL comp_flux(kk, jj, ii, 1_intk, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                    CALL adv_vof(kk, jj, ii, 1_intk, vffFlux, cWY, u, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
+                    END DO
 
-                    CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
-                    CALL comp_flux(kk, jj, ii, 2_intk, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                    CALL adv_vof(kk, jj, ii, 2_intk, vffFlux, cWY, v, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
+                END DO
 
-                    CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
-                    CALL comp_flux(kk, jj, ii, 3_intk, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                    CALL adv_vof(kk, jj, ii, 3_intk, vffFlux, cWY, w, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
-
-                END IF
-
-            ELSE IF ( mom_multiphase == "ARRUFAT" ) THEN
-                WRITE(*,*) "Not yet implemented!"
-                continue
             END IF
 
         END DO
@@ -1187,8 +764,8 @@ CONTAINS
                     a1 = veloWY(k-k0,j-j0,i-i0)*dtrki/deltaX(i-i0)
                     a2 = veloWY(k,j,i)*dtrki/deltaX(i)
 
-                    CALL comp_advr_inter(velo1, velo2, velo3, -0.5_realk*(1.0_realk + a1), advrU)
-                    CALL comp_advr_inter(velo1, velo2, velo3,  0.5_realk*(1.0_realk - a2), advrD)
+                    CALL comp_advr_inter(velo1, velo2, velo3, -0.5_realk*(1.0_realk + a1), "ENO", advrU)
+                    CALL comp_advr_inter(velo1, velo2, velo3,  0.5_realk*(1.0_realk - a2), "ENO", advrD)
                     
                     momFlux(k,j,i) = ( rho1 * vffFlux(k,j,i) + rho2 * complVffFlux(k,j,i) ) * advrD
                 END DO
@@ -1199,7 +776,7 @@ CONTAINS
             DO j = 3, jj-2
                 DO k = 3, kk-2
                     div(k,j,i) = ( veloWY(k,j,i) - veloWY(k-k0,j-j0,i-i0) ) / deltaX(ii)
-                    mom(k,j,i) = mom(k,j,i) - dtrki * ( momFlux(k,j,i) - momFlux(k-k0,j-j0,i-i0) ) + dtrki * veloWY(k,j,i) * cWY(k,j,i) * div(k,j,i)
+                    mom(k,j,i) = mom(k,j,i) - dtrki * ( momFlux(k,j,i) - momFlux(k-k0,j-j0,i-i0) ) + dtrki * (rho1-rho2) * veloWY(k,j,i) * cWY(k,j,i) * div(k,j,i)
                 END DO
             END DO
         END DO
@@ -1271,10 +848,59 @@ CONTAINS
 
     !================================================================
 
+    SUBROUTINE comp_cWY(kk, jj, ii, vff, cWY)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Computes the nondirectional compression coefficient c for 
+    !   Weymouth and Yue's advection scheme.
+    !
+    !   Source:
+    !   T. Arrufat et al., “A mass-momentum consistent, 
+    !   Volume-of-Fluid method for incompressible flow on staggered 
+    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
+    !   doi: 10.1016/j.compfluid.2020.104785.
+    !   
+    !   G. D. Weymouth and D. K.-P. Yue, “Conservative 
+    !   Volume-of-Fluid method for free-surface simulations on 
+    !   Cartesian-grids,” Journal of Computational Physics, vol. 229,
+    !   no. 8, pp. 2853–2865, Apr. 2010, 
+    !   doi: 10.1016/j.jcp.2009.12.018.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(out) :: cWY(kk, jj, ii)
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+
+        DO i = 1, ii
+            DO j = 1, jj
+                DO k = 1, kk
+                    IF ( vff(k,j,i) > 0.5_realk ) THEN
+                        cWY(k,j,i) = 1.0_realk
+                    ELSE
+                        cWY(k,j,i) = 0.0_realk
+                    END IF
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE comp_cWY
+
+    !================================================================
+
     SUBROUTINE clip_vff(kk, jj, ii, tol, vff)
     !----------------------------------------------------------------
     !   What it does:
     !    
+    !    
+    !   Source:
+    !   T. Arrufat et al., “A mass-momentum consistent, 
+    !   Volume-of-Fluid method for incompressible flow on staggered 
+    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
+    !   doi: 10.1016/j.compfluid.2020.104785.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1301,109 +927,46 @@ CONTAINS
 
     !================================================================
 
-    ! SUBROUTINE multiphase_momentum_advection(kk, jj, ii, q, splitDir, mom, densityFieldStag, densityFieldFluxStag, &
-    !                     densityCompressionTermStag, dt, dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
-    !                     nfro, nbac, nrgt, nlft, nbot, ntop)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !    
-    ! !----------------------------------------------------------------
+    SUBROUTINE check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz, tol)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
 
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
-    !     INTEGER(intk), INTENT(in) :: splitDir
-    !     INTEGER(intk), INTENT(in) :: q
-    !     REAL(realk), INTENT(inout) :: mom(kk, jj, ii, 3)
-    !     REAL(realk), INTENT(in) :: densityFieldStag(kk, jj, ii, 3)
-    !     REAL(realk), INTENT(in) :: densityFieldFluxStag(kk, jj, ii, 3) 
-    !     REAL(realk), INTENT(in) :: densityCompressionTermStag(kk, jj, ii, 3)
-    !     REAL(realk), INTENT(in) :: dt
-    !     REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
-    !     REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-    !     REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
-    !     REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
-    !     INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: tol
 
-    !     ! Local variables
-    !     INTEGER(intk) :: k, j, i
-    !     INTEGER(intk) :: nbu, nfu, nrv, nlv, nbw, ntw
-    !     REAL(realk) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-    !     REAL(realk) :: advrE(kk, jj, ii), advrW(kk, jj, ii), advrN(kk, jj, ii), advrS(kk, jj, ii), advrT(kk, jj, ii), advrB(kk, jj, ii)
-    !     REAL(realk) :: adveE(kk, jj, ii), adveW(kk, jj, ii), adveN(kk, jj, ii), adveS(kk, jj, ii), adveT(kk, jj, ii), adveB(kk, jj, ii)
-    !     REAL(realk) :: iStag, jStag, kStag
-    !     REAL(realk) :: velocity(kk, jj, ii)
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: div
+        LOGICAL :: isSolenoidal(kk, jj, ii)
 
-    !     nfu = 0
-    !     nbu = 0
-    !     nrv = 0
-    !     nlv = 0
-    !     nbw = 0
-    !     ntw = 0
+        isSolenoidal = .TRUE.
 
-    !     ! CON = 7
-    !     IF (nbac == 7) nbu = 1
-    !     IF (nlft == 7) nlv = 1
-    !     IF (ntop == 7) ntw = 1
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
 
-    !     ! OP1 = 3
-    !     IF (nfro == 3) nfu = 1
-    !     IF (nbac == 3) nbu = 1
-    !     IF (nrgt == 3) nrv = 1
-    !     IF (nlft == 3) nlv = 1
-    !     IF (nbot == 3) nbw = 1
-    !     IF (ntop == 3) ntw = 1
+                    div = ( u(k,j,i+1) - u(k,j,i) ) / dx(i) + &
+                          ( v(k,j+1,i) - v(k,j,i) ) / dy(j) + &
+                          ( w(k+1,j,i) - w(k,j,i) ) / dz(k)
 
-    !     IF ( q == 1 ) THEN
-    !         iStag = 1.0_realk
-    !         jStag = 0.0_realk
-    !         kStag = 0.0_realk
-    !         velocity = mom(:,:,:,q) / densityFieldStag(:,:,:,q)
-    !     ELSE IF ( q == 2 ) THEN
-    !         iStag = 0.0_realk
-    !         jStag = 1.0_realk
-    !         kStag = 0.0_realk
-    !         velocity = mom(:,:,:,q) / densityFieldStag(:,:,:,q)
-    !     ELSE IF ( q == 3 ) THEN
-    !         iStag = 0.0_realk
-    !         jStag = 0.0_realk
-    !         kStag = 1.0_realk
-    !         velocity = mom(:,:,:,q) / densityFieldStag(:,:,:,q)
-    !     END IF
+                    IF ( div > tol ) THEN
+                        isSolenoidal(k,j,i) = .FALSE.
+                    END IF
 
-    !     u = mom(:,:,:,1) / densityFieldStag(:,:,:,1)
-    !     v = mom(:,:,:,2) / densityFieldStag(:,:,:,2)
-    !     w = mom(:,:,:,3) / densityFieldStag(:,:,:,3)
-        
-    !     CALL comp_advr_centr(kk, jj, ii, u, v, w, iStag, jStag, kStag, advrE, advrW, advrN, advrS, advrT, advrB)
-    !     CALL comp_adve_quick(kk, jj, ii, velocity, advrE, advrW, advrN, advrS, advrT, advrB, adveE, adveW, adveN, adveS, adveT, adveB)
+                END DO
+            END DO
+        END DO
 
-    !     IF ( splitDir == 1 ) THEN
-    !         DO i = 4-nfu, ii-4+nbu
-    !             DO j = 4, jj-3
-    !                 DO k = 4, kk-4
-    !                     mom(k,j,i,q) = mom(k,j,i,q) - dt * ( adveE(k,j,i) * densityFieldFluxStag(k,j,i,q) - adveW(k,j,i) * densityFieldFluxStag(k,j,i-1,q) - velocity(k,j,i) * densityCompressionTermStag(k,j,i,q) )
-    !                 END DO
-    !             END DO
-    !         END DO
-    !     ELSE IF ( splitDir == 2 ) THEN
-    !         DO i = 4, ii-3
-    !             DO j = 4-nrv, jj-4+nlv
-    !                 DO k = 4, kk-3
-    !                     mom(k,j,i,q) = mom(k,j,i,q) - dt * ( adveN(k,j,i) * densityFieldFluxStag(k,j,i,q) - adveS(k,j,i) * densityFieldFluxStag(k,j-1,i,q) - velocity(k,j,i) * densityCompressionTermStag(k,j,i,q) )
-    !                 END DO
-    !             END DO
-    !         END DO
-    !     ELSE IF ( splitDir == 3 ) THEN
-    !         DO i = 4, ii-3
-    !             DO j = 4, jj-3
-    !                 DO k = 4-nbw, kk-4+ntw
-    !                     mom(k,j,i,q) = mom(k,j,i,q) - dt * ( adveT(k,j,i) * densityFieldFluxStag(k,j,i,q) - adveB(k,j,i) * densityFieldFluxStag(k-1,j,i,q) - velocity(k,j,i) * densityCompressionTermStag(k,j,i,q) )
-    !                 END DO
-    !             END DO
-    !         END DO
-    !     END IF
+        IF ( ANY(.NOT. isSolenoidal) ) THEN
+            WRITE(*,*) "Warning: velocity field is not solenoidal!"
+        END IF
 
-    ! END SUBROUTINE multiphase_momentum_advection
+    END SUBROUTINE check_solenoidality
 
     !================================================================
 
@@ -1716,8 +1279,7 @@ CONTAINS
 
     !================================================================
 
-
-    PURE SUBROUTINE comp_advr_inter(velo1, velo2, velo3,  length, advrD)
+    PURE SUBROUTINE comp_advr_inter(velo1, velo2, velo3, length, scheme, advrD)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -1726,20 +1288,31 @@ CONTAINS
     !   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
     !   (PARIS),” Computer Physics Communications, vol. 263, 
     !   p. 107849, Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
+    !   
+    !   PARIS source code function slope_lim (accessed: Mai 2026)
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         REAL(realk), INTENT(in) :: velo1, velo2, velo3
         REAL(realk), INTENT(in) :: length
+        CHARACTER(len=*), INTENT(in) :: scheme
         REAL(realk), INTENT(out) :: advrD 
 
         ! Loval variables
         REAL(realk) :: limiter
+        REAL(realk) :: a, a1, a2
 
-        IF ( abs(velo3-velo2) < abs(velo2-velo1) ) THEN
-            limiter = velo3-velo2
-        ELSE 
-            limiter = velo2-velo1
+        IF ( scheme == 'ENO' ) THEN
+            IF ( abs(velo3-velo2) < abs(velo2-velo1) ) THEN
+                limiter = velo3-velo2
+            ELSE 
+                limiter = velo2-velo1
+            END IF
+        ELSE IF ( scheme == 'WENO' ) THEN
+            a1 = 1.0_realk / ( ( velo2 - velo1 )**2.0_realk + 1.0E-16_realk )
+            a2 = 1.0_realk / ( ( velo3 - velo2 )**2.0_realk + 1.0E-16_realk )
+            a = a1 + a2
+            limiter = ( a1 * ( velo2 - velo1 ) + a2 * (velo3 - velo2) ) / a
         END IF
         
         advrD = velo2 + limiter * length
