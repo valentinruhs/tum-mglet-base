@@ -518,7 +518,7 @@ CONTAINS
         REAL(realk), ALLOCATABLE :: vffFlux(:,:,:), complVffFlux(:,:,:), mom(:,:,:), cWY(:,:,:), cWYStag(:,:,:)
         REAL(realk), ALLOCATABLE :: advrE(:,:,:), advrN(:,:,:), advrT(:,:,:), advrSplitDir(:,:,:,:)
         REAL(realk), ALLOCATABLE :: uNew(:,:,:), vNew(:,:,:), wNew(:,:,:)
-        REAL(realk), ALLOCATABLE :: mom4D(:,:,:,:), vffStag4D(:,:,:,:)
+        REAL(realk), ALLOCATABLE :: mom4D(:,:,:,:), vffStag4D(:,:,:,:), cWYStag4D(:,:,:,:)
         
         REAL(realk), PARAMETER :: tol = 1.0E-12_realk
 
@@ -590,18 +590,16 @@ CONTAINS
             IF (.NOt. ALLOCATED(wNew))                ALLOCATE(wNew(kk,jj,ii))
             IF (.NOt. ALLOCATED(mom4D))               ALLOCATE(mom4D(kk,jj,ii,3))
             IF (.NOt. ALLOCATED(vffStag4D))           ALLOCATE(vffStag4D(kk,jj,ii,3))
+            IF (.NOT. ALLOCATED(cWYStag4D))           ALLOCATE(cWYStag4D(kk,jj,ii,3))
             
             IF ( splitting_multiphase == "component-wise" ) THEN
 
                 CALL check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz, tol)
                 CALL get_advection_sequence(itstep, advSeq)
+                ! CALL clip_vff(kk, jj, ii, tol, vff)
                 CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
 
                 DO q = 1, 3
-                    
-                    vffStag = 0.0_realk; normxStag = 0.0_realk; normyStag = 0.0_realk; normzStag = 0.0_realk
-                    alphaStag = 0.0_realk; isInterfaceStag = .False.; isNearInterfaceStag = .False.
-                    dStag = 0.0_realk; mom = 0.0_realk; cWY = 0.0_realk; vffFlux = 0.0_realk; complVffFlux = 0.0_realk
                     
                     CALL staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
                     CALL interface_reconstruction_wrapper(kk, jj, ii, vffStag, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
@@ -672,6 +670,7 @@ CONTAINS
                 
                 CALL check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz, tol)
                 CALL get_advection_sequence(itstep, advSeq)
+                CALL clip_vff(kk, jj, ii, tol, vff)
                 CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
 
                 DO q = 1, 3
@@ -680,13 +679,13 @@ CONTAINS
                     CALL interface_reconstruction_wrapper(kk, jj, ii, vffStag, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
                     CALL comp_material_property_field(kk, jj, ii, vffStag, rho1, rho2, dStag)
                     CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
+                    CALL comp_cWY(kk, jj, ii, vffStag, cWYStag)
 
                     vffStag4D(:,:,:,q) = vffStag
                     mom4D(:,:,:,q) = mom
+                    cWYStag4D(:,:,:,q) = cWYStag
                     
                 END DO
-
-                CALL comp_cWY(kk, jj, ii, vff, cWY)
 
                 DO l = 1, 3
 
@@ -696,10 +695,15 @@ CONTAINS
 
                         vffStag = vffStag4D(:,:,:,q)
                         mom = mom4D(:,:,:,q)
+                        cWYStag = cWYStag4D(:,:,:,q)
 
-                        CALL comp_cWY(kk, jj, ii, vffStag, cWYStag)
+                        CALL comp_advr_centr(kk, jj, ii, q, u, v, w, advrE, advrN, advrT)
+                        advrSplitDir(:,:,:,1) = advrE
+                        advrSplitDir(:,:,:,2) = advrN
+                        advrSplitDir(:,:,:,3) = advrT
+
                         CALL comp_flux_stag(kk, jj, ii, q, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                        CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWYStag, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
+                        CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWYStag, advrSplitDir(:,:,:,q), dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
                         CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWYStag, advrE, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
 
                         IF ( q == 1 ) THEN
@@ -761,8 +765,6 @@ CONTAINS
                 END DO
             END DO
         END DO
-
-        CALL clip_vff(kk, jj, ii, tol, vff)
 
     END SUBROUTINE adv_vof
 

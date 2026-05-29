@@ -32,7 +32,7 @@
     "multiphase": {
     	"solve": true,
 	"test": "VorBoC",
-	"splitting": "component-wise",
+	"splitting": "direction-wise",
 	"rho1" : 1000.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.000001,
