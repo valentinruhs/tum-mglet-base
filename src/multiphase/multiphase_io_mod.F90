@@ -94,11 +94,6 @@ CONTAINS
             Nx = 20
             Ny = 20
             Nz = 21
-        ELSE IF ( test_multiphase == 'KelHel' ) THEN
-            OPEN(newunit=unit,file="vffInit.csv",status="old",action="read")
-            Nx = 6
-            Ny = 6
-            Nz = 6
         END IF
 
         DO i = 1, Nx*Ny*Nz
@@ -202,15 +197,17 @@ CONTAINS
                 END DO   
             ELSE IF ( test_multiphase == 'CylAdF' .OR. test_multiphase == 'CylAdC' ) THEN
                 IF ( itstep == 1 ) THEN
-                    u = 0.016_realk
-                    v = 0.016_realk
-                    w = 0.0_realk
-                END IF
-            ELSE IF ( test_multiphase == 'KelHel' ) THEN 
-                IF ( itstep == 1 ) THEN
-                    u = 0.016_realk
-                    v = 0.0_realk
-                    w = 0.0_realk
+                    DO i = 2, ii-1
+                        DO j = 2, jj-1
+                            DO k = 2, kk-1
+                                IF ( vff(k,j,i) > 0.0_realk ) THEN
+                                    u(k,j,i) = 0.016_realk
+                                    v(k,j,i) = 0.0_realk
+                                    w(k,j,i) = 0.0_realk
+                                END IF
+                            END DO
+                        END DO
+                    END DO  
                 END IF
             END IF
 

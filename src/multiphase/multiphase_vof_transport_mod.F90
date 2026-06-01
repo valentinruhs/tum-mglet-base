@@ -20,9 +20,8 @@ MODULE multiphase_vof_transport_mod
     USE err_mod, ONLY: errr
     USE multiphase_plic_mod, ONLY: track_interface, compute_normal_vector, compute_alpha, compute_cell_proportion, compute_iStag_vff, compute_jStag_vff, compute_kStag_vff, interface_reconstruction_wrapper, staggered_fractions_wrapper
     USE rungekutta_mod, ONLY: rk_2n_t
-    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
+    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, splitting_multiphase, permutation_multiphase
     USE multiphase_material_mod, ONLY: comp_material_property_field
-    USE multiphasecore_mod, ONLY: splitting_multiphase
     
     IMPLICIT NONE
     PRIVATE 
@@ -431,10 +430,41 @@ CONTAINS
 
     !================================================================
     
-    PURE SUBROUTINE get_advection_sequence(iteration, advSeq)
+    PURE SUBROUTINE def_advection_sequence(iteration, advSeq)
     !----------------------------------------------------------------
     !   What it does:
+    !   Defines the sequence, in which the volume fraction field and
+    !   the momentum are advected. 
+    !
+    !   The PARIS solver uses a cyclic periodicity of three. Hence,
+    !   the sequence can be
+    !   x -> y -> z,
+    !   y -> z -> x or
+    !   z -> x -> y.
     !   
+    !   Permutation can also be see as the sum of all possible 
+    !   sequences. For three dimensions we get six sequences.
+    !   x -> y -> z,
+    !   y -> z -> x,
+    !   z -> x -> y,
+    !   x -> z -> y,
+    !   y -> x -> z or
+    !   z -> y -> x.
+    !
+    !   The permutation_multiphase variable controls which version 
+    !   is used.
+    !
+    !   Source:
+    !   T. Arrufat et al., “A mass-momentum consistent, 
+    !   Volume-of-Fluid method for incompressible flow on staggered 
+    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
+    !   doi: 10.1016/j.compfluid.2020.104785.
+    !
+    !   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
+    !   (PARIS),” Computer Physics Communications, vol. 263, 
+    !   p. 107849, Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
+    !   
+    !   PARIS source code (accessed: Mai 2026)
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -445,7 +475,7 @@ CONTAINS
         INTEGER(intk) :: permutationIndex
 
         ! permutationIndex only changes in a new time-step
-        permutationIndex = mod(iteration-1, 3)
+        permutationIndex = mod(iteration-1, permutation_multiphase)
 
         ! Select permutation of split advection
         SELECT CASE (permutationIndex)
@@ -455,13 +485,19 @@ CONTAINS
                 advSeq = [3, 1, 2]
             CASE (2)
                 advSeq = [2, 3, 1]
+            CASE (3)
+                advSeq = [1, 3, 2]
+            CASE (4)
+                advSeq = [3, 2, 1]
+            CASE (5)
+                advSeq = [2, 1, 3]
         END SELECT
 
-    END SUBROUTINE get_advection_sequence
+    END SUBROUTINE def_advection_sequence
 
     !================================================================
 
-    SUBROUTINE multiphase_solve(u_f, v_f, w_f, f_f, p_f, g_f, d_f, dtrki, itstep)
+    SUBROUTINE multiphase_solve(u_f, v_f, w_f, f_f, p_f, g_f, d_f, dtrki, itstep, uo_f, vo_f, wo_f)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -477,10 +513,12 @@ CONTAINS
         TYPE(field_t), INTENT(in) :: d_f
         REAL(realk), INTENT(in) :: dtrki
         INTEGER(intk), INTENT(in) :: itstep
+        TYPE(field_t), INTENT(inout) :: uo_f, vo_f, wo_f
 
         ! Local variables
         REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: u, v, w
         REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: vff, p, g, d
+        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: uo, vo, wo
 
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
         TYPE(field_t), POINTER :: rdx_f, rdy_f, rdz_f, rddx_f, rddy_f, rddz_f
@@ -504,23 +542,16 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: alphaiStag(:,:,:), alphajStag(:,:,:), alphakStag(:,:,:)
 
+        REAL(realk), ALLOCATABLE :: vffPrev(:,:,:)
+
         INTEGER(intk) :: i, igrid
-        INTEGER(intk) :: kk, jj, ii, q, advSeq(3), l, splitDir
+        INTEGER(intk) :: kk, jj, ii
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
-        REAL(realk), ALLOCATABLE :: vffStag(:,:,:)
-        REAL(realk), ALLOCATABLE :: dStag(:,:,:)
-        REAL(realk), ALLOCATABLE :: normxStag(:,:,:), normyStag(:,:,:), normzStag(:,:,:)
-        REAL(realk), ALLOCATABLE :: alphaStag(:,:,:)
-        LOGICAL, ALLOCATABLE :: isInterface(:,:,:)
-        LOGICAL, ALLOCATABLE :: isInterfaceStag(:,:,:)
-        LOGICAL, ALLOCATABLE :: isNearInterface(:,:,:)
-        LOGICAL, ALLOCATABLE :: isNearInterfaceStag(:,:,:)
-        REAL(realk), ALLOCATABLE :: vffFlux(:,:,:), complVffFlux(:,:,:), mom(:,:,:), cWY(:,:,:), cWYStag(:,:,:)
-        REAL(realk), ALLOCATABLE :: advrE(:,:,:), advrN(:,:,:), advrT(:,:,:), advrSplitDir(:,:,:,:)
-        REAL(realk), ALLOCATABLE :: uNew(:,:,:), vNew(:,:,:), wNew(:,:,:)
-        REAL(realk), ALLOCATABLE :: mom4D(:,:,:,:), vffStag4D(:,:,:,:), cWYStag4D(:,:,:,:)
-        
         REAL(realk), PARAMETER :: tol = 1.0E-12_realk
+
+        uo_f = 0.0_realk
+        vo_f = 0.0_realk
+        wo_f = 0.0_realk
 
         CALL get_field(dx_f, "DX"); CALL get_field(dy_f, "DY"); CALL get_field(dz_f, "DZ")
         CALL get_field(ddx_f, "DDX"); CALL get_field(ddy_f, "DDY"); CALL get_field(ddz_f, "DDZ")
@@ -550,6 +581,9 @@ CONTAINS
             CALL p_f%get_ptr(p, igrid)
             CALL g_f%get_ptr(g, igrid)
             CALL d_f%get_ptr(d, igrid)
+            CALL uo_f%get_ptr(uo, igrid)
+            CALL vo_f%get_ptr(vo, igrid)
+            CALL wo_f%get_ptr(wo, igrid)
 
             CALL dx_f%get_ptr(dx, igrid); CALL dy_f%get_ptr(dy, igrid); CALL dz_f%get_ptr(dz, igrid)
             CALL ddx_f%get_ptr(ddx, igrid); CALL ddy_f%get_ptr(ddy, igrid); CALL ddz_f%get_ptr(ddz, igrid)
@@ -566,67 +600,220 @@ CONTAINS
             CALL alpha_f%get_ptr(alpha, igrid)
             CALL alphaiStag_f%get_ptr(alphaiStag, igrid); CALL alphajStag_f%get_ptr(alphajStag, igrid); CALL alphakStag_f%get_ptr(alphakStag, igrid)
 
-            IF (.NOT. ALLOCATED(vffStag))             ALLOCATE(vffStag(kk,jj,ii))
-            IF (.NOT. ALLOCATED(dStag))               ALLOCATE(dStag(kk,jj,ii))
-            IF (.NOT. ALLOCATED(normxStag))           ALLOCATE(normxStag(kk,jj,ii))
-            IF (.NOT. ALLOCATED(normyStag))           ALLOCATE(normyStag(kk,jj,ii))
-            IF (.NOT. ALLOCATED(normzStag))           ALLOCATE(normzStag(kk,jj,ii))
-            IF (.NOT. ALLOCATED(alphaStag))           ALLOCATE(alphaStag(kk,jj,ii))
-            IF (.NOT. ALLOCATED(isInterface))         ALLOCATE(isInterface(kk,jj,ii))
-            IF (.NOT. ALLOCATED(isInterfaceStag))     ALLOCATE(isInterfaceStag(kk,jj,ii))
-            IF (.NOT. ALLOCATED(isNearInterface))     ALLOCATE(isNearInterface(kk,jj,ii))
-            IF (.NOT. ALLOCATED(isNearInterfaceStag)) ALLOCATE(isNearInterfaceStag(kk,jj,ii))
-            IF (.NOT. ALLOCATED(vffFlux))             ALLOCATE(vffFlux(kk,jj,ii))
-            IF (.NOT. ALLOCATED(complVffFlux))        ALLOCATE(complVffFlux(kk,jj,ii))
-            IF (.NOT. ALLOCATED(mom))                 ALLOCATE(mom(kk,jj,ii))
-            IF (.NOT. ALLOCATED(cWY))                 ALLOCATE(cWY(kk,jj,ii))
-            IF (.NOT. ALLOCATED(cWYStag))             ALLOCATE(cWYStag(kk,jj,ii))
-            IF (.NOT. ALLOCATED(advrE))               ALLOCATE(advrE(kk,jj,ii))
-            IF (.NOT. ALLOCATED(advrN))               ALLOCATE(advrN(kk,jj,ii))
-            IF (.NOT. ALLOCATED(advrT))               ALLOCATE(advrT(kk,jj,ii))
-            IF (.NOT. ALLOCATED(advrSplitDir))        ALLOCATE(advrSplitDir(kk,jj,ii,3))
-            IF (.NOt. ALLOCATED(uNew))                ALLOCATE(uNew(kk,jj,ii))
-            IF (.NOt. ALLOCATED(vNew))                ALLOCATE(vNew(kk,jj,ii))
-            IF (.NOt. ALLOCATED(wNew))                ALLOCATE(wNew(kk,jj,ii))
-            IF (.NOt. ALLOCATED(mom4D))               ALLOCATE(mom4D(kk,jj,ii,3))
-            IF (.NOt. ALLOCATED(vffStag4D))           ALLOCATE(vffStag4D(kk,jj,ii,3))
-            IF (.NOT. ALLOCATED(cWYStag4D))           ALLOCATE(cWYStag4D(kk,jj,ii,3))
-            
-            IF ( splitting_multiphase == "component-wise" ) THEN
+            IF ( .NOT. ALLOCATED(vffPrev) ) ALLOCATE(vffPrev(kk, jj, ii))
+            vffPrev = vff
 
-                CALL check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz, tol)
-                CALL get_advection_sequence(itstep, advSeq)
-                ! CALL clip_vff(kk, jj, ii, tol, vff)
+            CALL adve_operator(kk, jj, ii, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, dtrki, itstep, tol, &
+                normx, normy, normz, alpha, &
+                vffiStag, vffjStag, vffkStag, diStag, djStag, dkStag, &
+                normxiStag, normyiStag, normziStag, & 
+                normxjStag, normyjStag, normzjStag, &
+                normxkStag, normykStag, normzkStag, &
+                alphaiStag, alphajStag, alphakStag, uo, vo, wo)
+
+            CALL diff_operator(kk, jj, ii, u, v, w, vffPrev, g, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
+
+            ! CALL exte_operator()
+
+            u = u + uo * dtrki
+            v = v + vo * dtrki
+            w = w + wo * dtrki
+
+        END DO
+
+    END SUBROUTINE multiphase_solve
+
+    !================================================================
+
+    SUBROUTINE adve_operator(kk, jj, ii, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, dtrki, itstep, tol, &
+        normx, normy, normz, alpha, &
+        vffiStag, vffjStag, vffkStag, diStag, djStag, dkStag, &
+        normxiStag, normyiStag, normziStag, & 
+        normxjStag, normyjStag, normzjStag, &
+        normxkStag, normykStag, normzkStag, &
+        alphaiStag, alphajStag, alphakStag, uo, vo, wo)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: tol, dtrki
+        INTEGER(intk), INTENT(in) :: itstep
+        REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii), alpha(kk, jj, ii)
+        REAL(realk), INTENT(out) :: vffiStag(kk, jj, ii), vffjStag(kk, jj, ii), vffkStag(kk, jj, ii)
+        REAL(realk), INTENT(out) :: diStag(kk, jj, ii), djStag(kk, jj, ii), dkStag(kk, jj, ii)
+        REAL(realk), INTENT(out) :: normxiStag(kk, jj, ii), normyiStag(kk, jj, ii), normziStag(kk, jj, ii)
+        REAL(realk), INTENT(out) :: normxjStag(kk, jj, ii), normyjStag(kk, jj, ii), normzjStag(kk, jj, ii)
+        REAL(realk), INTENT(out) :: normxkStag(kk, jj, ii), normykStag(kk, jj, ii), normzkStag(kk, jj, ii)
+        REAL(realk), INTENT(out) :: alphaiStag(kk, jj, ii), alphajStag(kk, jj, ii), alphakStag(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
+
+        ! Local variables
+        INTEGER(intk) :: q, advSeq(3), l, splitDir
+        REAL(realk), ALLOCATABLE :: vffStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: dStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: normxStag(:,:,:), normyStag(:,:,:), normzStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: alphaStag(:,:,:)
+        LOGICAL, ALLOCATABLE :: isInterface(:,:,:)
+        LOGICAL, ALLOCATABLE :: isInterfaceStag(:,:,:)
+        LOGICAL, ALLOCATABLE :: isNearInterface(:,:,:)
+        LOGICAL, ALLOCATABLE :: isNearInterfaceStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: vffFlux(:,:,:), complVffFlux(:,:,:), mom(:,:,:), cWY(:,:,:), cWYStag(:,:,:)
+        REAL(realk), ALLOCATABLE :: advrE(:,:,:), advrN(:,:,:), advrT(:,:,:), advrSplitDir(:,:,:,:)
+        REAL(realk), ALLOCATABLE :: uNew(:,:,:), vNew(:,:,:), wNew(:,:,:)
+        REAL(realk), ALLOCATABLE :: mom4D(:,:,:,:), vffStag4D(:,:,:,:), cWYStag4D(:,:,:,:)
+        
+        IF (.NOT. ALLOCATED(vffStag))             ALLOCATE(vffStag(kk,jj,ii))
+        IF (.NOT. ALLOCATED(dStag))               ALLOCATE(dStag(kk,jj,ii))
+        IF (.NOT. ALLOCATED(normxStag))           ALLOCATE(normxStag(kk,jj,ii))
+        IF (.NOT. ALLOCATED(normyStag))           ALLOCATE(normyStag(kk,jj,ii))
+        IF (.NOT. ALLOCATED(normzStag))           ALLOCATE(normzStag(kk,jj,ii))
+        IF (.NOT. ALLOCATED(alphaStag))           ALLOCATE(alphaStag(kk,jj,ii))
+        IF (.NOT. ALLOCATED(isInterface))         ALLOCATE(isInterface(kk,jj,ii))
+        IF (.NOT. ALLOCATED(isInterfaceStag))     ALLOCATE(isInterfaceStag(kk,jj,ii))
+        IF (.NOT. ALLOCATED(isNearInterface))     ALLOCATE(isNearInterface(kk,jj,ii))
+        IF (.NOT. ALLOCATED(isNearInterfaceStag)) ALLOCATE(isNearInterfaceStag(kk,jj,ii))
+        IF (.NOT. ALLOCATED(vffFlux))             ALLOCATE(vffFlux(kk,jj,ii))
+        IF (.NOT. ALLOCATED(complVffFlux))        ALLOCATE(complVffFlux(kk,jj,ii))
+        IF (.NOT. ALLOCATED(mom))                 ALLOCATE(mom(kk,jj,ii))
+        IF (.NOT. ALLOCATED(cWY))                 ALLOCATE(cWY(kk,jj,ii))
+        IF (.NOT. ALLOCATED(cWYStag))             ALLOCATE(cWYStag(kk,jj,ii))
+        IF (.NOT. ALLOCATED(advrE))               ALLOCATE(advrE(kk,jj,ii))
+        IF (.NOT. ALLOCATED(advrN))               ALLOCATE(advrN(kk,jj,ii))
+        IF (.NOT. ALLOCATED(advrT))               ALLOCATE(advrT(kk,jj,ii))
+        IF (.NOT. ALLOCATED(advrSplitDir))        ALLOCATE(advrSplitDir(kk,jj,ii,3))
+        IF (.NOt. ALLOCATED(uNew))                ALLOCATE(uNew(kk,jj,ii))
+        IF (.NOt. ALLOCATED(vNew))                ALLOCATE(vNew(kk,jj,ii))
+        IF (.NOt. ALLOCATED(wNew))                ALLOCATE(wNew(kk,jj,ii))
+        IF (.NOt. ALLOCATED(mom4D))               ALLOCATE(mom4D(kk,jj,ii,3))
+        IF (.NOt. ALLOCATED(vffStag4D))           ALLOCATE(vffStag4D(kk,jj,ii,3))
+        IF (.NOT. ALLOCATED(cWYStag4D))           ALLOCATE(cWYStag4D(kk,jj,ii,3))
+        
+        IF ( splitting_multiphase == "component-wise" ) THEN
+
+            CALL check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz)
+            CALL def_advection_sequence(itstep, advSeq)
+            CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+
+            DO q = 1, 3
+                
+                CALL staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
+                CALL interface_reconstruction_wrapper(kk, jj, ii, vffStag, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
+                CALL comp_material_property_field(kk, jj, ii, vffStag, rho1, rho2, dStag)
+                CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
+                CALL comp_cWY(kk, jj, ii, vffStag, cWYStag)
+                CALL comp_advr_centr(kk, jj, ii, q, u, v, w, advrE, advrN, advrT)
+                advrSplitDir(:,:,:,1) = advrE
+                advrSplitDir(:,:,:,2) = advrN
+                advrSplitDir(:,:,:,3) = advrT
+
+                DO l = 1, 3
+
+                    splitDir = advSeq(l)
+                                            
+                    CALL comp_flux_stag(kk, jj, ii, q, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
+                    CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWYStag, advrSplitDir(:,:,:,q), dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
+                    CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWYStag, advrE, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
+
+                END DO
+                
+                IF ( q == 1 ) THEN
+                    CALL comp_velocity_change(kk, jj, ii, q, u, vffStag, mom, dtrki, uo)
+                ELSE IF ( q == 2 ) THEN
+                    CALL comp_velocity_change(kk, jj, ii, q, v, vffStag, mom, dtrki, vo)
+                ELSE IF ( q == 3 ) THEN
+                    CALL comp_velocity_change(kk, jj, ii, q, w, vffStag, mom, dtrki, wo)
+                END IF
+
+                IF ( q == 1 ) THEN
+                    vffiStag = vffStag
+                    diStag = dStag
+                    normxiStag = normxStag
+                    normyiStag = normyStag
+                    normziStag = normzStag
+                    alphaiStag = alphaStag
+                ELSE IF ( q == 2 ) THEN
+                    vffjStag = vffStag
+                    djStag = dStag
+                    normxjStag = normxStag
+                    normyjStag = normyStag
+                    normzjStag = normzStag
+                    alphajStag = alphaStag
+                ELSE IF ( q == 3 ) THEN
+                    vffkStag = vffStag
+                    dkStag = dStag
+                    normxkStag = normxStag
+                    normykStag = normyStag
+                    normzkStag = normzStag
+                    alphakStag = alphaStag
+                END IF
+
+            END DO
+
+            CALL comp_cWY(kk, jj, ii, vff, cWY)
+
+            DO l = 1, 3
+
+                splitDir = advSeq(l)
+                
                 CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+                CALL comp_flux_cent(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, w, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
+                CALL clip_vff(kk, jj, ii, tol, vff)
+
+            END DO
+
+        ELSE IF ( splitting_multiphase == "direction-wise" ) THEN
+            
+            CALL check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz)
+            CALL def_advection_sequence(itstep, advSeq)
+            CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+
+            DO q = 1, 3
+
+                CALL staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
+                CALL interface_reconstruction_wrapper(kk, jj, ii, vffStag, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
+                CALL comp_material_property_field(kk, jj, ii, vffStag, rho1, rho2, dStag)
+                CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
+                CALL comp_cWY(kk, jj, ii, vffStag, cWYStag)
+
+                vffStag4D(:,:,:,q) = vffStag
+                mom4D(:,:,:,q) = mom
+                cWYStag4D(:,:,:,q) = cWYStag
+                
+            END DO
+
+            DO l = 1, 3
+
+                splitDir = advSeq(l)
 
                 DO q = 1, 3
                     
-                    CALL staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
-                    CALL interface_reconstruction_wrapper(kk, jj, ii, vffStag, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
-                    CALL comp_material_property_field(kk, jj, ii, vffStag, rho1, rho2, dStag)
-                    CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
-                    CALL comp_cWY(kk, jj, ii, vffStag, cWYStag)
+                    vffStag = vffStag4D(:,:,:,q)
+                    mom = mom4D(:,:,:,q)
+                    cWYStag = cWYStag4D(:,:,:,q)
+
                     CALL comp_advr_centr(kk, jj, ii, q, u, v, w, advrE, advrN, advrT)
                     advrSplitDir(:,:,:,1) = advrE
                     advrSplitDir(:,:,:,2) = advrN
                     advrSplitDir(:,:,:,3) = advrT
 
-                    DO l = 1, 3
+                    CALL comp_flux_stag(kk, jj, ii, q, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
+                    CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWYStag, advrSplitDir(:,:,:,q), dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
+                    CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWYStag, advrE, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
 
-                        splitDir = advSeq(l)
-                                                
-                        CALL comp_flux_stag(kk, jj, ii, q, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                        CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWYStag, advrSplitDir(:,:,:,q), dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
-                        CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWYStag, advrE, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
-
-                    END DO
-                    
                     IF ( q == 1 ) THEN
-                        CALL comp_velocity(kk, jj, ii, q, vffStag, mom, u)
+                        CALL comp_velocity_change(kk, jj, ii, q, u, vffStag, mom, dtrki, uo)
                     ELSE IF ( q == 2 ) THEN
-                        CALL comp_velocity(kk, jj, ii, q, vffStag, mom, v)
+                        CALL comp_velocity_change(kk, jj, ii, q, v, vffStag, mom, dtrki, vo)
                     ELSE IF ( q == 3 ) THEN
-                        CALL comp_velocity(kk, jj, ii, q, vffStag, mom, w)
+                        CALL comp_velocity_change(kk, jj, ii, q, w, vffStag, mom, dtrki, wo)
                     END IF
 
                     IF ( q == 1 ) THEN
@@ -654,83 +841,20 @@ CONTAINS
 
                 END DO
 
-                CALL comp_cWY(kk, jj, ii, vff, cWY)
-
-                DO l = 1, 3
-
-                    splitDir = advSeq(l)
-
-                    CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
-                    CALL comp_flux_cent(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                    CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, w, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
-
-                END DO
-
-            ELSE IF ( splitting_multiphase == "direction-wise" ) THEN
-                
-                CALL check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz, tol)
-                CALL get_advection_sequence(itstep, advSeq)
-                CALL clip_vff(kk, jj, ii, tol, vff)
                 CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+                CALL comp_flux_cent(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, w, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
+                CALL clip_vff(kk, jj, ii, tol, vff)
 
-                DO q = 1, 3
+            END DO
 
-                    CALL staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
-                    CALL interface_reconstruction_wrapper(kk, jj, ii, vffStag, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
-                    CALL comp_material_property_field(kk, jj, ii, vffStag, rho1, rho2, dStag)
-                    CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
-                    CALL comp_cWY(kk, jj, ii, vffStag, cWYStag)
+        END IF
 
-                    vffStag4D(:,:,:,q) = vffStag
-                    mom4D(:,:,:,q) = mom
-                    cWYStag4D(:,:,:,q) = cWYStag
-                    
-                END DO
-
-                DO l = 1, 3
-
-                    splitDir = advSeq(l)
-
-                    DO q = 1, 3
-
-                        vffStag = vffStag4D(:,:,:,q)
-                        mom = mom4D(:,:,:,q)
-                        cWYStag = cWYStag4D(:,:,:,q)
-
-                        CALL comp_advr_centr(kk, jj, ii, q, u, v, w, advrE, advrN, advrT)
-                        advrSplitDir(:,:,:,1) = advrE
-                        advrSplitDir(:,:,:,2) = advrN
-                        advrSplitDir(:,:,:,3) = advrT
-
-                        CALL comp_flux_stag(kk, jj, ii, q, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                        CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWYStag, advrSplitDir(:,:,:,q), dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
-                        CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWYStag, advrE, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
-
-                        IF ( q == 1 ) THEN
-                            CALL comp_velocity(kk, jj, ii, q, vffStag, mom, u)
-                        ELSE IF ( q == 2 ) THEN
-                            CALL comp_velocity(kk, jj, ii, q, vffStag, mom, v)
-                        ELSE IF ( q == 3 ) THEN
-                            CALL comp_velocity(kk, jj, ii, q, vffStag, mom, w)
-                        END IF
-
-                    END DO
-
-                    CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
-                    CALL comp_flux_cent(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                    CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, w, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
-
-                END DO
-
-            END IF
-
-        END DO
-
-    END SUBROUTINE multiphase_solve
+    END SUBROUTINE
 
     !================================================================
 
-    SUBROUTINE adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, veloWY, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
+    SUBROUTINE adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, velWY, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -740,7 +864,7 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: splitDir
         REAL(realk), INTENT(in) :: vffFlux(kk, jj, ii)
-        REAL(realk), INTENT(in) :: cWY(kk, jj, ii), veloWY(kk, jj, ii)
+        REAL(realk), INTENT(in) :: cWY(kk, jj, ii), velWY(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dtrki, tol
@@ -760,7 +884,7 @@ CONTAINS
         DO i = 2, ii-1
             DO j = 2, jj-1
                 DO k = 2, kk-1
-                    div(k,j,i) = ( veloWY(k,j,i) - veloWY(k-k0,j-j0,i-i0) ) / deltaX(ii)
+                    div(k,j,i) = ( velWY(k,j,i) - velWY(k-k0,j-j0,i-i0) ) / deltaX(ii)
                     vff(k,j,i) = vff(k,j,i) - dtrki * ( vffFlux(k,j,i) - vffFlux(k-k0,j-j0,i-i0) ) + dtrki * cWY(k,j,i) * div(k,j,i)
                 END DO
             END DO
@@ -770,7 +894,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE adv_mom(kk, jj, ii, splitDir, vff, vffFlux, complVffFlux, cWY, veloWY, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
+    SUBROUTINE adv_mom(kk, jj, ii, splitDir, vff, vffFlux, complVffFlux, cWY, velWY, dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -780,7 +904,7 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: splitDir
         REAL(realk), INTENT(in) :: vff(kk, jj, ii), vffFlux(kk, jj, ii), complVffFlux(kk, jj, ii)
-        REAL(realk), INTENT(in) :: cWY(kk, jj, ii), veloWY(kk, jj, ii)
+        REAL(realk), INTENT(in) :: cWY(kk, jj, ii), velWY(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dtrki
@@ -791,7 +915,7 @@ CONTAINS
         INTEGER(intk) :: i0, j0, k0
         REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
         REAL(realk) :: dStag(kk, jj, ii)
-        REAL(realk) :: velo1, velo2, velo3, a1, a2, advrU, advrD
+        REAL(realk) :: vel1, vel2, vel3, a1, a2, advrU, advrD
         REAL(realk) :: momFlux(kk, jj, ii)
         REAL(realk) :: div(kk, jj, ii)
 
@@ -805,15 +929,15 @@ CONTAINS
         DO i = 2, ii-1
             DO j = 2, jj-1
                 DO k = 2, kk-1
-                    velo1 = mom(k-k0,j-j0,i-i0) / dStag(k-k0,j-j0,i-i0)
-                    velo2 = mom(k,j,i) / dStag(k,j,i)
-                    velo3 = mom(k+k0,j+j0,i+i0) / dStag(k+k0,j+j0,i+i0)
+                    vel1 = mom(k-k0,j-j0,i-i0) / dStag(k-k0,j-j0,i-i0)
+                    vel2 = mom(k,j,i) / dStag(k,j,i)
+                    vel3 = mom(k+k0,j+j0,i+i0) / dStag(k+k0,j+j0,i+i0)
 
-                    a1 = veloWY(k-k0,j-j0,i-i0)*dtrki/deltaX(i-i0)
-                    a2 = veloWY(k,j,i)*dtrki/deltaX(i)
+                    a1 = velWY(k-k0,j-j0,i-i0)*dtrki/deltaX(i-i0)
+                    a2 = velWY(k,j,i)*dtrki/deltaX(i)
 
-                    CALL comp_advr_inter(velo1, velo2, velo3, -0.5_realk*(1.0_realk + a1), "ENO", advrU)
-                    CALL comp_advr_inter(velo1, velo2, velo3,  0.5_realk*(1.0_realk - a2), "ENO", advrD)
+                    CALL comp_advr_inter(vel1, vel2, vel3, -0.5_realk*(1.0_realk + a1), "ENO", advrU)
+                    CALL comp_advr_inter(vel1, vel2, vel3,  0.5_realk*(1.0_realk - a2), "ENO", advrD)
                     
                     momFlux(k,j,i) = ( rho1 * vffFlux(k,j,i) + rho2 * complVffFlux(k,j,i) ) * advrD
                 END DO
@@ -823,8 +947,8 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    div(k,j,i) = ( veloWY(k,j,i) - veloWY(k-k0,j-j0,i-i0) ) / deltaX(ii)
-                    mom(k,j,i) = mom(k,j,i) - dtrki * ( momFlux(k,j,i) - momFlux(k-k0,j-j0,i-i0) ) + dtrki * (rho1-rho2) * veloWY(k,j,i) * cWY(k,j,i) * div(k,j,i)
+                    div(k,j,i) = ( velWY(k,j,i) - velWY(k-k0,j-j0,i-i0) ) / deltaX(ii)
+                    mom(k,j,i) = mom(k,j,i) - dtrki * ( momFlux(k,j,i) - momFlux(k-k0,j-j0,i-i0) ) + dtrki * (rho1-rho2) * velWY(k,j,i) * cWY(k,j,i) * div(k,j,i)
                 END DO
             END DO
         END DO
@@ -848,14 +972,14 @@ CONTAINS
 
         ! Local variables
         INTEGER(intk) :: i, j, k
-        REAL(realk) :: veloFld(kk, jj, ii)
+        REAL(realk) :: velFld(kk, jj, ii)
 
-        CALL get_component_specifics(kk, jj, ii, q, u=u, v=v, w=w, veloFld=veloFld)
+        CALL get_component_specifics(kk, jj, ii, q, u=u, v=v, w=w, velFld=velFld)
 
         DO i = 1, ii
             DO j = 1, jj
                 DO k = 1, kk
-                    mom(k,j,i) = veloFld(k,j,i) * dStag(k,j,i)
+                    mom(k,j,i) = velFld(k,j,i) * dStag(k,j,i)
                 END DO
             END DO
         END DO
@@ -864,7 +988,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_velocity(kk, jj, ii, q, vff, mom, velo)
+    SUBROUTINE comp_velocity_change(kk, jj, ii, q, vel, vff, mom, dt, velo)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -873,8 +997,9 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: q
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii), mom(kk, jj, ii)
-        REAL(realk), INTENT(inout) :: velo(kk,jj,ii)
+        REAL(realk), INTENT(in) :: vel(kk, jj, ii), vff(kk, jj, ii), mom(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dt
+        REAL(realk), INTENT(out) :: velo(kk,jj,ii)
 
         ! Local variables
         INTEGER(intk) :: i, j, k
@@ -886,13 +1011,13 @@ CONTAINS
             DO j = 4, jj-3
                 DO k = 4, kk-3
                     IF ( vff(k,j,i) >= 0.0_realk .AND. vff(k,j,i) <= 1.0_realk ) THEN
-                        velo(k,j,i) = mom(k,j,i) / dStag(k,j,i)
+                        velo(k,j,i) = ( mom(k,j,i) / dStag(k,j,i) - vel(k,j,i) ) / dt
                     END IF
                 END DO
             END DO
         END DO
 
-    END SUBROUTINE comp_velocity
+    END SUBROUTINE comp_velocity_change
 
     !================================================================
 
@@ -942,7 +1067,7 @@ CONTAINS
     SUBROUTINE clip_vff(kk, jj, ii, tol, vff)
     !----------------------------------------------------------------
     !   What it does:
-    !    
+    !   Clips the volume fraction field to its boundaries [0, 1].
     !    
     !   Source:
     !   T. Arrufat et al., “A mass-momentum consistent, 
@@ -975,7 +1100,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz, tol)
+    SUBROUTINE check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -985,12 +1110,13 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
-        REAL(realk), INTENT(in) :: tol
 
         ! Local variables
         INTEGER(intk) :: k, j, i
         REAL(realk) :: div(kk, jj, ii)
         LOGICAL :: isSolenoidal
+        REAL(realk), PARAMETER :: eps = 1.0E-10_realk
+        REAL(realk) :: uChar, lChar, L1Eps, L2Eps, LinfEps, L1Norm, L2Norm, LinfNorm
 
         isSolenoidal = .TRUE.
 
@@ -998,218 +1124,193 @@ CONTAINS
             DO j = 3, jj-2
                 DO k = 3, kk-2
 
-                    div(k,j,i) = ( u(k,j,i+1) - u(k,j,i) ) / dx(i) + &
-                                 ( v(k,j+1,i) - v(k,j,i) ) / dy(j) + &
-                                 ( w(k+1,j,i) - w(k,j,i) ) / dz(k)
+                    div(k,j,i) = ( u(k,j,i+1) - u(k,j,i) )/dx(i) + &
+                                 ( v(k,j+1,i) - v(k,j,i) )/dy(j) + &
+                                 ( w(k+1,j,i) - w(k,j,i) )/dz(k)
 
                 END DO
             END DO
         END DO
 
-        IF ( SUM(div) > tol ) THEN
+        uChar = MAX(MAXVAL(ABS(u(3:kk-2,3:jj-2,3:ii-2))), &
+                    MAXVAL(ABS(v(3:kk-2,3:jj-2,3:ii-2))), &
+                    MAXVAL(ABS(w(3:kk-2,3:jj-2,3:ii-2))))
+        lChar = MAX(MAXVAL(ABS(dx(3:ii-2))), &
+                    MAXVAL(ABS(dy(3:jj-2))), &
+                    MAXVAL(ABS(dz(3:kk-2))))
+
+        L1Eps = eps * uChar / lChar
+        L2Eps = eps * uChar / lChar * ( SIZE(div(3:kk-2,3:jj-2,3:ii-2)) )**(1.0_realk/2.0_realk)
+        LinfEps = eps * uChar / lChar * SIZE(div(3:kk-2,3:jj-2,3:ii-2))
+        
+        L1Norm = SUM( ABS(div(3:kk-2,3:jj-2,3:ii-2)) )
+        L2Norm = ( SUM( div(3:kk-2,3:jj-2,3:ii-2)**2.0_realk ) )**(1.0_realk/2.0_realk)
+        LinfNorm = MAXVAL( ABS(div(3:kk-2,3:jj-2,3:ii-2)) )
+
+        IF ( L1Norm > L1Eps .OR. L2Norm > L2Eps .OR. LinfNorm > LinfEps ) THEN
             isSolenoidal = .FALSE.
-            WRITE(*,*) "Warning: velocity field is not solenoidal! Max. val. div: ", maxval(div)
+            WRITE(*,*) "Velocity not solenoidal: L1 =", L1Norm, " L2 =", L2Norm, " Linf =", LinfNorm
         END IF
 
     END SUBROUTINE check_solenoidality
 
     !================================================================
 
-    ! SUBROUTINE multiphase_momentum_diffusion(kk, jj, ii, uo, vo, wo, u, v, w, g, &
-    !         dx, dy, dz, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, &
-    !         nfro, nbac, nrgt, nlft, nbot, ntop, densityFieldiStag, densityFieldjStag, densityFieldkStag)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !    
-    ! !----------------------------------------------------------------
+    SUBROUTINE diff_operator(kk, jj, ii, u, v, w, vff, g, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
     
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
-    !     REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), &
-    !         wo(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: g(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
-    !     REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-    !     REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
-    !     REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
-    !     INTEGER, INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
-    !     REAL(realk), INTENT(in) :: densityFieldiStag(kk, jj, ii), densityFieldjStag(kk, jj, ii), densityFieldkStag(kk, jj, ii)
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii), vff(kk, jj, ii), g(kk, jj, ii)
+        REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
+        REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
+        REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
 
-    !     ! Local variables
-    !     INTEGER(intk) :: k, j, i
-    !     INTEGER(intk) :: nbu, nfu, nrv, nbw, ntw, nlv
-    !     REAL(realk) :: ge, gw, gn, gs, gt, gb
-    !     REAL(realk) :: tauxxe, tauxxw, tauyxn, tauyxs, tauzxt, tauzxb
-    !     REAL(realk) :: tauxye, tauxyw, tauyyn, tauyys, tauzyt, tauzyb
-    !     REAL(realk) :: tauxze, tauxzw, tauyzn, tauyzs, tauzzt, tauzzb
-    !     REAL(realk) :: duo, dvo, dwo
+        ! Local variables
+        REAL(realk) :: d(kk, jj, ii)
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: ge, gw, gn, gs, gt, gb
+        REAL(realk) :: tauxxe, tauxxw, tauyxn, tauyxs, tauzxt, tauzxb
+        REAL(realk) :: tauxye, tauxyw, tauyyn, tauyys, tauzyt, tauzyb
+        REAL(realk) :: tauxze, tauxzw, tauyzn, tauyzs, tauzzt, tauzzb
+        
+        CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, d)
 
-    !     nfu = 0
-    !     nbu = 0
-    !     nrv = 0
-    !     nlv = 0
-    !     nbw = 0
-    !     ntw = 0
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    ! Face values of dynamic viscosity on u-momentum cell
+                    ! Harmonic mean for a more physical treatment at interfaces
+                    ge = g(k, j, i+1)
+                    gw = g(k, j, i)
+                    gn = g(k, j, i)*g(k, j+1, i) &
+                        / MAX(g(k, j, i) + g(k, j+1, i), MIN(gmol1,gmol2)) &
+                        + g(k, j, i+1)*g(k, j+1, i+1) &
+                        / MAX(g(k, j, i+1) + g(k, j+1, i+1), MIN(gmol1,gmol2))
+                    gs = g(k, j-1, i)*g(k, j, i) &
+                        / MAX(g(k, j-1, i) + g(k, j, i), MIN(gmol1,gmol2)) &
+                        + g(k, j-1, i+1)*g(k, j, i+1) &
+                        / MAX(g(k, j-1, i+1) + g(k, j, i+1), MIN(gmol1,gmol2))
+                    gt = g(k, j, i)*g(k+1, j, i) &
+                        / MAX(g(k, j, i) + g(k+1, j, i), MIN(gmol1,gmol2)) &
+                        + g(k, j, i+1)*g(k+1, j, i+1) &
+                        /MAX(g(k, j, i+1) + g(k+1, j, i+1), MIN(gmol1,gmol2))
+                    gb = g(k-1, j, i)*g(k, j, i) &
+                        / MAX(g(k-1, j, i) + g(k, j, i), MIN(gmol1,gmol2)) &
+                        + g(k-1, j, i+1)*g(k, j, i+1) &
+                        / MAX(g(k-1, j, i+1) + g(k, j, i+1), MIN(gmol1,gmol2))
 
-    !     ! CON = 7
-    !     IF (nbac == 7) nbu = 1
-    !     IF (nlft == 7) nlv = 1
-    !     IF (ntop == 7) ntw = 1
+                    ! Normal stresses
+                    tauxxe = ge * 2.0_realk * (u(k,j,i+1) - u(k,j,i)) * rddx(i+1)
+                    tauxxw = gw * 2.0_realk * (u(k,j,i) - u(k,j,i-1)) * rddx(i)
 
-    !     ! OP1 = 3
-    !     IF (nfro == 3) nfu = 1
-    !     IF (nbac == 3) nbu = 1
-    !     IF (nrgt == 3) nrv = 1
-    !     IF (nlft == 3) nlv = 1
-    !     IF (nbot == 3) nbw = 1
-    !     IF (ntop == 3) ntw = 1
+                    ! Shear stresses
+                    tauyxn = gn * ( (u(k,j+1,i) - u(k,j,i)) * rdy(j)   + (v(k,j,i+1) - v(k,j,i))     * rdx(i) )
+                    tauyxs = gs * ( (u(k,j,i) - u(k,j-1,i)) * rdy(j-1) + (v(k,j-1,i+1) - v(k,j-1,i)) * rdx(i) )
+                    tauzxt = gt * ( (u(k+1,j,i) - u(k,j,i)) * rdz(k)   + (w(k,j,i+1) - w(k,j,i))     * rdx(i) )
+                    tauzxb = gb * ( (u(k,j,i) - u(k-1,j,i)) * rdz(k-1) + (w(k-1,j,i+1) - w(k-1,j,i)) * rdx(i) )
 
-    !     ! CALL swcle3d(kk, jj, ii, uo, vo, wo, u, v, w, &
-    !     !     ddx, ddy, ddz, nfro, nbac, nrgt, nlft, nbot, ntop)
+                    ! Change due to diffusion
+                    uo(k,j,i) = uo(k,j,i) + 1.0_realk/( 0.5_realk * ( d(k,j,i) + d(k,j,i+1) ) ) * &
+                        ( ( tauxxe - tauxxw ) * rdx(i) + &
+                          ( tauyxn - tauyxs ) * rddy(j) + &
+                          ( tauzxt - tauzxb ) * rddz(k) )
+                END DO
+            END DO
+        END DO
 
-    !     DO i = 3-nfu, ii-3+nbu
-    !         DO j = 3, jj-2
-    !             DO k = 3, kk-2
-    !                 ! Face values of dynamic viscosity on u-momentum cell
-    !                 ! Harmonic mean for a more physical treatment at interfaces
-    !                 ge = g(k, j, i+1)
-    !                 gw = g(k, j, i)
-    !                 gn = g(k, j, i)*g(k, j+1, i) &
-    !                     / MAX(g(k, j, i) + g(k, j+1, i), MIN(gmol1,gmol2)) &
-    !                     + g(k, j, i+1)*g(k, j+1, i+1) &
-    !                     / MAX(g(k, j, i+1) + g(k, j+1, i+1), MIN(gmol1,gmol2))
-    !                 gs = g(k, j-1, i)*g(k, j, i) &
-    !                     / MAX(g(k, j-1, i) + g(k, j, i), MIN(gmol1,gmol2)) &
-    !                     + g(k, j-1, i+1)*g(k, j, i+1) &
-    !                     / MAX(g(k, j-1, i+1) + g(k, j, i+1), MIN(gmol1,gmol2))
-    !                 gt = g(k, j, i)*g(k+1, j, i) &
-    !                     / MAX(g(k, j, i) + g(k+1, j, i), MIN(gmol1,gmol2)) &
-    !                     + g(k, j, i+1)*g(k+1, j, i+1) &
-    !                     /MAX(g(k, j, i+1) + g(k+1, j, i+1), MIN(gmol1,gmol2))
-    !                 gb = g(k-1, j, i)*g(k, j, i) &
-    !                     / MAX(g(k-1, j, i) + g(k, j, i), MIN(gmol1,gmol2)) &
-    !                     + g(k-1, j, i+1)*g(k, j, i+1) &
-    !                     / MAX(g(k-1, j, i+1) + g(k, j, i+1), MIN(gmol1,gmol2))
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    ! Face values of dynamic viscosity on v-momentum cell
+                    ! Harmonic mean for a more physical treatment at interfaces
+                    ge = g(k, j, i)*g(k, j, i+1) &
+                        / MAX(g(k, j, i) + g(k, j, i+1), MIN(gmol1,gmol2)) &
+                        + g(k, j+1, i)*g(k, j+1, i+1) &
+                        / MAX(g(k, j+1, i) + g(k, j+1, i+1), MIN(gmol1,gmol2))
+                    gw = g(k, j, i-1)*g(k, j, i) &
+                        / MAX(g(k, j, i-1) + g(k, j, i), MIN(gmol1,gmol2)) &
+                        + g(k, j+1, i-1)*g(k, j+1, i) &
+                        / MAX(g(k, j+1, i-1) + g(k, j+1, i), MIN(gmol1,gmol2))
+                    gn = g(k, j+1, i)
+                    gs = g(k, j, i)
+                    gt = g(k, j, i)*g(k+1, j, i) &
+                        / MAX(g(k, j, i) + g(k+1, j, i), MIN(gmol1,gmol2)) &
+                        + g(k, j+1, i)*g(k+1, j+1, i) &
+                        / MAX(g(k, j+1, i) + g(k+1, j+1, i), MIN(gmol1,gmol2))
+                    gb = g(k-1, j, i)*g(k, j, i) &
+                        / MAX(g(k-1, j, i) + g(k, j, i), MIN(gmol1,gmol2)) &
+                        + g(k-1, j+1, i)*g(k, j+1, i) &
+                        / MAX(g(k-1, j+1, i) + g(k, j+1, i), MIN(gmol1,gmol2))
 
-    !                 ! Normal stresses
-    !                 !             ---------------inner derivatives---------------
-    !                 tauxxe = ge * 2.0_realk * (u(k,j,i+1) - u(k,j,i)) * rddx(i+1)
-    !                 tauxxw = gw * 2.0_realk * (u(k,j,i) - u(k,j,i-1)) * rddx(i)
+                    ! Shear stresses
+                    tauxye = ge * ( (u(k,j+1,i) - u(k,j,i))     * rdy(j) + (v(k,j,i+1) - v(k,j,i)) * rdx(i)   )
+                    tauxyw = gw * ( (u(k,j+1,i-1) - u(k,j,i-1)) * rdy(j) + (v(k,j,i) - v(k,j,i-1)) * rdx(i-1) )
 
-    !                 ! Shear stresses
-    !                 !             ------------------------------inner derivatives------------------------------
-    !                 tauyxn = gn * ( (u(k,j+1,i) - u(k,j,i)) * rdy(j)   + (v(k,j,i+1) - v(k,j,i))     * rdx(i) )
-    !                 tauyxs = gs * ( (u(k,j,i) - u(k,j-1,i)) * rdy(j-1) + (v(k,j-1,i+1) - v(k,j-1,i)) * rdx(i) )
-    !                 tauzxt = gt * ( (u(k+1,j,i) - u(k,j,i)) * rdz(k)   + (w(k,j,i+1) - w(k,j,i))     * rdx(i) )
-    !                 tauzxb = gb * ( (u(k,j,i) - u(k-1,j,i)) * rdz(k-1) + (w(k-1,j,i+1) - w(k-1,j,i)) * rdx(i) )
-
-    !                 ! Change due to diffusion
-    !                 !                                  ---------------------------------------outer derivatives----------------------------------------
-    !                 duo = 1/densityFieldiStag(k,j,i) * ( ( tauxxe - tauxxw ) * rdx(i) + ( tauyxn - tauyxs ) * rddy(j) + ( tauzxt - tauzxb ) * rddz(k) )
-
-    !                 ! Addition
-    !                 uo(k, j, i) = uo(k, j, i) + duo
-    !             END DO
-    !         END DO
-    !     END DO
-
-    !     DO i = 3, ii-2
-    !         DO j = 3-nrv, jj-3+nlv
-    !             DO k = 3, kk-2
-    !                 ! Face values of dynamic viscosity on v-momentum cell
-    !                 ! Harmonic mean for a more physical treatment at interfaces
-    !                 ge = g(k, j, i)*g(k, j, i+1) &
-    !                     / MAX(g(k, j, i) + g(k, j, i+1), MIN(gmol1,gmol2)) &
-    !                     + g(k, j+1, i)*g(k, j+1, i+1) &
-    !                     / MAX(g(k, j+1, i) + g(k, j+1, i+1), MIN(gmol1,gmol2))
-    !                 gw = g(k, j, i-1)*g(k, j, i) &
-    !                     / MAX(g(k, j, i-1) + g(k, j, i), MIN(gmol1,gmol2)) &
-    !                     + g(k, j+1, i-1)*g(k, j+1, i) &
-    !                     / MAX(g(k, j+1, i-1) + g(k, j+1, i), MIN(gmol1,gmol2))
-    !                 gn = g(k, j+1, i)
-    !                 gs = g(k, j, i)
-    !                 gt = g(k, j, i)*g(k+1, j, i) &
-    !                     / MAX(g(k, j, i) + g(k+1, j, i), MIN(gmol1,gmol2)) &
-    !                     + g(k, j+1, i)*g(k+1, j+1, i) &
-    !                     / MAX(g(k, j+1, i) + g(k+1, j+1, i), MIN(gmol1,gmol2))
-    !                 gb = g(k-1, j, i)*g(k, j, i) &
-    !                     / MAX(g(k-1, j, i) + g(k, j, i), MIN(gmol1,gmol2)) &
-    !                     + g(k-1, j+1, i)*g(k, j+1, i) &
-    !                     / MAX(g(k-1, j+1, i) + g(k, j+1, i), MIN(gmol1,gmol2))
-
-    !                 ! Shear stresses
-    !                 !             ------------------------------inner derivatives------------------------------
-    !                 tauxye = ge * ( (u(k,j+1,i) - u(k,j,i))     * rdy(j) + (v(k,j,i+1) - v(k,j,i)) * rdx(i)   )
-    !                 tauxyw = gw * ( (u(k,j+1,i-1) - u(k,j,i-1)) * rdy(j) + (v(k,j,i) - v(k,j,i-1)) * rdx(i-1) )
-
-    !                 ! Normal stresses
-    !                 !             ---------------inner derivatives---------------
-    !                 tauyyn = gn * 2.0_realk * (v(k,j+1,i) - v(k,j,i)) * rddy(j+1)
-    !                 tauyys = gs * 2.0_realk * (v(k,j,i) - v(k,j-1,i)) * rddy(j)
+                    ! Normal stresses
+                    tauyyn = gn * 2.0_realk * (v(k,j+1,i) - v(k,j,i)) * rddy(j+1)
+                    tauyys = gs * 2.0_realk * (v(k,j,i) - v(k,j-1,i)) * rddy(j)
                     
-    !                 ! Shear stresses
-    !                 !             ------------------------------inner derivatives------------------------------
-    !                 tauzyt = gt * ( (v(k+1,j,i) - v(k,j,i)) * rdz(k)   + (w(k,j+1,i) - w(k,j,i))     * rdy(j) )
-    !                 tauzyb = gb * ( (v(k,j,i) - v(k-1,j,i)) * rdz(k-1) + (w(k-1,j+1,i) - w(k-1,j,i)) * rdy(j) )
+                    ! Shear stresses
+                    tauzyt = gt * ( (v(k+1,j,i) - v(k,j,i)) * rdz(k)   + (w(k,j+1,i) - w(k,j,i))     * rdy(j) )
+                    tauzyb = gb * ( (v(k,j,i) - v(k-1,j,i)) * rdz(k-1) + (w(k-1,j+1,i) - w(k-1,j,i)) * rdy(j) )
 
-    !                 ! Change due to diffusion
-    !                 !                                  ---------------------------------------outer derivatives----------------------------------------
-    !                 dvo = 1/densityFieldjStag(k,j,i) * ( ( tauxye - tauxyw ) * rddx(i) + ( tauyyn - tauyys ) * rdy(j) + ( tauzyt - tauzyb ) * rddz(k) )
+                    ! Change due to diffusion
+                    vo(k,j,i) = vo(k,j,i) + 1.0_realk/( 0.5_realk * ( d(k,j,i) + d(k,j+1,i) ) ) * &
+                        ( ( tauxye - tauxyw ) * rddx(i) + &
+                          ( tauyyn - tauyys ) * rdy(j) + &
+                          ( tauzyt - tauzyb ) * rddz(k) )
+                END DO
+            END DO
+        END DO
 
-    !                 ! Addition
-    !                 vo(k, j, i) = vo(k, j, i) + dvo
-    !             END DO
-    !         END DO
-    !     END DO
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    ! Face values of dynamic viscosity on w-momentum cell
+                    ! Harmonic mean for a more physical treatment at interfaces
+                    ge = g(k, j, i)*g(k, j, i+1) &
+                        / MAX(g(k, j, i) + g(k, j, i+1), MIN(gmol1,gmol2)) &
+                        + g(k+1, j, i)*g(k+1, j, i+1) &
+                        / MAX(g(k+1, j, i) + g(k+1, j, i+1), MIN(gmol1,gmol2))
+                    gw = g(k, j, i-1)*g(k, j, i) &
+                        / MAX(g(k, j, i-1) + g(k, j, i), MIN(gmol1,gmol2)) &
+                        + g(k+1, j, i-1)*g(k+1, j, i) &
+                        / MAX(g(k+1, j, i-1) + g(k+1, j, i), MIN(gmol1,gmol2))
+                    gn = g(k, j, i)*g(k, j+1, i) &
+                        / MAX(g(k, j, i) + g(k, j+1, i), MIN(gmol1,gmol2)) &
+                        + g(k+1, j, i)*g(k+1, j+1, i) &
+                        / MAX(g(k+1, j, i) + g(k+1, j+1, i), MIN(gmol1,gmol2))
+                    gs = g(k, j-1, i)*g(k, j, i) &
+                        / MAX(g(k, j-1, i) + g(k, j, i), MIN(gmol1,gmol2)) &
+                        + g(k+1, j-1, i)*g(k+1, j, i) &
+                        / MAX(g(k+1, j-1, i) + g(k+1, j, i), MIN(gmol1,gmol2))
+                    gt = g(k+1, j, i)
+                    gb = g(k, j, i)
 
-    !     DO i = 3, ii-2
-    !         DO j = 3, jj-2
-    !             DO k = 3-nbw, kk-3+ntw
-    !                 ! Face values of dynamic viscosity on w-momentum cell
-    !                 ! Harmonic mean for a more physical treatment at interfaces
-    !                 ge = g(k, j, i)*g(k, j, i+1) &
-    !                     / MAX(g(k, j, i) + g(k, j, i+1), MIN(gmol1,gmol2)) &
-    !                     + g(k+1, j, i)*g(k+1, j, i+1) &
-    !                     / MAX(g(k+1, j, i) + g(k+1, j, i+1), MIN(gmol1,gmol2))
-    !                 gw = g(k, j, i-1)*g(k, j, i) &
-    !                     / MAX(g(k, j, i-1) + g(k, j, i), MIN(gmol1,gmol2)) &
-    !                     + g(k+1, j, i-1)*g(k+1, j, i) &
-    !                     / MAX(g(k+1, j, i-1) + g(k+1, j, i), MIN(gmol1,gmol2))
-    !                 gn = g(k, j, i)*g(k, j+1, i) &
-    !                     / MAX(g(k, j, i) + g(k, j+1, i), MIN(gmol1,gmol2)) &
-    !                     + g(k+1, j, i)*g(k+1, j+1, i) &
-    !                     / MAX(g(k+1, j, i) + g(k+1, j+1, i), MIN(gmol1,gmol2))
-    !                 gs = g(k, j-1, i)*g(k, j, i) &
-    !                     / MAX(g(k, j-1, i) + g(k, j, i), MIN(gmol1,gmol2)) &
-    !                     + g(k+1, j-1, i)*g(k+1, j, i) &
-    !                     / MAX(g(k+1, j-1, i) + g(k+1, j, i), MIN(gmol1,gmol2))
-    !                 gt = g(k+1, j, i)
-    !                 gb = g(k, j, i)
-
-    !                 ! Shear stresses
-    !                 !             ------------------------------inner derivatives------------------------------
-    !                 tauxze = ge * ( (u(k+1,j,i) - u(k,j,i))     * rdz(k) + (w(k,j,i+1) - w(k,j,i)) * rdx(i)   )
-    !                 tauxzw = gw * ( (u(k+1,j,i-1) - u(k,j,i-1)) * rdz(k) + (w(k,j,i) - w(k,j,i-1)) * rdx(i-1) )
-    !                 tauyzn = gn * ( (v(k+1,j,i) - v(k,j,i))     * rdz(k) + (w(k,j+1,i) - w(k,j,i)) * rdy(j)   )
-    !                 tauyzs = gs * ( (v(k+1,j-1,i) - v(k,j-1,i)) * rdz(k) + (w(k,j,i) - w(k,j-1,i)) * rdy(j-1) )
+                    ! Shear stresses
+                    tauxze = ge * ( (u(k+1,j,i) - u(k,j,i))     * rdz(k) + (w(k,j,i+1) - w(k,j,i)) * rdx(i)   )
+                    tauxzw = gw * ( (u(k+1,j,i-1) - u(k,j,i-1)) * rdz(k) + (w(k,j,i) - w(k,j,i-1)) * rdx(i-1) )
+                    tauyzn = gn * ( (v(k+1,j,i) - v(k,j,i))     * rdz(k) + (w(k,j+1,i) - w(k,j,i)) * rdy(j)   )
+                    tauyzs = gs * ( (v(k+1,j-1,i) - v(k,j-1,i)) * rdz(k) + (w(k,j,i) - w(k,j-1,i)) * rdy(j-1) )
                     
-    !                 ! Normal stresses
-    !                 !             ---------------inner derivatives---------------
-    !                 tauzzt = gt * 2.0_realk * (w(k+1,j,i) - w(k,j,i)) * rddz(k+1)
-    !                 tauzzb = gb * 2.0_realk * (w(k,j,i) - w(k-1,j,i)) * rddz(k)
+                    ! Normal stresses
+                    tauzzt = gt * 2.0_realk * (w(k+1,j,i) - w(k,j,i)) * rddz(k+1)
+                    tauzzb = gb * 2.0_realk * (w(k,j,i) - w(k-1,j,i)) * rddz(k)
 
-    !                 ! Change due to diffusion
-    !                 !                                  ---------------------------------------outer derivatives----------------------------------------
-    !                 dwo = 1/densityFieldkStag(k,j,i) * ( ( tauxze - tauxzw ) * rddx(i) + ( tauyzn - tauyzs ) * rddy(j) + ( tauzzt - tauzzb ) * rdz(k) )
+                    ! Change due to diffusion
+                    wo(k,j,i) = wo(k,j,i) + 1.0_realk/( 0.5_realk * ( d(k,j,i) + d(k,j,i+1) ) ) * &
+                        ( ( tauxze - tauxzw ) * rddx(i) + &
+                          ( tauyzn - tauyzs ) * rddy(j) + &
+                          ( tauzzt - tauzzb ) * rdz(k) )
+                END DO
+            END DO
+        END DO 
 
-    !                 ! Addition
-    !                 wo(k, j, i) = wo(k, j, i) + dwo
-    !             END DO
-    !         END DO
-    !     END DO 
-
-    ! END SUBROUTINE multiphase_momentum_diffusion
+    END SUBROUTINE diff_operator
 
     !================================================================
 
@@ -1324,7 +1425,7 @@ CONTAINS
 
     !================================================================
 
-    PURE SUBROUTINE comp_advr_inter(velo1, velo2, velo3, length, scheme, advrD)
+    PURE SUBROUTINE comp_advr_inter(vel1, vel2, vel3, length, scheme, advrD)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -1338,7 +1439,7 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        REAL(realk), INTENT(in) :: velo1, velo2, velo3
+        REAL(realk), INTENT(in) :: vel1, vel2, vel3
         REAL(realk), INTENT(in) :: length
         CHARACTER(len=*), INTENT(in) :: scheme
         REAL(realk), INTENT(out) :: advrD 
@@ -1348,19 +1449,19 @@ CONTAINS
         REAL(realk) :: a, a1, a2
 
         IF ( scheme == 'ENO' ) THEN
-            IF ( abs(velo3-velo2) < abs(velo2-velo1) ) THEN
-                limiter = velo3-velo2
+            IF ( abs(vel3-vel2) < abs(vel2-vel1) ) THEN
+                limiter = vel3-vel2
             ELSE 
-                limiter = velo2-velo1
+                limiter = vel2-vel1
             END IF
         ELSE IF ( scheme == 'WENO' ) THEN
-            a1 = 1.0_realk / ( ( velo2 - velo1 )**2.0_realk + 1.0E-16_realk )
-            a2 = 1.0_realk / ( ( velo3 - velo2 )**2.0_realk + 1.0E-16_realk )
+            a1 = 1.0_realk / ( ( vel2 - vel1 )**2.0_realk + 1.0E-16_realk )
+            a2 = 1.0_realk / ( ( vel3 - vel2 )**2.0_realk + 1.0E-16_realk )
             a = a1 + a2
-            limiter = ( a1 * ( velo2 - velo1 ) + a2 * (velo3 - velo2) ) / a
+            limiter = ( a1 * ( vel2 - vel1 ) + a2 * (vel3 - vel2) ) / a
         END IF
         
-        advrD = velo2 + limiter * length
+        advrD = vel2 + limiter * length
 
     END SUBROUTINE comp_advr_inter
 
@@ -1368,7 +1469,7 @@ CONTAINS
 
     PURE SUBROUTINE get_component_specifics(kk, jj, ii, q, u, v, w, &
         dx, dy, dz, ddx, ddy, ddz, i0, j0, k0, iStag, jStag, kStag, &
-        deltaX, deltaY, deltaZ, veloFld)
+        deltaX, deltaY, deltaZ, velFld)
     !----------------------------------------------------------------
     !   What it does:
     !   Select the specifics for the qth staggered grid.
@@ -1382,7 +1483,7 @@ CONTAINS
         INTEGER(intk), INTENT(out), OPTIONAL :: i0, j0, k0
         REAL(realk), INTENT(out), OPTIONAL :: iStag, jStag, kStag
         REAL(realk), INTENT(out), OPTIONAL :: deltaX(ii), deltaY(jj), deltaZ(kk)
-        REAL(realk), INTENT(out), OPTIONAL :: veloFld(kk, jj, ii)
+        REAL(realk), INTENT(out), OPTIONAL :: velFld(kk, jj, ii)
 
         ! Local variables
         ! None
@@ -1397,7 +1498,7 @@ CONTAINS
             IF ( PRESENT(deltaX) ) deltaX = dx
             IF ( PRESENT(deltaY) ) deltaY = ddy
             IF ( PRESENT(deltaZ) ) deltaZ = ddz
-            IF ( PRESENT(veloFld) ) veloFld = u
+            IF ( PRESENT(velFld) ) velFld = u
         ELSE IF ( q == 2 ) THEN
             IF ( PRESENT(iStag) ) iStag = 0.0_realk
             IF ( PRESENT(jStag) ) jStag = 1.0_realk
@@ -1408,7 +1509,7 @@ CONTAINS
             IF ( PRESENT(deltaX) ) deltaX = ddx
             IF ( PRESENT(deltaY) ) deltaY = dy
             IF ( PRESENT(deltaZ) ) deltaZ = ddz
-            IF ( PRESENT(veloFld) ) veloFld = v
+            IF ( PRESENT(velFld) ) velFld = v
         ELSE IF ( q == 3 ) THEN
             IF ( PRESENT(iStag) ) iStag = 0.0_realk
             IF ( PRESENT(jStag) ) jStag = 0.0_realk
@@ -1419,7 +1520,7 @@ CONTAINS
             IF ( PRESENT(deltaX) ) deltaX = ddx
             IF ( PRESENT(deltaY) ) deltaY = ddy
             IF ( PRESENT(deltaZ) ) deltaZ = dz
-            IF ( PRESENT(veloFld) ) veloFld = w
+            IF ( PRESENT(velFld) ) velFld = w
         END IF
     
     END SUBROUTINE get_component_specifics

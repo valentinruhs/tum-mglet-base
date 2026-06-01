@@ -32,6 +32,8 @@
     "multiphase": {
     	"solve": true,
 	"test": "VorBoF",
+	"splitting": "direction-wise",
+	"permutation": 3,
 	"rho1" : 1.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.000001,
