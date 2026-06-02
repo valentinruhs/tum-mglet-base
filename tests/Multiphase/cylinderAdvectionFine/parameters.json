@@ -1,7 +1,7 @@
 {
     "time": {
-        "dt": 0.02,
-        "mtstep": 500,
+        "dt": 0.01,
+        "mtstep": 3000,
 	"itinfo": 100,
         "tstat": 10.0,
 	"read": false
@@ -32,6 +32,8 @@
     "multiphase": {
     	"solve": true,
 	"test": "CylAdF",
+	"splitting": "direction-wise",
+	"permutation": 3,
 	"rho1" : 1000.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.000001,

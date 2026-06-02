@@ -16,12 +16,13 @@ MODULE multiphase_vof_transport_mod
     USE grids_mod, ONLY: nmygrids, mygrids
     USE field_mod, ONLY: field_t
     USE fields_mod, ONLY: get_field
-    USE grids_mod, ONLY: get_mgdims, get_mgbasb
+    USE grids_mod, ONLY: get_mgdims, get_mgbasb, get_gradpxflag
     USE err_mod, ONLY: errr
     USE multiphase_plic_mod, ONLY: comp_prop, iface_recon_wrap, comp_stag_frac_wrap
     USE rungekutta_mod, ONLY: rk_2n_t
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, splitting_multiphase, permutation_multiphase
     USE multiphase_material_mod, ONLY: comp_material_property_field
+    USE flowcore_mod, ONLY: gradp
     
     IMPLICIT NONE
     PRIVATE 
@@ -613,7 +614,7 @@ CONTAINS
 
             CALL diff_operator(kk, jj, ii, u, v, w, vffPrev, g, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
 
-            ! CALL exte_operator()
+            CALL pres_operator(kk, jj, ii, vffPrev, p, rdx, rdy, rdz, igrid, uo, vo, wo)
 
             u = u + uo * dtrki
             v = v + vo * dtrki
@@ -856,6 +857,218 @@ CONTAINS
 
     !================================================================
 
+    SUBROUTINE diff_operator(kk, jj, ii, u, v, w, vff, g, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
+    
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii), vff(kk, jj, ii), g(kk, jj, ii)
+        REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
+        REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
+        REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
+
+        ! Local variables
+        REAL(realk) :: d(kk, jj, ii)
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: ge, gw, gn, gs, gt, gb
+        REAL(realk) :: tauxxe, tauxxw, tauyxn, tauyxs, tauzxt, tauzxb
+        REAL(realk) :: tauxye, tauxyw, tauyyn, tauyys, tauzyt, tauzyb
+        REAL(realk) :: tauxze, tauxzw, tauyzn, tauyzs, tauzzt, tauzzb
+        
+        CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, d)
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    ! Face values of dynamic viscosity on u-momentum cell
+                    ! Harmonic mean for a more physical treatment at interfaces
+                    ge = g(k, j, i+1)
+                    gw = g(k, j, i)
+                    gn = g(k, j, i)*g(k, j+1, i) &
+                        / MAX(g(k, j, i) + g(k, j+1, i), MIN(gmol1,gmol2)) &
+                        + g(k, j, i+1)*g(k, j+1, i+1) &
+                        / MAX(g(k, j, i+1) + g(k, j+1, i+1), MIN(gmol1,gmol2))
+                    gs = g(k, j-1, i)*g(k, j, i) &
+                        / MAX(g(k, j-1, i) + g(k, j, i), MIN(gmol1,gmol2)) &
+                        + g(k, j-1, i+1)*g(k, j, i+1) &
+                        / MAX(g(k, j-1, i+1) + g(k, j, i+1), MIN(gmol1,gmol2))
+                    gt = g(k, j, i)*g(k+1, j, i) &
+                        / MAX(g(k, j, i) + g(k+1, j, i), MIN(gmol1,gmol2)) &
+                        + g(k, j, i+1)*g(k+1, j, i+1) &
+                        /MAX(g(k, j, i+1) + g(k+1, j, i+1), MIN(gmol1,gmol2))
+                    gb = g(k-1, j, i)*g(k, j, i) &
+                        / MAX(g(k-1, j, i) + g(k, j, i), MIN(gmol1,gmol2)) &
+                        + g(k-1, j, i+1)*g(k, j, i+1) &
+                        / MAX(g(k-1, j, i+1) + g(k, j, i+1), MIN(gmol1,gmol2))
+
+                    ! Normal stresses
+                    tauxxe = ge * 2.0_realk * (u(k,j,i+1) - u(k,j,i)) * rddx(i+1)
+                    tauxxw = gw * 2.0_realk * (u(k,j,i) - u(k,j,i-1)) * rddx(i)
+
+                    ! Shear stresses
+                    tauyxn = gn * ( (u(k,j+1,i) - u(k,j,i)) * rdy(j)   + (v(k,j,i+1) - v(k,j,i))     * rdx(i) )
+                    tauyxs = gs * ( (u(k,j,i) - u(k,j-1,i)) * rdy(j-1) + (v(k,j-1,i+1) - v(k,j-1,i)) * rdx(i) )
+                    tauzxt = gt * ( (u(k+1,j,i) - u(k,j,i)) * rdz(k)   + (w(k,j,i+1) - w(k,j,i))     * rdx(i) )
+                    tauzxb = gb * ( (u(k,j,i) - u(k-1,j,i)) * rdz(k-1) + (w(k-1,j,i+1) - w(k-1,j,i)) * rdx(i) )
+
+                    ! Change due to diffusion
+                    uo(k,j,i) = uo(k,j,i) + 2.0_realk/( d(k,j,i) + d(k,j,i+1) ) * &
+                        ( ( tauxxe - tauxxw ) * rdx(i) + &
+                          ( tauyxn - tauyxs ) * rddy(j) + &
+                          ( tauzxt - tauzxb ) * rddz(k) )
+                END DO
+            END DO
+        END DO
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    ! Face values of dynamic viscosity on v-momentum cell
+                    ! Harmonic mean for a more physical treatment at interfaces
+                    ge = g(k, j, i)*g(k, j, i+1) &
+                        / MAX(g(k, j, i) + g(k, j, i+1), MIN(gmol1,gmol2)) &
+                        + g(k, j+1, i)*g(k, j+1, i+1) &
+                        / MAX(g(k, j+1, i) + g(k, j+1, i+1), MIN(gmol1,gmol2))
+                    gw = g(k, j, i-1)*g(k, j, i) &
+                        / MAX(g(k, j, i-1) + g(k, j, i), MIN(gmol1,gmol2)) &
+                        + g(k, j+1, i-1)*g(k, j+1, i) &
+                        / MAX(g(k, j+1, i-1) + g(k, j+1, i), MIN(gmol1,gmol2))
+                    gn = g(k, j+1, i)
+                    gs = g(k, j, i)
+                    gt = g(k, j, i)*g(k+1, j, i) &
+                        / MAX(g(k, j, i) + g(k+1, j, i), MIN(gmol1,gmol2)) &
+                        + g(k, j+1, i)*g(k+1, j+1, i) &
+                        / MAX(g(k, j+1, i) + g(k+1, j+1, i), MIN(gmol1,gmol2))
+                    gb = g(k-1, j, i)*g(k, j, i) &
+                        / MAX(g(k-1, j, i) + g(k, j, i), MIN(gmol1,gmol2)) &
+                        + g(k-1, j+1, i)*g(k, j+1, i) &
+                        / MAX(g(k-1, j+1, i) + g(k, j+1, i), MIN(gmol1,gmol2))
+
+                    ! Shear stresses
+                    tauxye = ge * ( (u(k,j+1,i) - u(k,j,i))     * rdy(j) + (v(k,j,i+1) - v(k,j,i)) * rdx(i)   )
+                    tauxyw = gw * ( (u(k,j+1,i-1) - u(k,j,i-1)) * rdy(j) + (v(k,j,i) - v(k,j,i-1)) * rdx(i-1) )
+
+                    ! Normal stresses
+                    tauyyn = gn * 2.0_realk * (v(k,j+1,i) - v(k,j,i)) * rddy(j+1)
+                    tauyys = gs * 2.0_realk * (v(k,j,i) - v(k,j-1,i)) * rddy(j)
+                    
+                    ! Shear stresses
+                    tauzyt = gt * ( (v(k+1,j,i) - v(k,j,i)) * rdz(k)   + (w(k,j+1,i) - w(k,j,i))     * rdy(j) )
+                    tauzyb = gb * ( (v(k,j,i) - v(k-1,j,i)) * rdz(k-1) + (w(k-1,j+1,i) - w(k-1,j,i)) * rdy(j) )
+
+                    ! Change due to diffusion
+                    vo(k,j,i) = vo(k,j,i) + 2.0_realk/( d(k,j,i) + d(k,j+1,i) ) * &
+                        ( ( tauxye - tauxyw ) * rddx(i) + &
+                          ( tauyyn - tauyys ) * rdy(j) + &
+                          ( tauzyt - tauzyb ) * rddz(k) )
+                END DO
+            END DO
+        END DO
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    ! Face values of dynamic viscosity on w-momentum cell
+                    ! Harmonic mean for a more physical treatment at interfaces
+                    ge = g(k, j, i)*g(k, j, i+1) &
+                        / MAX(g(k, j, i) + g(k, j, i+1), MIN(gmol1,gmol2)) &
+                        + g(k+1, j, i)*g(k+1, j, i+1) &
+                        / MAX(g(k+1, j, i) + g(k+1, j, i+1), MIN(gmol1,gmol2))
+                    gw = g(k, j, i-1)*g(k, j, i) &
+                        / MAX(g(k, j, i-1) + g(k, j, i), MIN(gmol1,gmol2)) &
+                        + g(k+1, j, i-1)*g(k+1, j, i) &
+                        / MAX(g(k+1, j, i-1) + g(k+1, j, i), MIN(gmol1,gmol2))
+                    gn = g(k, j, i)*g(k, j+1, i) &
+                        / MAX(g(k, j, i) + g(k, j+1, i), MIN(gmol1,gmol2)) &
+                        + g(k+1, j, i)*g(k+1, j+1, i) &
+                        / MAX(g(k+1, j, i) + g(k+1, j+1, i), MIN(gmol1,gmol2))
+                    gs = g(k, j-1, i)*g(k, j, i) &
+                        / MAX(g(k, j-1, i) + g(k, j, i), MIN(gmol1,gmol2)) &
+                        + g(k+1, j-1, i)*g(k+1, j, i) &
+                        / MAX(g(k+1, j-1, i) + g(k+1, j, i), MIN(gmol1,gmol2))
+                    gt = g(k+1, j, i)
+                    gb = g(k, j, i)
+
+                    ! Shear stresses
+                    tauxze = ge * ( (u(k+1,j,i) - u(k,j,i))     * rdz(k) + (w(k,j,i+1) - w(k,j,i)) * rdx(i)   )
+                    tauxzw = gw * ( (u(k+1,j,i-1) - u(k,j,i-1)) * rdz(k) + (w(k,j,i) - w(k,j,i-1)) * rdx(i-1) )
+                    tauyzn = gn * ( (v(k+1,j,i) - v(k,j,i))     * rdz(k) + (w(k,j+1,i) - w(k,j,i)) * rdy(j)   )
+                    tauyzs = gs * ( (v(k+1,j-1,i) - v(k,j-1,i)) * rdz(k) + (w(k,j,i) - w(k,j-1,i)) * rdy(j-1) )
+                    
+                    ! Normal stresses
+                    tauzzt = gt * 2.0_realk * (w(k+1,j,i) - w(k,j,i)) * rddz(k+1)
+                    tauzzb = gb * 2.0_realk * (w(k,j,i) - w(k-1,j,i)) * rddz(k)
+
+                    ! Change due to diffusion
+                    wo(k,j,i) = wo(k,j,i) + 2.0_realk/( d(k,j,i) + d(k,j,i+1) ) * &
+                        ( ( tauxze - tauxzw ) * rddx(i) + &
+                          ( tauyzn - tauyzs ) * rddy(j) + &
+                          ( tauzzt - tauzzb ) * rdz(k) )
+                END DO
+            END DO
+        END DO 
+
+    END SUBROUTINE diff_operator
+
+    !================================================================
+
+    SUBROUTINE pres_operator(kk, jj, ii, vff, p, rdx, rdy, rdz, igrid, uo, vo, wo)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii), p(kk, jj, ii)
+        REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
+        INTEGER(intk), INTENT(in) :: igrid
+        REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
+
+        ! Local variables
+        REAL(realk) :: d(kk, jj, ii)
+        INTEGER(intk) :: gradpflag
+        REAL(realk) :: gpx, gpy, gpz
+        INTEGER(intk) :: i, j, k
+
+        CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, d)
+
+        CALL get_gradpxflag(gradpflag, igrid)
+        gpx = gradp(1)*gradpflag
+        gpy = gradp(2)*gradpflag
+        gpz = gradp(3)*gradpflag
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    uo(k,j,i) = uo(k,j,i) - 2.0_realk / ( d(k,j,i) + d(k,j,i+1) ) * ( p(k,j,i+1) - p(k,j,i) + gpx / rdx(i) ) * rdx(i)
+                END DO
+            END DO
+        END DO
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    vo(k,j,i) = vo(k,j,i) - 2.0_realk / ( d(k,j,i) + d(k,j+1,i) ) * ( p(k,j+1,i) - p(k,j,i) + gpy / rdy(j) ) * rdy(j)
+                END DO
+            END DO
+        END DO
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    wo(k,j,i) = wo(k,j,i) - 2.0_realk / ( d(k,j,i) + d(k+1,j,i) ) * ( p(k+1,j,i) - p(k,j,i) + gpz / rdz(k) ) * rdz(k)
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE pres_operator
+
+    !================================================================
+
     SUBROUTINE adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, velWY1, velWY2, velWY3, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
     !----------------------------------------------------------------
     !   What it does:
@@ -939,8 +1152,8 @@ CONTAINS
                     a1 = velWY(k-k0,j-j0,i-i0)*dtrki/deltaX(i-i0)
                     a2 = velWY(k,j,i)*dtrki/deltaX(i)
 
-                    CALL comp_advr_inter(vel1, vel2, vel3, -0.5_realk*(1.0_realk + a1), "ENO", advrU)
-                    CALL comp_advr_inter(vel1, vel2, vel3,  0.5_realk*(1.0_realk - a2), "ENO", advrD)
+                    CALL comp_advr_inter(vel1, vel2, vel3, -0.5_realk*(1.0_realk + a1), "WENO", advrU)
+                    CALL comp_advr_inter(vel1, vel2, vel3,  0.5_realk*(1.0_realk - a2), "WENO", advrD)
                     
                     momFlux(k,j,i) = ( rho1 * vffFlux(k,j,i) + rho2 * complVffFlux(k,j,i) ) * advrD
                 END DO
@@ -1156,164 +1369,6 @@ CONTAINS
         END IF
 
     END SUBROUTINE check_solenoidality
-
-    !================================================================
-
-    SUBROUTINE diff_operator(kk, jj, ii, u, v, w, vff, g, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
-    !----------------------------------------------------------------
-    !   What it does:
-    !    
-    !----------------------------------------------------------------
-    
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii), vff(kk, jj, ii), g(kk, jj, ii)
-        REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
-        REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
-        REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
-
-        ! Local variables
-        REAL(realk) :: d(kk, jj, ii)
-        INTEGER(intk) :: k, j, i
-        REAL(realk) :: ge, gw, gn, gs, gt, gb
-        REAL(realk) :: tauxxe, tauxxw, tauyxn, tauyxs, tauzxt, tauzxb
-        REAL(realk) :: tauxye, tauxyw, tauyyn, tauyys, tauzyt, tauzyb
-        REAL(realk) :: tauxze, tauxzw, tauyzn, tauyzs, tauzzt, tauzzb
-        return
-        CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, d)
-
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
-                    ! Face values of dynamic viscosity on u-momentum cell
-                    ! Harmonic mean for a more physical treatment at interfaces
-                    ge = g(k, j, i+1)
-                    gw = g(k, j, i)
-                    gn = g(k, j, i)*g(k, j+1, i) &
-                        / MAX(g(k, j, i) + g(k, j+1, i), MIN(gmol1,gmol2)) &
-                        + g(k, j, i+1)*g(k, j+1, i+1) &
-                        / MAX(g(k, j, i+1) + g(k, j+1, i+1), MIN(gmol1,gmol2))
-                    gs = g(k, j-1, i)*g(k, j, i) &
-                        / MAX(g(k, j-1, i) + g(k, j, i), MIN(gmol1,gmol2)) &
-                        + g(k, j-1, i+1)*g(k, j, i+1) &
-                        / MAX(g(k, j-1, i+1) + g(k, j, i+1), MIN(gmol1,gmol2))
-                    gt = g(k, j, i)*g(k+1, j, i) &
-                        / MAX(g(k, j, i) + g(k+1, j, i), MIN(gmol1,gmol2)) &
-                        + g(k, j, i+1)*g(k+1, j, i+1) &
-                        /MAX(g(k, j, i+1) + g(k+1, j, i+1), MIN(gmol1,gmol2))
-                    gb = g(k-1, j, i)*g(k, j, i) &
-                        / MAX(g(k-1, j, i) + g(k, j, i), MIN(gmol1,gmol2)) &
-                        + g(k-1, j, i+1)*g(k, j, i+1) &
-                        / MAX(g(k-1, j, i+1) + g(k, j, i+1), MIN(gmol1,gmol2))
-
-                    ! Normal stresses
-                    tauxxe = ge * 2.0_realk * (u(k,j,i+1) - u(k,j,i)) * rddx(i+1)
-                    tauxxw = gw * 2.0_realk * (u(k,j,i) - u(k,j,i-1)) * rddx(i)
-
-                    ! Shear stresses
-                    tauyxn = gn * ( (u(k,j+1,i) - u(k,j,i)) * rdy(j)   + (v(k,j,i+1) - v(k,j,i))     * rdx(i) )
-                    tauyxs = gs * ( (u(k,j,i) - u(k,j-1,i)) * rdy(j-1) + (v(k,j-1,i+1) - v(k,j-1,i)) * rdx(i) )
-                    tauzxt = gt * ( (u(k+1,j,i) - u(k,j,i)) * rdz(k)   + (w(k,j,i+1) - w(k,j,i))     * rdx(i) )
-                    tauzxb = gb * ( (u(k,j,i) - u(k-1,j,i)) * rdz(k-1) + (w(k-1,j,i+1) - w(k-1,j,i)) * rdx(i) )
-
-                    ! Change due to diffusion
-                    uo(k,j,i) = uo(k,j,i) + 1.0_realk/( 0.5_realk * ( d(k,j,i) + d(k,j,i+1) ) ) * &
-                        ( ( tauxxe - tauxxw ) * rdx(i) + &
-                          ( tauyxn - tauyxs ) * rddy(j) + &
-                          ( tauzxt - tauzxb ) * rddz(k) )
-                END DO
-            END DO
-        END DO
-
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
-                    ! Face values of dynamic viscosity on v-momentum cell
-                    ! Harmonic mean for a more physical treatment at interfaces
-                    ge = g(k, j, i)*g(k, j, i+1) &
-                        / MAX(g(k, j, i) + g(k, j, i+1), MIN(gmol1,gmol2)) &
-                        + g(k, j+1, i)*g(k, j+1, i+1) &
-                        / MAX(g(k, j+1, i) + g(k, j+1, i+1), MIN(gmol1,gmol2))
-                    gw = g(k, j, i-1)*g(k, j, i) &
-                        / MAX(g(k, j, i-1) + g(k, j, i), MIN(gmol1,gmol2)) &
-                        + g(k, j+1, i-1)*g(k, j+1, i) &
-                        / MAX(g(k, j+1, i-1) + g(k, j+1, i), MIN(gmol1,gmol2))
-                    gn = g(k, j+1, i)
-                    gs = g(k, j, i)
-                    gt = g(k, j, i)*g(k+1, j, i) &
-                        / MAX(g(k, j, i) + g(k+1, j, i), MIN(gmol1,gmol2)) &
-                        + g(k, j+1, i)*g(k+1, j+1, i) &
-                        / MAX(g(k, j+1, i) + g(k+1, j+1, i), MIN(gmol1,gmol2))
-                    gb = g(k-1, j, i)*g(k, j, i) &
-                        / MAX(g(k-1, j, i) + g(k, j, i), MIN(gmol1,gmol2)) &
-                        + g(k-1, j+1, i)*g(k, j+1, i) &
-                        / MAX(g(k-1, j+1, i) + g(k, j+1, i), MIN(gmol1,gmol2))
-
-                    ! Shear stresses
-                    tauxye = ge * ( (u(k,j+1,i) - u(k,j,i))     * rdy(j) + (v(k,j,i+1) - v(k,j,i)) * rdx(i)   )
-                    tauxyw = gw * ( (u(k,j+1,i-1) - u(k,j,i-1)) * rdy(j) + (v(k,j,i) - v(k,j,i-1)) * rdx(i-1) )
-
-                    ! Normal stresses
-                    tauyyn = gn * 2.0_realk * (v(k,j+1,i) - v(k,j,i)) * rddy(j+1)
-                    tauyys = gs * 2.0_realk * (v(k,j,i) - v(k,j-1,i)) * rddy(j)
-                    
-                    ! Shear stresses
-                    tauzyt = gt * ( (v(k+1,j,i) - v(k,j,i)) * rdz(k)   + (w(k,j+1,i) - w(k,j,i))     * rdy(j) )
-                    tauzyb = gb * ( (v(k,j,i) - v(k-1,j,i)) * rdz(k-1) + (w(k-1,j+1,i) - w(k-1,j,i)) * rdy(j) )
-
-                    ! Change due to diffusion
-                    vo(k,j,i) = vo(k,j,i) + 1.0_realk/( 0.5_realk * ( d(k,j,i) + d(k,j+1,i) ) ) * &
-                        ( ( tauxye - tauxyw ) * rddx(i) + &
-                          ( tauyyn - tauyys ) * rdy(j) + &
-                          ( tauzyt - tauzyb ) * rddz(k) )
-                END DO
-            END DO
-        END DO
-
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
-                    ! Face values of dynamic viscosity on w-momentum cell
-                    ! Harmonic mean for a more physical treatment at interfaces
-                    ge = g(k, j, i)*g(k, j, i+1) &
-                        / MAX(g(k, j, i) + g(k, j, i+1), MIN(gmol1,gmol2)) &
-                        + g(k+1, j, i)*g(k+1, j, i+1) &
-                        / MAX(g(k+1, j, i) + g(k+1, j, i+1), MIN(gmol1,gmol2))
-                    gw = g(k, j, i-1)*g(k, j, i) &
-                        / MAX(g(k, j, i-1) + g(k, j, i), MIN(gmol1,gmol2)) &
-                        + g(k+1, j, i-1)*g(k+1, j, i) &
-                        / MAX(g(k+1, j, i-1) + g(k+1, j, i), MIN(gmol1,gmol2))
-                    gn = g(k, j, i)*g(k, j+1, i) &
-                        / MAX(g(k, j, i) + g(k, j+1, i), MIN(gmol1,gmol2)) &
-                        + g(k+1, j, i)*g(k+1, j+1, i) &
-                        / MAX(g(k+1, j, i) + g(k+1, j+1, i), MIN(gmol1,gmol2))
-                    gs = g(k, j-1, i)*g(k, j, i) &
-                        / MAX(g(k, j-1, i) + g(k, j, i), MIN(gmol1,gmol2)) &
-                        + g(k+1, j-1, i)*g(k+1, j, i) &
-                        / MAX(g(k+1, j-1, i) + g(k+1, j, i), MIN(gmol1,gmol2))
-                    gt = g(k+1, j, i)
-                    gb = g(k, j, i)
-
-                    ! Shear stresses
-                    tauxze = ge * ( (u(k+1,j,i) - u(k,j,i))     * rdz(k) + (w(k,j,i+1) - w(k,j,i)) * rdx(i)   )
-                    tauxzw = gw * ( (u(k+1,j,i-1) - u(k,j,i-1)) * rdz(k) + (w(k,j,i) - w(k,j,i-1)) * rdx(i-1) )
-                    tauyzn = gn * ( (v(k+1,j,i) - v(k,j,i))     * rdz(k) + (w(k,j+1,i) - w(k,j,i)) * rdy(j)   )
-                    tauyzs = gs * ( (v(k+1,j-1,i) - v(k,j-1,i)) * rdz(k) + (w(k,j,i) - w(k,j-1,i)) * rdy(j-1) )
-                    
-                    ! Normal stresses
-                    tauzzt = gt * 2.0_realk * (w(k+1,j,i) - w(k,j,i)) * rddz(k+1)
-                    tauzzb = gb * 2.0_realk * (w(k,j,i) - w(k-1,j,i)) * rddz(k)
-
-                    ! Change due to diffusion
-                    wo(k,j,i) = wo(k,j,i) + 1.0_realk/( 0.5_realk * ( d(k,j,i) + d(k,j,i+1) ) ) * &
-                        ( ( tauxze - tauxzw ) * rddx(i) + &
-                          ( tauyzn - tauyzs ) * rddy(j) + &
-                          ( tauzzt - tauzzb ) * rdz(k) )
-                END DO
-            END DO
-        END DO 
-
-    END SUBROUTINE diff_operator
 
     !================================================================
 
