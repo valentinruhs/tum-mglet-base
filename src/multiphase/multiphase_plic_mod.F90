@@ -20,15 +20,13 @@ MODULE multiphase_plic_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: init_multiphase_plic, finish_multiphase_plic, &
-              track_interface, track_near_interface_region, interface_reconstruction_wrapper, &
-              compute_normal_vector, compute_alpha, compute_cell_proportion, &
-              staggered_fractions_wrapper, compute_iStag_vff, compute_jStag_vff, compute_kStag_vff
+    PUBLIC :: init_multiphase_plic, finish_multiphase_plic, iface_recon_wrap, &
+              comp_prop, comp_stag_frac_wrap
 
 
-    INTERFACE interface_reconstruction_wrapper
-        MODULE PROCEDURE interface_reconstruction_wrapper_pres
-        MODULE PROCEDURE interface_reconstruction_wrapper_stag
+    INTERFACE iface_recon_wrap
+        MODULE PROCEDURE iface_recon_wrap_pres
+        MODULE PROCEDURE iface_recon_wrap_stag
     END INTERFACE
 
 CONTAINS
@@ -135,10 +133,9 @@ CONTAINS
 
     END SUBROUTINE track_near_interface_region
 
-    
     !================================================================
 
-    SUBROUTINE interface_reconstruction_wrapper_pres(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+    SUBROUTINE iface_recon_wrap_pres(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine is just a wrapper for the subroutines, which
@@ -159,18 +156,18 @@ CONTAINS
         ! None
 
         CALL track_interface(isInterface, kk, jj, ii, vff, tol)
-        CALL compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
-        CALL compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+        CALL comp_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
+        CALL comp_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
 
         IF ( PRESENT(isNearInterface) ) THEN
             CALL track_near_interface_region(isNearInterface, kk, jj, ii, isInterface, tol)
         END IF
 
-    END SUBROUTINE interface_reconstruction_wrapper_pres
+    END SUBROUTINE iface_recon_wrap_pres
 
     !================================================================
 
-    SUBROUTINE interface_reconstruction_wrapper_stag(kk, jj, ii, q, vff, dx, dy, dz, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+    SUBROUTINE iface_recon_wrap_stag(kk, jj, ii, q, vff, dx, dy, dz, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine is just a wrapper for the subroutines, which
@@ -180,14 +177,14 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: q
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii, 3)
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol
-        REAL(realk), INTENT(out) :: normx(kk, jj, ii, 3), normy(kk, jj, ii, 3), normz(kk, jj, ii, 3)
-        REAL(realk), INTENT(out) :: alpha(kk, jj, ii, 3)
-        LOGICAL, INTENT(out) :: isInterface(kk, jj, ii, 3)
-        LOGICAL, INTENT(out), OPTIONAL :: isNearInterface(kk, jj, ii, 3)
+        REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
+        REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
+        LOGICAL, INTENT(out) :: isInterface(kk, jj, ii)
+        LOGICAL, INTENT(out), OPTIONAL :: isNearInterface(kk, jj, ii)
 
         ! Local variables
         REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
@@ -206,19 +203,19 @@ CONTAINS
             deltaZ = dz
         END IF
 
-        CALL track_interface(isInterface(:,:,:,q), kk, jj, ii, vff(:,:,:,q), tol)
-        CALL compute_normal_vector(normx(:,:,:,q), normy(:,:,:,q), normz(:,:,:,q), kk, jj, ii, vff(:,:,:,q), deltaX, deltaY, deltaZ, tol)
-        CALL compute_alpha(alpha(:,:,:,q), kk, jj, ii, vff(:,:,:,q), isInterface(:,:,:,q), deltaX, deltaY, deltaZ, normx(:,:,:,q), normy(:,:,:,q), normz(:,:,:,q), tol)
+        CALL track_interface(isInterface, kk, jj, ii, vff, tol)
+        CALL comp_normal_vector(normx, normy, normz, kk, jj, ii, vff, deltaX, deltaY, deltaZ, tol)
+        CALL comp_alpha(alpha, kk, jj, ii, vff, isInterface, deltaX, deltaY, deltaZ, normx, normy, normz, tol)
 
         IF ( PRESENT(isNearInterface) ) THEN
-            CALL track_near_interface_region(isNearInterface(:,:,:,q), kk, jj, ii, isInterface(:,:,:,q), tol)
+            CALL track_near_interface_region(isNearInterface, kk, jj, ii, isInterface, tol)
         END IF
 
-    END SUBROUTINE interface_reconstruction_wrapper_stag
+    END SUBROUTINE iface_recon_wrap_stag
 
     !================================================================
 
-    SUBROUTINE compute_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
+    SUBROUTINE comp_normal_vector(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the normal vector components normx, normy and normz
@@ -287,11 +284,11 @@ CONTAINS
             END DO
         END DO
 
-    END SUBROUTINE compute_normal_vector
+    END SUBROUTINE comp_normal_vector
 
     !================================================================
 
-    SUBROUTINE compute_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+    SUBROUTINE comp_alpha(alpha, kk, jj, ii, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine calculates the alpha value for PLIC. The 
@@ -334,18 +331,18 @@ CONTAINS
 
                     ! 1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
                     ! To enhance performance consider inlining
-                    CALL get_corner_crossing_order(m1, m2, m3, c1, c2, c3, normx(k,j,i), normy(k,j,i), normz(k,j,i), ddx(i), ddy(j), ddz(k))
+                    CALL get_order(m1, m2, m3, c1, c2, c3, normx(k,j,i), normy(k,j,i), normz(k,j,i), ddx(i), ddy(j), ddz(k))
 
                     ! 2. Transform vff to a actual volume in bounds [0,0.5] * dV
                     ! 3. Solve the standart cases for alpha
                     ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
                     !         Journal of Computational Physics, Bd. 164, Nr. 1, S. 228–237, Okt. 2000, doi: 10.1006/jcph.2000.6567.
                     ! To enhance performance consider inlining
-                    CALL solve_alpha_standart_cases(m1, m2, m3, c1, c2, c3, alphaStd(k,j,i), alphaMax(k,j,i), vff(k,j,i), ddx(i), ddy(j), ddz(k), tol)
+                    CALL comp_alpha_std(m1, m2, m3, c1, c2, c3, alphaStd(k,j,i), alphaMax(k,j,i), vff(k,j,i), ddx(i), ddy(j), ddz(k), tol)
 
                     ! 4. If necessary, transform alpha back to volume bounds [0,1] * dV
                     ! If the volume fraction function has a value above 0.5 the "inverse problem" is solved. Therefore, the result is no longer 
-                    ! alpha, but alphaMax - alpha. It can be seen as a rotation of the voxel. This is the inverse rotation (see solve_alpha_standart_cases)
+                    ! alpha, but alphaMax - alpha. It can be seen as a rotation of the voxel. This is the inverse rotation (see comp_alpha_std)
                     alpha(k,j,i) = alphaStd(k,j,i)
                     IF ( vff(k,j,i) > 1.0_realk / 2.0_realk ) THEN
                         alpha(k,j,i) = alphaMax(k,j,i) - alpha(k,j,i)
@@ -353,7 +350,7 @@ CONTAINS
 
                     ! 5. If necessary, transform alpha regarding to its negative normal vector components
                     ! If one of the normal vector components is negative, a mirrored case is solved. Therefore, the solution
-                    ! has to be transformed back (see get_corner_crossing_order)
+                    ! has to be transformed back (see get_order)
                     IF ( normx(k,j,i) < 0.0_realk ) THEN
                         alpha(k,j,i) = alpha(k,j,i) + ddx(i)*normx(k,j,i)
                     END IF
@@ -370,11 +367,11 @@ CONTAINS
             END DO
         END DO
 
-    END SUBROUTINE compute_alpha
+    END SUBROUTINE comp_alpha
 
     !================================================================
 
-    SUBROUTINE compute_cell_proportion(cellProportion, alpha, vff, ddx, ddy, ddz, normx, normy, normz, tol)
+    SUBROUTINE comp_prop(cellProportion, alpha, vff, ddx, ddy, ddz, normx, normy, normz, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine calculates the value of the volume fraction 
@@ -401,7 +398,7 @@ CONTAINS
 
         ! 1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
         ! To enhance performance consider inlining
-        CALL get_corner_crossing_order(m1, m2, m3, c1, c2, c3, normx, normy, normz, ddx, ddy, ddz)
+        CALL get_order(m1, m2, m3, c1, c2, c3, normx, normy, normz, ddx, ddy, ddz)
 
         ! 2. If necessary, transform alpha regarding to its negative normal vector components
         alphaLoc = alpha
@@ -419,13 +416,13 @@ CONTAINS
 
         ! 3. If necessary, transform alpha to its conjugate alphaMax - alpha
         ! 4. Solve the standart case for vol
-        CALL solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, cellProportion, tol)
+        CALL comp_volume_std(m1, m2, m3, c1, c2, c3, alphaLoc, cellProportion, tol)
 
-    END SUBROUTINE compute_cell_proportion
+    END SUBROUTINE comp_prop
 
     !================================================================
 
-    SUBROUTINE staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
+    SUBROUTINE comp_stag_frac_wrap(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine is just a wrapper for the subroutines, which
@@ -447,18 +444,18 @@ CONTAINS
         ! None
 
         IF ( q == 1 ) THEN
-            CALL compute_iStag_vff(kk, jj, ii, vffStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+            CALL comp_iStag_vff(kk, jj, ii, vffStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
         ELSE IF ( q == 2 ) THEN
-            CALL compute_jStag_vff(kk, jj, ii, vffStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+            CALL comp_jStag_vff(kk, jj, ii, vffStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
         ELSE IF ( q == 3 ) THEN
-            CALL compute_kStag_vff(kk, jj, ii, vffStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+            CALL comp_kStag_vff(kk, jj, ii, vffStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
         END IF
 
-    END SUBROUTINE staggered_fractions_wrapper
+    END SUBROUTINE comp_stag_frac_wrap
 
     !================================================================
 
-    SUBROUTINE compute_iStag_vff(kk, jj, ii, vffiStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+    SUBROUTINE comp_iStag_vff(kk, jj, ii, vffiStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
@@ -480,16 +477,16 @@ CONTAINS
                     IF ( isInterface(k,j,i) .AND. isInterface(k,j,i+1) ) THEN
                         alphaLeft  = alpha(k,j,i) - normx(k,j,i) * ddx(i) / 2.0_realk
                         alphaRight = alpha(k,j,i+1)
-                        CALL compute_cell_proportion(halfFractionLeft,  alphaLeft,  vff(k,j,i),   ddx(i) / 2.0_realk,   ddy(j), ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
-                        CALL compute_cell_proportion(halfFractionRight, alphaRight, vff(k,j,i+1), ddx(i+1) / 2.0_realk, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
+                        CALL comp_prop(halfFractionLeft,  alphaLeft,  vff(k,j,i),   ddx(i) / 2.0_realk,   ddy(j), ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
+                        CALL comp_prop(halfFractionRight, alphaRight, vff(k,j,i+1), ddx(i+1) / 2.0_realk, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
                         vffiStag(k,j,i) = ( halfFractionLeft * ddx(i) + halfFractionRight * ddx(i+1) ) / ( ddx(i) + ddx(i+1) ) 
                     ELSE IF ( isInterface(k,j,i) .AND. .NOT. isInterface(k,j,i+1) ) THEN
                         alphaLeft  = alpha(k,j,i) - normx(k,j,i) * ddx(i) / 2.0_realk
-                        CALL compute_cell_proportion(halfFractionLeft,  alphaLeft,  vff(k,j,i),   ddx(i) / 2.0_realk,   ddy(j), ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
+                        CALL comp_prop(halfFractionLeft,  alphaLeft,  vff(k,j,i),   ddx(i) / 2.0_realk,   ddy(j), ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
                         vffiStag(k,j,i) = ( halfFractionLeft * ddx(i) + vff(k,j,i+1) * ddx(i+1) ) / ( ddx(i) + ddx(i+1) )
                     ELSE IF ( .NOT. isInterface(k,j,i) .AND. isInterface(k,j,i+1) ) THEN
                         alphaRight = alpha(k,j,i+1)
-                        CALL compute_cell_proportion(halfFractionRight, alphaRight, vff(k,j,i+1), ddx(i+1) / 2.0_realk, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
+                        CALL comp_prop(halfFractionRight, alphaRight, vff(k,j,i+1), ddx(i+1) / 2.0_realk, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
                         vffiStag(k,j,i) = ( vff(k,j,i) * ddx(i) + halfFractionRight * ddx(i+1) ) / ( ddx(i) + ddx(i+1) )
                     ELSE
                         vffiStag(k,j,i) = ( vff(k,j,i) * ddx(i) + vff(k,j,i+1) * ddx(i+1) ) / ( ddx(i) + ddx(i+1) )
@@ -498,11 +495,11 @@ CONTAINS
             END DO
         END DO
 
-    END SUBROUTINE compute_iStag_vff
+    END SUBROUTINE comp_iStag_vff
 
     !================================================================
 
-    SUBROUTINE compute_jStag_vff(kk, jj, ii, vffjStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+    SUBROUTINE comp_jStag_vff(kk, jj, ii, vffjStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
@@ -524,16 +521,16 @@ CONTAINS
                     IF ( isInterface(k,j,i) .AND. isInterface(k,j+1,i) ) THEN
                         alphaFront = alpha(k,j,i) - normy(k,j,i) * ddy(j) / 2.0_realk
                         alphaBack  = alpha(k,j+1,i)
-                        CALL compute_cell_proportion(halfFractionFront,  alphaFront, vff(k,j,i),   ddx(i),   ddy(j) / 2.0_realk,   ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
-                        CALL compute_cell_proportion(halfFractionBack,   alphaBack,  vff(k,j+1,i), ddx(i),   ddy(j+1) / 2.0_realk, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
+                        CALL comp_prop(halfFractionFront,  alphaFront, vff(k,j,i),   ddx(i),   ddy(j) / 2.0_realk,   ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
+                        CALL comp_prop(halfFractionBack,   alphaBack,  vff(k,j+1,i), ddx(i),   ddy(j+1) / 2.0_realk, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
                         vffjStag(k,j,i) = ( halfFractionFront * ddy(j) + halfFractionBack * ddy(j+1) ) / ( ddy(j) + ddy(j+1) ) 
                     ELSE IF ( isInterface(k,j,i) .AND. .NOT. isInterface(k,j+1,i) ) THEN
                         alphaFront = alpha(k,j,i) - normy(k,j,i) * ddy(j) / 2.0_realk
-                        CALL compute_cell_proportion(halfFractionFront,  alphaFront, vff(k,j,i),   ddx(i),   ddy(j) / 2.0_realk,   ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
+                        CALL comp_prop(halfFractionFront,  alphaFront, vff(k,j,i),   ddx(i),   ddy(j) / 2.0_realk,   ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
                         vffjStag(k,j,i) = ( halfFractionFront * ddy(j) + vff(k,j+1,i) * ddy(j+1) ) / ( ddy(j) + ddy(j+1) )
                     ELSE IF ( .NOT. isInterface(k,j,i) .AND. isInterface(k,j+1,i) ) THEN
                         alphaBack = alpha(k,j+1,i)
-                        CALL compute_cell_proportion(halfFractionBack,   alphaBack, vff(k,j+1,i),  ddx(i),   ddy(j+1) / 2.0_realk, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
+                        CALL comp_prop(halfFractionBack,   alphaBack, vff(k,j+1,i),  ddx(i),   ddy(j+1) / 2.0_realk, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
                         vffjStag(k,j,i) = ( vff(k,j,i) * ddy(j) + halfFractionBack * ddy(j+1) ) / ( ddy(j) + ddy(j+1) )
                     ELSE
                         vffjStag(k,j,i) = ( vff(k,j,i) * ddy(j) + vff(k,j+1,i) * ddy(j+1) ) / ( ddy(j) + ddy(j+1) )
@@ -542,11 +539,11 @@ CONTAINS
             END DO
         END DO
 
-    END SUBROUTINE compute_jStag_vff
+    END SUBROUTINE comp_jStag_vff
 
     !================================================================
 
-    SUBROUTINE compute_kStag_vff(kk, jj, ii, vffkStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
+    SUBROUTINE comp_kStag_vff(kk, jj, ii, vffkStag, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol)
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
@@ -568,16 +565,16 @@ CONTAINS
                     IF ( isInterface(k,j,i) .AND. isInterface(k+1,j,i) ) THEN
                         alphaBottom = alpha(k,j,i) - normz(k,j,i) * ddz(k) / 2.0_realk
                         alphaTop    = alpha(k+1,j,i)
-                        CALL compute_cell_proportion(halfFractionBottom, alphaBottom, vff(k,j,i),   ddx(i), ddy(j), ddz(k) / 2.0_realk,   normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
-                        CALL compute_cell_proportion(halfFractionTop,    alphaTop,    vff(k+1,j,i), ddx(i), ddy(j), ddz(k+1) / 2.0_realk, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
+                        CALL comp_prop(halfFractionBottom, alphaBottom, vff(k,j,i),   ddx(i), ddy(j), ddz(k) / 2.0_realk,   normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
+                        CALL comp_prop(halfFractionTop,    alphaTop,    vff(k+1,j,i), ddx(i), ddy(j), ddz(k+1) / 2.0_realk, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
                         vffkStag(k,j,i) = ( halfFractionBottom * ddz(k) + halfFractionTop * ddz(k+1) ) / ( ddz(k) + ddz(k+1) )
                     ELSE IF ( isInterface(k,j,i) .AND. .NOT. isInterface(k+1,j,i) ) THEN
                         alphaBottom = alpha(k,j,i) - normz(k,j,i) * ddz(k) / 2.0_realk
-                        CALL compute_cell_proportion(halfFractionBottom, alphaBottom, vff(k,j,i),   ddx(i), ddy(j), ddz(k) / 2.0_realk,   normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
+                        CALL comp_prop(halfFractionBottom, alphaBottom, vff(k,j,i),   ddx(i), ddy(j), ddz(k) / 2.0_realk,   normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
                         vffkStag(k,j,i) = ( halfFractionBottom * ddz(k) + vff(k+1,j,i) * ddz(k+1) ) / ( ddz(k) + ddz(k+1) )
                     ELSE IF ( .NOT. isInterface(k,j,i) .AND. isInterface(k+1,j,i) ) THEN
                         alphaTop    = alpha(k+1,j,i)
-                        CALL compute_cell_proportion(halfFractionTop,    alphaTop,    vff(k+1,j,i), ddx(i), ddy(j), ddz(k+1) / 2.0_realk, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
+                        CALL comp_prop(halfFractionTop,    alphaTop,    vff(k+1,j,i), ddx(i), ddy(j), ddz(k+1) / 2.0_realk, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
                         vffkStag(k,j,i) = ( vff(k,j,i) * ddz(k) + halfFractionTop * ddz(k+1) ) / ( ddz(k) + ddz(k+1) )
                     ELSE
                         vffkStag(k,j,i) = ( vff(k,j,i) * ddz(k) + vff(k+1,j,i) * ddz(k+1) ) / ( ddz(k) + ddz(k+1) )
@@ -586,11 +583,11 @@ CONTAINS
             END DO
         END DO
 
-    END SUBROUTINE compute_kStag_vff
+    END SUBROUTINE comp_kStag_vff
 
     !================================================================
 
-    PURE SUBROUTINE get_corner_crossing_order(m1, m2, m3, c1, c2, c3, normx, normy, normz, ddx, ddy, ddz)
+    PURE SUBROUTINE get_order(m1, m2, m3, c1, c2, c3, normx, normy, normz, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
     !   This is a pure subroutine to enhance the performance by 
@@ -645,7 +642,7 @@ CONTAINS
         END IF
 
         ! Assign new order to m1-m3 and c1-c3 respectively
-        ! The absolute value of norm(.) is a mirror transform (see compute_alpha 5.).
+        ! The absolute value of norm(.) is a mirror transform (see comp_alpha 5.).
         SELECT CASE (i1)
         CASE (1); m1 = abs(normx); c1 = ddx
         CASE (2); m1 = abs(normy); c1 = ddy
@@ -664,11 +661,11 @@ CONTAINS
         CASE (3); m3 = abs(normz); c3 = ddz
         END SELECT
 
-    END SUBROUTINE get_corner_crossing_order
+    END SUBROUTINE get_order
 
     !================================================================
 
-    SUBROUTINE solve_alpha_standart_cases(m1, m2, m3, c1, c2, c3, alphaStd, alphaMax, vff, ddx, ddy, ddz, tol)
+    SUBROUTINE comp_alpha_std(m1, m2, m3, c1, c2, c3, alphaStd, alphaMax, vff, ddx, ddy, ddz, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   This is a pure subroutine to enhance the performance by 
@@ -704,7 +701,7 @@ CONTAINS
         REAL(realk) :: theta
 
         ! Transform vff to a actual volume in bounds [0,0.5] * dV
-        ! Rotate voxel into standart configuration (see compute_alpha 4.)
+        ! Rotate voxel into standart configuration (see comp_alpha 4.)
         vol = min(vff, 1.0_realk - vff) * ddx * ddy * ddz
         
         ! Solve the standart cases for alphaStd
@@ -778,11 +775,11 @@ CONTAINS
             END IF
         END IF
 
-    END SUBROUTINE solve_alpha_standart_cases
+    END SUBROUTINE comp_alpha_std
 
     !================================================================
 
-    PURE SUBROUTINE solve_vol_standart_cases(m1, m2, m3, c1, c2, c3, alphaLoc, cellProportion, tol)
+    PURE SUBROUTINE comp_volume_std(m1, m2, m3, c1, c2, c3, alphaLoc, cellProportion, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   This is a pure subroutine to enhance the performance by 
@@ -894,6 +891,6 @@ CONTAINS
             cellProportion = 1.0_realk - cellProportion
         END IF
 
-    END SUBROUTINE solve_vol_standart_cases
+    END SUBROUTINE comp_volume_std
 
 END MODULE multiphase_plic_mod

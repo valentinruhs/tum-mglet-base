@@ -18,7 +18,7 @@ MODULE multiphase_vof_transport_mod
     USE fields_mod, ONLY: get_field
     USE grids_mod, ONLY: get_mgdims, get_mgbasb
     USE err_mod, ONLY: errr
-    USE multiphase_plic_mod, ONLY: track_interface, compute_normal_vector, compute_alpha, compute_cell_proportion, compute_iStag_vff, compute_jStag_vff, compute_kStag_vff, interface_reconstruction_wrapper, staggered_fractions_wrapper
+    USE multiphase_plic_mod, ONLY: comp_prop, iface_recon_wrap, comp_stag_frac_wrap
     USE rungekutta_mod, ONLY: rk_2n_t
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, splitting_multiphase, permutation_multiphase
     USE multiphase_material_mod, ONLY: comp_material_property_field
@@ -108,7 +108,7 @@ CONTAINS
                                 fluxWidth = abs( u(k,j,i) ) * dt
                                 fluxAlpha = alpha(k,j,i) - normx(k,j,i) * ( ddx(i) - fluxWidth )
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i), &
+                                CALL comp_prop(fluxedProp, fluxAlpha, field(k,j,i), &
                                     fluxWidth, ddy(j), ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
                                 
                                 flux = fluxedProp  * ( abs( u(k,j,i) ) * dt / ddx(i) )
@@ -149,7 +149,7 @@ CONTAINS
                                 fluxWidth = abs( u(k,j,i) ) * dt
                                 fluxAlpha = alpha(k,j,i+1)
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i+1), fluxWidth, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
+                                CALL comp_prop(fluxedProp, fluxAlpha, field(k,j,i+1), fluxWidth, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
 
                                 flux = fluxedProp * ( abs( u(k,j,i) ) * dt / ddx(i+1) )
                             ELSE
@@ -188,7 +188,7 @@ CONTAINS
                                 fluxWidth = abs( v(k,j,i) ) * dt
                                 fluxAlpha = alpha(k,j,i) - normy(k,j,i) * ( ddy(j) - fluxWidth )
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i), ddx(i), fluxWidth, ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
+                                CALL comp_prop(fluxedProp, fluxAlpha, field(k,j,i), ddx(i), fluxWidth, ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
 
                                 flux = fluxedProp * ( abs( v(k,j,i) ) * dt / ddy(j) )
                             ELSE
@@ -201,7 +201,7 @@ CONTAINS
                                 fluxWidth = abs( v(k,j,i) ) * dt
                                 fluxAlpha = alpha(k,j+1,i)
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j+1,i), ddx(i), fluxWidth, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
+                                CALL comp_prop(fluxedProp, fluxAlpha, field(k,j+1,i), ddx(i), fluxWidth, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
 
                                 flux = fluxedProp * ( abs( v(k,j,i) ) * dt / ddy(j+1) )
                             ELSE
@@ -226,7 +226,7 @@ CONTAINS
                                 fluxWidth = abs( w(k,j,i) ) * dt
                                 fluxAlpha = alpha(k,j,i) - normz(k,j,i) * ( ddz(k) - fluxWidth )
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i), ddx(i), ddy(j), fluxWidth, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
+                                CALL comp_prop(fluxedProp, fluxAlpha, field(k,j,i), ddx(i), ddy(j), fluxWidth, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
 
                                 flux = fluxedProp * ( abs( w(k,j,i) ) * dt / ddz(k) )
                             ELSE
@@ -239,7 +239,7 @@ CONTAINS
                                 fluxWidth = abs( w(k,j,i) ) * dt
                                 fluxAlpha = alpha(k+1,j,i)
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k+1,j,i), ddx(i), ddy(j), fluxWidth, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
+                                CALL comp_prop(fluxedProp, fluxAlpha, field(k+1,j,i), ddx(i), ddy(j), fluxWidth, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
 
                                 flux = fluxedProp * ( abs( w(k,j,i) ) * dt / ddz(k+1) )
                             ELSE
@@ -302,7 +302,7 @@ CONTAINS
                                 fluxWidth = abs( advrE(k,j,i) ) * dt
                                 fluxAlpha = alpha(k,j,i) - normx(k,j,i) * ( deltaX(i)/2.0_realk - fluxWidth )
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i), fluxWidth, ddy(j), ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
+                                CALL comp_prop(fluxedProp, fluxAlpha, field(k,j,i), fluxWidth, ddy(j), ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
                                 
                                 flux = fluxedProp  * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
                                 complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i) )
@@ -317,7 +317,7 @@ CONTAINS
                                 fluxWidth = abs( advrE(k,j,i) ) * dt
                                 fluxAlpha = alpha(k,j,i+1) - normx(k,j,i+1) * deltaX(i+1)/2.0_realk
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i+1), fluxWidth, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
+                                CALL comp_prop(fluxedProp, fluxAlpha, field(k,j,i+1), fluxWidth, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
 
                                 flux = fluxedProp * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
                                 complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrE(k,j,i) ) * dt / deltaX(i+1) )
@@ -346,7 +346,7 @@ CONTAINS
                                 fluxWidth = abs( advrN(k,j,i) ) * dt
                                 fluxAlpha = alpha(k,j,i) - normy(k,j,i) * ( deltaY(j)/2.0_realk - fluxWidth )
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i), ddx(i), fluxWidth, ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
+                                CALL comp_prop(fluxedProp, fluxAlpha, field(k,j,i), ddx(i), fluxWidth, ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
 
                                 flux = fluxedProp * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
                                 complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j) )
@@ -361,7 +361,7 @@ CONTAINS
                                 fluxWidth = abs( advrN(k,j,i) ) * dt
                                 fluxAlpha = alpha(k,j+1,i) - normy(k,j+1,i) * deltaY(j+1)/2.0_realk
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j+1,i), ddx(i), fluxWidth, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
+                                CALL comp_prop(fluxedProp, fluxAlpha, field(k,j+1,i), ddx(i), fluxWidth, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
 
                                 flux = fluxedProp * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
                                 complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrN(k,j,i) ) * dt / deltaY(j+1) )
@@ -390,7 +390,7 @@ CONTAINS
                                 fluxWidth = abs( advrT(k,j,i) ) * dt
                                 fluxAlpha = alpha(k,j,i) - normz(k,j,i) * ( deltaZ(k)/2.0_realk - fluxWidth )
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k,j,i), ddx(i), ddy(j), fluxWidth, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
+                                CALL comp_prop(fluxedProp, fluxAlpha, field(k,j,i), ddx(i), ddy(j), fluxWidth, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
 
                                 flux = fluxedProp * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
                                 complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k) )
@@ -405,7 +405,7 @@ CONTAINS
                                 fluxWidth = abs( advrT(k,j,i) ) * dt
                                 fluxAlpha = alpha(k+1,j,i) - normz(k+1,j,i) * deltaZ(k+1)/2.0_realk
 
-                                CALL compute_cell_proportion(fluxedProp, fluxAlpha, field(k+1,j,i), ddx(i), ddy(j), fluxWidth, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
+                                CALL comp_prop(fluxedProp, fluxAlpha, field(k+1,j,i), ddx(i), ddy(j), fluxWidth, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
 
                                 flux = fluxedProp * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
                                 complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advrT(k,j,i) ) * dt / deltaZ(k+1) )
@@ -699,12 +699,12 @@ CONTAINS
 
             CALL check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz)
             CALL def_advection_sequence(itstep, advSeq)
-            CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+            CALL iface_recon_wrap(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
 
             DO q = 1, 3
                 
-                CALL staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
-                CALL interface_reconstruction_wrapper(kk, jj, ii, vffStag, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
+                CALL comp_stag_frac_wrap(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
+                CALL iface_recon_wrap(kk, jj, ii, q, vffStag, dx, dy, dz, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
                 CALL comp_material_property_field(kk, jj, ii, vffStag, rho1, rho2, dStag)
                 CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
                 CALL comp_cWY(kk, jj, ii, vffStag, cWYStag)
@@ -718,8 +718,8 @@ CONTAINS
                     splitDir = advSeq(l)
                                             
                     CALL comp_flux_stag(kk, jj, ii, q, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                    CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWYStag, advrSplitDir(:,:,:,q), dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
-                    CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWYStag, advrE, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
+                    CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWYStag, advrSplitDir(:,:,:,splitDir), dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
+                    CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWYStag, advrE, advrN, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
 
                 END DO
                 
@@ -762,9 +762,9 @@ CONTAINS
 
                 splitDir = advSeq(l)
                 
-                CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+                CALL iface_recon_wrap(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
                 CALL comp_flux_cent(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, w, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
+                CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, u, v, w, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
                 CALL clip_vff(kk, jj, ii, tol, vff)
 
             END DO
@@ -773,12 +773,13 @@ CONTAINS
             
             CALL check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz)
             CALL def_advection_sequence(itstep, advSeq)
-            CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+            CALL clip_vff(kk, jj, ii, tol, vff)
+            CALL iface_recon_wrap(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
 
             DO q = 1, 3
 
-                CALL staggered_fractions_wrapper(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
-                CALL interface_reconstruction_wrapper(kk, jj, ii, vffStag, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
+                CALL comp_stag_frac_wrap(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
+                CALL iface_recon_wrap(kk, jj, ii, vffStag, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
                 CALL comp_material_property_field(kk, jj, ii, vffStag, rho1, rho2, dStag)
                 CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
                 CALL comp_cWY(kk, jj, ii, vffStag, cWYStag)
@@ -788,6 +789,8 @@ CONTAINS
                 cWYStag4D(:,:,:,q) = cWYStag
                 
             END DO
+
+            CALL comp_cWY(kk, jj, ii, vff, cWY)
 
             DO l = 1, 3
 
@@ -805,8 +808,8 @@ CONTAINS
                     advrSplitDir(:,:,:,3) = advrT
 
                     CALL comp_flux_stag(kk, jj, ii, q, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
-                    CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWYStag, advrSplitDir(:,:,:,q), dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
-                    CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWYStag, advrE, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
+                    CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWYStag, advrSplitDir(:,:,:,splitDir), dx, dy, dz, ddx, ddy, ddz, dtrki, mom)
+                    CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWYStag, advrE, advrN, advrT, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vffStag)
 
                     IF ( q == 1 ) THEN
                         CALL comp_velocity_change(kk, jj, ii, q, u, vffStag, mom, dtrki, uo)
@@ -841,10 +844,9 @@ CONTAINS
 
                 END DO
 
-                CALL interface_reconstruction_wrapper(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+                CALL iface_recon_wrap(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
                 CALL comp_flux_cent(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dtrki, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, w, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
-                CALL clip_vff(kk, jj, ii, tol, vff)
+                CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, u, v, w, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
 
             END DO
 
@@ -854,7 +856,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, velWY, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
+    SUBROUTINE adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, velWY1, velWY2, velWY3, dx, dy, dz, ddx, ddy, ddz, dtrki, tol, vff)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -864,7 +866,7 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: splitDir
         REAL(realk), INTENT(in) :: vffFlux(kk, jj, ii)
-        REAL(realk), INTENT(in) :: cWY(kk, jj, ii), velWY(kk, jj, ii)
+        REAL(realk), INTENT(in) :: cWY(kk, jj, ii), velWY1(kk, jj, ii), velWY2(kk, jj, ii), velWY3(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dtrki, tol
@@ -874,12 +876,13 @@ CONTAINS
         INTEGER(intk) :: i, j, k
         INTEGER(intk) :: i0, j0, k0
         REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
+        REAL(realk) :: velWY(kk, jj, ii)
         REAL(realk) :: div(kk, jj, ii)
         
         i0 = 0_intk; j0 = 0_intk; k0 = 0_intk
 
-        CALL get_component_specifics(kk, jj, ii, splitDir, dx=dx, dy=dy, dz=dz, ddx=ddx, ddy=ddy, ddz=ddz, &
-            i0=i0, j0=j0, k0=k0, deltaX=deltaX, deltaY=deltaY, deltaZ=deltaZ)
+        CALL get_component_specifics(kk, jj, ii, splitDir, vel1=velWY1, vel2=velWY2, vel3=velWY3, dx=dx, dy=dy, dz=dz, ddx=ddx, ddy=ddy, ddz=ddz, &
+            i0=i0, j0=j0, k0=k0, deltaX=deltaX, deltaY=deltaY, deltaZ=deltaZ, velFld=velWY)
 
         DO i = 2, ii-1
             DO j = 2, jj-1
@@ -974,7 +977,7 @@ CONTAINS
         INTEGER(intk) :: i, j, k
         REAL(realk) :: velFld(kk, jj, ii)
 
-        CALL get_component_specifics(kk, jj, ii, q, u=u, v=v, w=w, velFld=velFld)
+        CALL get_component_specifics(kk, jj, ii, q, vel1=u, vel2=v, vel3=w, velFld=velFld)
 
         DO i = 1, ii
             DO j = 1, jj
@@ -1176,7 +1179,7 @@ CONTAINS
         REAL(realk) :: tauxxe, tauxxw, tauyxn, tauyxs, tauzxt, tauzxb
         REAL(realk) :: tauxye, tauxyw, tauyyn, tauyys, tauzyt, tauzyb
         REAL(realk) :: tauxze, tauxzw, tauyzn, tauyzs, tauzzt, tauzzb
-        
+        return
         CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, d)
 
         DO i = 3, ii-2
@@ -1467,7 +1470,7 @@ CONTAINS
 
     !================================================================
 
-    PURE SUBROUTINE get_component_specifics(kk, jj, ii, q, u, v, w, &
+    PURE SUBROUTINE get_component_specifics(kk, jj, ii, q, vel1, vel2, vel3, &
         dx, dy, dz, ddx, ddy, ddz, i0, j0, k0, iStag, jStag, kStag, &
         deltaX, deltaY, deltaZ, velFld)
     !----------------------------------------------------------------
@@ -1477,7 +1480,7 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii, q
-        REAL(realk), INTENT(in), OPTIONAL :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in), OPTIONAL :: vel1(kk, jj, ii), vel2(kk, jj, ii), vel3(kk, jj, ii)
         REAL(realk), INTENT(in), OPTIONAL :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in), OPTIONAL :: ddx(ii), ddy(jj), ddz(kk)
         INTEGER(intk), INTENT(out), OPTIONAL :: i0, j0, k0
@@ -1498,7 +1501,7 @@ CONTAINS
             IF ( PRESENT(deltaX) ) deltaX = dx
             IF ( PRESENT(deltaY) ) deltaY = ddy
             IF ( PRESENT(deltaZ) ) deltaZ = ddz
-            IF ( PRESENT(velFld) ) velFld = u
+            IF ( PRESENT(velFld) ) velFld = vel1
         ELSE IF ( q == 2 ) THEN
             IF ( PRESENT(iStag) ) iStag = 0.0_realk
             IF ( PRESENT(jStag) ) jStag = 1.0_realk
@@ -1509,7 +1512,7 @@ CONTAINS
             IF ( PRESENT(deltaX) ) deltaX = ddx
             IF ( PRESENT(deltaY) ) deltaY = dy
             IF ( PRESENT(deltaZ) ) deltaZ = ddz
-            IF ( PRESENT(velFld) ) velFld = v
+            IF ( PRESENT(velFld) ) velFld = vel2
         ELSE IF ( q == 3 ) THEN
             IF ( PRESENT(iStag) ) iStag = 0.0_realk
             IF ( PRESENT(jStag) ) jStag = 0.0_realk
@@ -1520,7 +1523,7 @@ CONTAINS
             IF ( PRESENT(deltaX) ) deltaX = ddx
             IF ( PRESENT(deltaY) ) deltaY = ddy
             IF ( PRESENT(deltaZ) ) deltaZ = dz
-            IF ( PRESENT(velFld) ) velFld = w
+            IF ( PRESENT(velFld) ) velFld = vel3
         END IF
     
     END SUBROUTINE get_component_specifics

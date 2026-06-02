@@ -1,7 +1,7 @@
 {
     "time": {
         "dt": 0.1,
-        "mtstep": 300,
+        "mtstep": 5,
 	"itinfo": 100,
         "tstat": 10.0,
 	"read": false
@@ -36,7 +36,7 @@
 	"permutation" : 3,
 	"rho1" : 1000.0,
 	"rho2" : 1.0,
-	"gmol1" : 0.01,
+	"gmol1" : 0.0001,
 	"gmol2" : 0.0001
     }   
 }

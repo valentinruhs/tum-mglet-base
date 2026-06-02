@@ -200,9 +200,9 @@ CONTAINS
                     DO i = 2, ii-1
                         DO j = 2, jj-1
                             DO k = 2, kk-1
-                                IF ( vff(k,j,i) > 0.0_realk ) THEN
+                                IF ( vff(k,j,i) >= 0.0_realk ) THEN
                                     u(k,j,i) = 0.016_realk
-                                    v(k,j,i) = 0.0_realk
+                                    v(k,j,i) = 0.016_realk
                                     w(k,j,i) = 0.0_realk
                                 END IF
                             END DO
