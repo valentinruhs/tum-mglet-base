@@ -73,11 +73,13 @@ CONTAINS
             SELECT CASE (TRIM(derivfields(i)))
             CASE ("DIV")
                 BLOCK
-                    TYPE(field_t), POINTER :: u, v, w
+                    TYPE(field_t), POINTER :: u, v, w, prefak
                     CALL get_field(u, "U")
                     CALL get_field(v, "V")
                     CALL get_field(w, "W")
-                    CALL ib%divcal(field, u, v, w, 1.0_realk)
+                    CALL prefak%init("FAK")
+                    prefak%arr = 1.0_realk
+                    CALL ib%divcal(field, u, v, w, prefak)
                 END BLOCK
             CASE DEFAULT
                 CALL errr(__FILE__, __LINE__)

@@ -5,6 +5,8 @@ MODULE pressuresolver_mod
     USE ib_mod
     USE itinfo_mod, ONLY: itinfo_sample
     USE plog_mod
+    USE multiphasecore_mod, ONLY: rho1, rho2, solve_multiphase
+    USE multiphase_material_mod, ONLY: comp_material_property_field
 
     IMPLICIT NONE (type, external)
     PRIVATE
@@ -301,10 +303,10 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: irk
 
         ! Local variables
-        TYPE(field_t) :: dp, hilf, rhs, res
+        TYPE(field_t) :: dp, hilf, rhs, res, prefak
         TYPE(field_t), POINTER :: bp
         INTEGER(intk) :: ilevel, ipcount, ipc, i
-        REAL(realk) :: prefak, maxrhs, maxrhsall
+        REAL(realk) :: maxrhs, maxrhsall
         REAL(realk), ALLOCATABLE :: maxrhslvl(:)
 
         CALL start_timer(320)
@@ -321,12 +323,13 @@ CONTAINS
         CALL hilf%init("HILF")
         CALL rhs%init("RHS")
         CALL res%init("RES")
+        CALL prefak%init('FAK')
 
         CALL dp%init_buffers()
         CALL hilf%init_buffers()
 
         ! laplace(dp) = prefak * div(u) is the underlying equation
-        prefak = rho/dt
+        CALL comp_prefak(prefak, dt)
         CALL ib%divcal(rhs, u, v, w, prefak)
 
         DO ilevel = maxlevel, minlevel, -1
@@ -415,7 +418,7 @@ CONTAINS
                 CALL MPI_Allreduce(maxrhs, maxrhsall, 1, mglet_mpi_real, &
                     MPI_MAX, MPI_COMM_WORLD)
 
-                IF (maxrhsall/prefak < epcorr) THEN
+                IF (maxrhsall/MINVAL(prefak%arr) < epcorr) THEN
                     EXIT outer
                 END IF
             END IF
@@ -447,7 +450,7 @@ CONTAINS
 
         ! Pressure correction: P = P + dtrk/rho*DP
         ! Velocity fields are modified and become solenoidal based on DP
-        CALL mgpcorr(u, v, w, p, dp, dt/rho, bp)
+        CALL mgpcorr(u, v, w, p, dp, prefak, bp)
         DO ilevel = maxlevel, minlevel, -1
             CALL ftoc(ilevel, u%arr, u%arr, 'U')
             CALL ftoc(ilevel, v%arr, v%arr, 'V')
@@ -471,6 +474,7 @@ CONTAINS
         CALL rhs%finish()
         CALL hilf%finish()
         CALL dp%finish()
+        CALL prefak%finish()
 
         DEALLOCATE(maxrhslvl)
         CALL stop_timer(320)
@@ -1427,11 +1431,11 @@ CONTAINS
     END SUBROUTINE rescal_grid
 
 
-    SUBROUTINE mgpcorr(u, v, w, p, dp, rfak, bp_f)
+    SUBROUTINE mgpcorr(u, v, w, p, dp, fak, bp_f)
         ! Subroutine arguments
         TYPE(field_t), INTENT(inout) :: u, v, w, p
         TYPE(field_t), INTENT(in) :: dp
-        REAL(realk), INTENT(in) :: rfak
+        TYPE(field_t), INTENT(in) :: fak
         TYPE(field_t), INTENT(in), OPTIONAL :: bp_f
 
         ! Local variables
@@ -1463,13 +1467,13 @@ CONTAINS
             END IF
 
             CALL mgpcorr_grid(kk, jj, ii, u%arr(ip3), v%arr(ip3), w%arr(ip3), &
-                p%arr(ip3), dp%arr(ip3), rdx, rdy, rdz, rfak, bp)
+                p%arr(ip3), dp%arr(ip3), rdx, rdy, rdz, fak%arr(ip3), bp)
         END DO
     END SUBROUTINE mgpcorr
 
 
     PURE SUBROUTINE mgpcorr_grid(kk, jj, ii, u, v, w, p, dp, rdx, rdy, rdz, &
-            rfak, bp)
+            fak, bp)
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(inout) :: u(kk, jj, ii)
@@ -1480,11 +1484,14 @@ CONTAINS
         REAL(realk), INTENT(in) :: rdx(ii)
         REAL(realk), INTENT(in) :: rdy(jj)
         REAL(realk), INTENT(in) :: rdz(kk)
-        REAL(realk), INTENT(in) :: rfak
+        REAL(realk), INTENT(in) :: fak(kk, jj, ii)
         REAL(realk), INTENT(in), OPTIONAL :: bp(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
+        REAL(realk) :: rfak(kk, jj, ii)
+
+        rfak = 1.0_realk / fak
 
         IF (PRESENT(bp)) THEN
             DO i = 2, ii-1
@@ -1500,7 +1507,7 @@ CONTAINS
                     DO k = 3, kk-2
                         u(k, j, i) = u(k, j, i) &
                             + (dp(k, j, i) - dp(k, j, i+1)) &
-                            *bp(k, j, i)*bp(k, j, i+1)*rdx(i)*rfak
+                            *bp(k, j, i)*bp(k, j, i+1)*rdx(i)*rfak(k,j,i)
                     END DO
                 END DO
             END DO
@@ -1510,7 +1517,7 @@ CONTAINS
                     DO k = 3, kk-2
                         v(k, j, i) = v(k, j, i) &
                             + (dp(k, j, i) - dp(k, j+1, i)) &
-                            *bp(k, j, i)*bp(k, j+1, i)*rdy(j)*rfak
+                            *bp(k, j, i)*bp(k, j+1, i)*rdy(j)*rfak(k,j,i)
                     END DO
                 END DO
             END DO
@@ -1520,7 +1527,7 @@ CONTAINS
                     DO k = 2, kk-2
                         w(k, j, i) = w(k, j, i) &
                             + (dp(k, j, i) - dp(k+1, j, i)) &
-                            *bp(k, j, i)*bp(k+1, j, i)*rdz(k)*rfak
+                            *bp(k, j, i)*bp(k+1, j, i)*rdz(k)*rfak(k,j,i)
                     END DO
                 END DO
             END DO
@@ -1537,7 +1544,7 @@ CONTAINS
                 DO j = 3, jj-2
                     DO k = 3, kk-2
                         u(k, j, i) = u(k, j, i) &
-                            + (dp(k, j, i) - dp(k, j, i+1))*rdx(i)*rfak
+                            + (dp(k, j, i) - dp(k, j, i+1))*rdx(i)*rfak(k,j,i)
                     END DO
                 END DO
             END DO
@@ -1546,7 +1553,7 @@ CONTAINS
                 DO j = 2, jj - 2
                     DO k = 3, kk-2
                         v(k, j, i) = v(k, j, i) &
-                            + (dp(k, j, i) - dp(k, j+1, i))*rdy(j)*rfak
+                            + (dp(k, j, i) - dp(k, j+1, i))*rdy(j)*rfak(k,j,i)
                     END DO
                 END DO
             END DO
@@ -1555,10 +1562,52 @@ CONTAINS
                 DO j = 3, jj-2
                     DO k = 2, kk-2
                         w(k, j, i) = w(k, j, i) &
-                            + (dp(k, j, i) - dp(k+1, j, i))*rdz(k)*rfak
+                            + (dp(k, j, i) - dp(k+1, j, i))*rdz(k)*rfak(k,j,i)
                     END DO
                 END DO
             END DO
         END IF
     END SUBROUTINE mgpcorr_grid
+
+
+    SUBROUTINE comp_prefak(fak_f, dt)
+
+        ! Subroutine arguments
+        TYPE(field_t), INTENT(inout) :: fak_f
+        REAL(realk), INTENT(in) :: dt
+
+        ! Local variables
+        TYPE(field_t), POINTER :: vff_f
+        INTEGER(intk) :: i, ilevel, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk), CONTIGUOUS, POINTER :: vff(:,:,:), fak(:,:,:)
+        REAL(realk), ALLOCATABLE :: d(:,:,:)
+
+        CALL get_field(vff_f, "VFF")
+
+        DO ilevel = minlevel, maxlevel
+            ! Assume that U, V, W and DIV are defined on the same levels!!!
+            IF (.NOT. fak_f%active_level(ilevel)) CYCLE
+
+            DO i = 1, nmygridslvl(ilevel)
+
+                igrid = mygridslvl(i, ilevel)
+                CALL get_mgdims(kk, jj, ii, igrid)
+
+                CALL vff_f%get_ptr(vff, igrid)
+                CALL fak_f%get_ptr(fak, igrid)
+
+                IF ( solve_multiphase ) THEN
+                    IF ( .NOT. ALLOCATED(d) ) ALLOCATE(d(kk, jj, ii))
+                    CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, d)
+                    fak = d / dt
+                ELSE 
+                    fak = rho / dt
+                END IF
+
+            END DO
+        END DO
+
+    END SUBROUTINE comp_prefak
+
 END MODULE pressuresolver_mod

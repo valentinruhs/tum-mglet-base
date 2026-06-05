@@ -15,5 +15,6 @@ target_include_directories(multiphase
 target_link_libraries(multiphase
     PRIVATE core
     PRIVATE ib
+    PRIVATE flow
     PRIVATE ${MPI_Fortran_LIBRARIES}
 )

@@ -19,7 +19,7 @@ MODULE multiphase_mod
     USE multiphase_vof_transport_mod, ONLY: init_multiphase_vof_transport, finish_multiphase_vof_transport
     USE multiphase_plic_mod, ONLY: init_multiphase_plic, finish_multiphase_plic
     USE multiphase_material_mod, ONLY: init_multiphase_material, finish_multiphase_material
-    USE multiphase_io_mod, ONLY: init_multiphase_io, finish_multiphase_io, read_vff
+    USE multiphase_io_mod, ONLY: init_multiphase_io, finish_multiphase_io
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
     USE precision_mod, ONLY: intk, realk
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_mgbasb
@@ -29,7 +29,7 @@ MODULE multiphase_mod
     IMPLICIT NONE(type, external)
     PRIVATE
 
-    PUBLIC :: init_multiphase, finish_multiphase, init_vff
+    PUBLIC :: init_multiphase, finish_multiphase
 
 CONTAINS
 
@@ -42,14 +42,11 @@ CONTAINS
         ! None
 
         CALL init_multiphasecore()
-        CALL init_multiphase_io()
         CALL init_multiphase_material()
         CALL init_multiphase_vof_transport()
         CALL init_multiphase_plic()
-        IF(.NOT. has_multiphase) RETURN
-
-        CALL init_vff()
-        
+        CALL init_multiphase_io()
+        IF(.NOT. has_multiphase) RETURN        
 
         IF(.NOT. solve_multiphase) RETURN
 
@@ -75,22 +72,5 @@ CONTAINS
         CALL finish_multiphasecore()
 
     END SUBROUTINE finish_multiphase
-
-    !================================================================
-        
-    SUBROUTINE init_vff()
-    !----------------------------------------------------------------
-    !   What it does:
-    !   The subroutine manages the allocation of the volume fraction
-    !   field. 
-    !----------------------------------------------------------------
-
-        TYPE(field_t), POINTER :: vff
-        
-        CALL get_field(vff, "VFF")
-
-        CALL read_vff(vff)
-
-    END SUBROUTINE init_vff
 
 END MODULE multiphase_mod

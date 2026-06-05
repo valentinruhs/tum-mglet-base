@@ -16,7 +16,7 @@ MODULE multiphase_io_mod
     USE field_mod, ONLY: field_t
     USE grids_mod, ONLY: nmygrids, mygrids
     USE field_mod, ONLY: field_t
-    USE grids_mod, ONLY: get_mgdims, get_mgbasb
+    USE grids_mod, ONLY: get_mgdims, get_mgbasb, get_bbox
     USE precision_mod, ONLY: intk, realk
     USE fields_mod, ONLY: get_field
     USE multiphasecore_mod, ONLY: test_multiphase
@@ -24,7 +24,7 @@ MODULE multiphase_io_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: init_multiphase_io, finish_multiphase_io, read_vff, update_velocity
+    PUBLIC :: init_multiphase_io, finish_multiphase_io, update_velocity
 
 CONTAINS
 
@@ -34,9 +34,98 @@ CONTAINS
         ! None
 
         ! Local variables
-        ! None
+        TYPE(field_t), POINTER :: vff_f
+        TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        INTEGER(intk) :: i, j, k, di, dj, dk
+        INTEGER(intk) :: iSub, jSub, kSub
+        INTEGER(intk) :: nxDom, nyDom, nzDom
+        REAL(realk), POINTER, CONTIGUOUS :: vff(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
+        REAL(realk) :: centx, centy, centz, rad, x, y, z, inside
 
-        continue
+        CALL get_field(vff_f, "VFF")
+        CALL get_field(dx_f, "DX"); CALL get_field(dy_f, "DY"); CALL get_field(dz_f, "DZ")
+        CALL get_field(ddx_f, "DDX"); CALL get_field(ddy_f, "DDY"); CALL get_field(ddz_f, "DDZ")
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+            CALL get_bbox(minx, maxx, miny, maxy, minz, maxz, igrid)
+
+            CALL vff_f%get_ptr(vff, igrid)
+            CALL dx_f%get_ptr(dx, igrid); CALL dy_f%get_ptr(dy, igrid); CALL dz_f%get_ptr(dz, igrid)
+            CALL ddx_f%get_ptr(ddx, igrid); CALL ddy_f%get_ptr(ddy, igrid); CALL ddz_f%get_ptr(ddz, igrid)
+
+            SELECT CASE( test_multiphase )
+            CASE ( 'SphTra' )
+
+                centx = 0.2_realk ; centy = 0.2_realk ; rad = 0.1_realk
+                iSub = 128 ; jSub = 128 ; kSub = 128
+                nxDom = 16 ; nyDom = 16 ; nzDom = 16
+
+                ! Outer loop over cells
+                DO i = 1, ii ; DO j = 1, jj ; DO k = 1, kk
+
+                    inside = 0
+
+                    ! Inner loop over (.)Sub for refinement
+                    DO di = 1, iSub ; DO dj = 1, jSub ; DO dk = 1, kSub
+
+                        x = ( i + (di + 0.5_realk)/iSub ) / nxDom
+                        y = ( j + (dj + 0.5_realk)/jSub ) / nyDom
+                        z = ( k + (dk + 0.5_realk)/kSub ) / nzDom
+
+                        IF ( (x - centx)**2_realk + (y - centy)**2_realk + (z - centz)**2_realk <= rad**2_realk ) THEN
+                            inside = inside + 1
+                        ENDIF
+                        
+                    ENDDO ; ENDDO ; ENDDO
+
+                    vff(k,j,i) = inside / (iSub * jSub * kSub)
+
+                ENDDO ; ENDDO ; ENDDO
+
+            CASE ( 'VorBoF' )
+                continue
+            CASE ( 'VorBoC' )
+                                
+                centx = 0.5_realk ; centy = 0.75_realk ; rad = 0.15_realk
+                iSub = 256 ; jSub = 256
+                nxDom = 32 ; nyDom = 32
+                
+                ! Outer loop over cells
+                DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
+
+                    inside = 0.0_realk
+
+                    ! Inner loop over (.)Sub for refinement
+                    DO di = 0, iSub-1 ; DO dj = 0, jSub-1
+
+                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) / nxDom
+                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) / nyDom
+
+                        IF ( (x - centx)**2.0_realk + (y - centy)**2.0_realk <= rad**2.0_realk ) THEN
+                            inside = inside + 1.0_realk
+                        ENDIF
+                        
+                    ENDDO ; ENDDO
+                    
+                    vff(k,j,i) = inside / (iSub * jSub)
+
+                ENDDO ; ENDDO ; ENDDO
+
+            CASE ( 'CylAdF' )
+                continue
+            CASE ( 'CylAdC' )
+                continue
+            END SELECT
+        ENDDO
+
     END SUBROUTINE init_multiphase_io
 
     !================================================================
@@ -51,57 +140,6 @@ CONTAINS
 
         continue
     END SUBROUTINE finish_multiphase_io
-
-    !================================================================
-
-    SUBROUTINE read_vff(vff)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   This subroutine reads the initial values of the volume
-    !   fraction field from a csv-file generated in column-major 
-    !   order. The grid size needs to be specified via Nx, Ny and Nz.
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        TYPE(field_t), INTENT(inout) :: vff
-        
-        ! Local variables
-        INTEGER(intk) :: Nx, Ny, Nz
-        INTEGER(intk) :: i, unit
-
-        IF ( test_multiphase == 'SphTra' ) THEN
-            OPEN(newunit=unit,file="vffInitSub32.csv",status="old",action="read")
-            Nx = 84
-            Ny = 84
-            Nz = 85
-        ELSE IF ( test_multiphase == 'VorBoF' ) THEN
-            OPEN(newunit=unit,file="vffInitSub128.csv",status="old",action="read")
-            Nx = 132
-            Ny = 132
-            Nz = 133
-        ELSE IF ( test_multiphase == 'VorBoC' ) THEN
-            OPEN(newunit=unit,file="vffInitSub256.csv",status="old",action="read")
-            Nx = 36
-            Ny = 36
-            Nz = 37
-        ELSE IF ( test_multiphase == 'CylAdF' ) THEN
-            OPEN(newunit=unit,file="vffInitSub256.csv",status="old",action="read")
-            Nx = 84
-            Ny = 84
-            Nz = 9
-        ELSE IF ( test_multiphase == 'CylAdC' ) THEN
-            OPEN(newunit=unit,file="vffInitSub256.csv",status="old",action="read")
-            Nx = 20
-            Ny = 20
-            Nz = 21
-        END IF
-
-        DO i = 1, Nx*Ny*Nz
-            READ(unit,*) vff%arr(i)
-        END DO
-        CLOSE(unit)
-
-    END SUBROUTINE read_vff
 
     !================================================================
 
@@ -202,7 +240,7 @@ CONTAINS
                             DO k = 2, kk-1
                                 IF ( vff(k,j,i) >= 0.0_realk ) THEN
                                     u(k,j,i) = 0.016_realk
-                                    v(k,j,i) = 0.016_realk
+                                    v(k,j,i) = 0.0_realk
                                     w(k,j,i) = 0.0_realk
                                 END IF
                             END DO

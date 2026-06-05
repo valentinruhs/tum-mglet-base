@@ -136,8 +136,8 @@ CONTAINS
         DO ilevel = minlevel, maxlevel
             CALL connect(ilevel, 1, v1=u, v2=v, v3=w, &
                 normal=.true., forward=1)
-            CALL parent(ilevel, u, v, w, p)
-            CALL bound_flow%bound(ilevel, u, v, w, p)
+            CALL parent(ilevel, u, v, w, p, vff)
+            CALL bound_flow%bound(ilevel, u, f2=v, f3=w, f4=p)
         END DO
 
         ! TODO: check dtrk
