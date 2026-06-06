@@ -1,7 +1,7 @@
 {
     "time": {
         "dt": 0.1,
-        "mtstep": 600,
+        "mtstep": 300,
 	"itinfo": 100,
         "tstat": 10.0,
 	"read": false
@@ -30,7 +30,7 @@
     },
     
     "multiphase": {
-    	"solve": false,
+    	"solve": true,
 	"test": "CylAdC",
 	"splitting" : "direction-wise",
 	"permutation" : 3,

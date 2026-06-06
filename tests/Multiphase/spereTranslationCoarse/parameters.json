@@ -2,7 +2,7 @@
     "time": {
         "dt": 0.1,
         "mtstep": 200,
-	"itinfo": 10,
+	"itinfo": 100,
         "tstat": 10.0,
 	"read": false
     },
@@ -31,8 +31,8 @@
     
     "multiphase": {
     	"solve": true,
-	"test": "SphTra",
-	"rho1" : 1.0,
+	"test": "SphTrC",
+	"rho1" : 1000.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.000001,
 	"gmol2" : 0.000001
