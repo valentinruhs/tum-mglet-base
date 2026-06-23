@@ -20,6 +20,8 @@ MODULE multiphase_io_mod
     USE precision_mod, ONLY: intk, realk
     USE fields_mod, ONLY: get_field
     USE multiphasecore_mod, ONLY: test_multiphase
+    USE connect2_mod, ONLY: connect
+    USE grids_mod, ONLY: minlevel, maxlevel
 
     IMPLICIT NONE
     PRIVATE 
@@ -41,14 +43,14 @@ CONTAINS
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
-        INTEGER(intk) :: i, j, k, di, dj, dk
+        INTEGER(intk) :: i, j, k, di, dj, dk, r, ilevel
         INTEGER(intk) :: iSub, jSub, kSub
-        INTEGER(intk) :: nxDom, nyDom, nzDom
         REAL(realk), POINTER, CONTIGUOUS :: vff(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
-        REAL(realk) :: centx, centy, centz, rad, x, y, z, inside
+        REAL(realk) :: centx, centy, centz, rad, x, y, z, inside, a, b, e, maxTrans, theta
+        REAL(realk) :: randx(10), randy(10), randt(10)
         REAL(realk) :: trueVol, apprVol
 
         CALL get_field(vff_f, "VFF")
@@ -65,21 +67,21 @@ CONTAINS
             CALL dx_f%get_ptr(dx, igrid); CALL dy_f%get_ptr(dy, igrid); CALL dz_f%get_ptr(dz, igrid)
             CALL ddx_f%get_ptr(ddx, igrid); CALL ddy_f%get_ptr(ddy, igrid); CALL ddz_f%get_ptr(ddz, igrid)
 
+            WRITE(*,'(A19,1X,I12)')   "INITIALIZE GRID    " , igrid
+
             SELECT CASE( test_multiphase )
             CASE ( 'SphTrF' ) ! Sphere Translation Fine
                 !----------------------------------------------------
                 centx = 0.5_realk ; centy = 0.5_realk ; centz = 0.5_realk ; rad = 0.06875_realk
                 iSub = 32 ; jSub = 32 ; kSub = 32
-                nxDom = 160 ; nyDom = 160 ; nzDom = 160
-                WRITE(*,'(A23)') "Start VFF Init...      "
                 ! Outer loop over cells
                 DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
                     inside = 0.0_realk
                     ! Inner loop over (.)Sub for refinement
                     DO di = 0, iSub-1 ; DO dj = 0, jSub-1 ; DO dk = 0, kSub-1
-                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) / nxDom
-                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) / nyDom
-                        z = minz + ( k-3 + (dk + 0.5_realk)/kSub ) / nzDom
+                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
+                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
+                        z = minz + ( k-3 + (dk + 0.5_realk)/kSub ) * dz(1) ! assume equidistance
                         IF ( (x - centx)**2.0_realk + &
                              (y - centy)**2.0_realk + &
                              (z - centz)**2.0_realk <= rad**2.0_realk ) THEN
@@ -96,16 +98,14 @@ CONTAINS
                 !----------------------------------------------------
                 centx = 0.5_realk ; centy = 0.5_realk ; centz = 0.5_realk ; rad = 0.06875_realk
                 iSub = 32 ; jSub = 32 ; kSub = 32
-                nxDom = 80 ; nyDom = 80 ; nzDom = 80
-                WRITE(*,'(A23)') "Start VFF Init...      "
                 ! Outer loop over cells
                 DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
                     inside = 0.0_realk
                     ! Inner loop over (.)Sub for refinement
                     DO di = 0, iSub-1 ; DO dj = 0, jSub-1 ; DO dk = 0, kSub-1
-                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) / nxDom
-                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) / nyDom
-                        z = minz + ( k-3 + (dk + 0.5_realk)/kSub ) / nzDom
+                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
+                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
+                        z = minz + ( k-3 + (dk + 0.5_realk)/kSub ) * dz(1) ! assume equidistance
                         IF ( (x - centx)**2.0_realk + &
                              (y - centy)**2.0_realk + &
                              (z - centz)**2.0_realk <= rad**2.0_realk ) THEN
@@ -122,15 +122,13 @@ CONTAINS
                 !----------------------------------------------------
                 centx = 0.5_realk ; centy = 0.75_realk ; centz = 0.0_realk ; rad = 0.15_realk
                 iSub = 512 ; jSub = 512 ; kSub = 1
-                nxDom = 128 ; nyDom = 128 ; nzDom = 5
-                WRITE(*,'(A23)') "Start VFF Init...      "
                 ! Outer loop over cells
                 DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
                     inside = 0.0_realk
                     ! Inner loop over (.)Sub for refinement
                     DO di = 0, iSub-1 ; DO dj = 0, jSub-1
-                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) / nxDom
-                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) / nyDom
+                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
+                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
                         IF ( (x - centx)**2.0_realk + &
                              (y - centy)**2.0_realk <= rad**2.0_realk ) THEN
                             inside = inside + 1.0_realk
@@ -138,7 +136,7 @@ CONTAINS
                     ENDDO ; ENDDO
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
-                trueVol = pi * rad**2.0_realk * ( maxy - miny )
+                trueVol = pi * rad**2.0_realk * ( maxz - minz )
                 apprVol = SUM(vff) * ( dx(1) * dy(1) * dz(1) )
                 CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
@@ -146,15 +144,13 @@ CONTAINS
                 !----------------------------------------------------
                 centx = 0.5_realk ; centy = 0.75_realk ; centz = 0.0_realk ; rad = 0.15_realk
                 iSub = 512 ; jSub = 512 ; kSub = 1
-                nxDom = 32 ; nyDom = 32 ; nzDom = 5
-                WRITE(*,'(A23)') "Start VFF Init...      "
                 ! Outer loop over cells
                 DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
                     inside = 0.0_realk
                     ! Inner loop over (.)Sub for refinement
                     DO di = 0, iSub-1 ; DO dj = 0, jSub-1
-                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) / nxDom
-                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) / nyDom
+                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
+                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
                         IF ( (x - centx)**2.0_realk + &
                              (y - centy)**2.0_realk <= rad**2.0_realk ) THEN
                             inside = inside + 1.0_realk
@@ -162,7 +158,7 @@ CONTAINS
                     ENDDO ; ENDDO
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
-                trueVol = pi * rad**2.0_realk * ( maxy - miny )
+                trueVol = pi * rad**2.0_realk * ( maxz - minz )
                 apprVol = SUM(vff) * ( dx(1) * dy(1) * dz(1) )
                 CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
@@ -170,15 +166,13 @@ CONTAINS
                 !----------------------------------------------------
                 centx = 0.2_realk ; centy = 0.2_realk ; centz = 0.0_realk ; rad = 0.1_realk
                 iSub = 512 ; jSub = 512 ; kSub = 1
-                nxDom = 80 ; nyDom = 80 ; nzDom = 5
-                WRITE(*,'(A23)') "Start VFF Init...      "
                 ! Outer loop over cells
                 DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
                     inside = 0.0_realk
                     ! Inner loop over (.)Sub for refinement
                     DO di = 0, iSub-1 ; DO dj = 0, jSub-1
-                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) / nxDom
-                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) / nyDom
+                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
+                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
                         IF ( (x - centx)**2.0_realk + &
                              (y - centy)**2.0_realk <= rad**2.0_realk ) THEN
                             inside = inside + 1.0_realk
@@ -194,15 +188,13 @@ CONTAINS
                 !----------------------------------------------------
                 centx = 0.2_realk ; centy = 0.2_realk ; centz = 0.0_realk ; rad = 0.1_realk
                 iSub = 512 ; jSub = 512 ; kSub = 1
-                nxDom = 16 ; nyDom = 16 ; nzDom = 5
-                WRITE(*,'(A23)') "Start VFF Init...      "
                 ! Outer loop over cells
                 DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
                     inside = 0.0_realk
                     ! Inner loop over (.)Sub for refinement
                     DO di = 0, iSub-1 ; DO dj = 0, jSub-1
-                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) / nxDom
-                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) / nyDom
+                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
+                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
                         IF ( (x - centx)**2.0_realk + &
                              (y - centy)**2.0_realk <= rad**2.0_realk ) THEN
                             inside = inside + 1.0_realk
@@ -210,11 +202,48 @@ CONTAINS
                     ENDDO ; ENDDO
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
-                trueVol = pi * rad**2.0_realk * ( maxy - miny )
+                trueVol = pi * rad**2.0_realk * ( maxz - minz )
                 apprVol = SUM(vff) * ( dx(1) * dy(1) * dz(1) )
                 CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
+            CASE ( 'PlicEl' ) ! PLIC Ellipse
+                !----------------------------------------------------
+                DO r = 1, 1
+                    randx = [0.2047, 0.8682, 0.8612, 0.9178,  -0.42, 0.7934, 0.9832, 0.0922, -0.348, 0.2323]
+                    randy = [0.4138, 0.7814, 0.3582, -0.841, 0.9691, 0.8432, 0.2889, -0.527, 0.2153, -0.781]
+                    randt = [0.7019, 0.5916, 0.6264, 0.9859, 0.4035, 0.1262, 0.3234, 0.1483, 0.8225, 0.4155]
+                    maxTrans = 0.15_realk
+                    theta = randt(r) * 2.0_realk * pi
+                    centx = 0.5_realk !+ randx(r) * maxTrans
+                    centy = 0.5_realk !+ randy(r) * maxTrans
+                    a = 0.3464_realk ; b = 0.1414_realk ; e = SQRT(a**2.0_realk - b**2.0_realk)
+                    iSub = 256 ; jSub = 256 ; kSub = 1
+                    ! Outer loop over cells
+                    DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
+                        inside = 0.0_realk
+                        ! Inner loop over (.)Sub for refinement
+                        DO di = 0, iSub-1 ; DO dj = 0, jSub-1
+                            x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
+                            y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
+                            IF ( SQRT( ((x - centx) - e*COS(theta))**2.0_realk + ((y - centy) - e*SIN(theta))**2.0_realk ) + &
+                                 SQRT( ((x - centx) + e*COS(theta))**2.0_realk + ((y - centy) + e*SIN(theta))**2.0_realk ) <= 2*a ) THEN
+                                inside = inside + 1.0_realk
+                            ENDIF
+                        ENDDO ; ENDDO
+                        vff(k,j,i) = inside / (iSub * jSub * kSub)
+                    ENDDO ; ENDDO ; ENDDO
+                    trueVol = pi * a * b * ( maxz - minz )
+                    apprVol = SUM(vff) * ( dx(1) * dy(1) * dz(1) )
+                    WRITE(*,*) r
+                    CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
+                ENDDO
+                !----------------------------------------------------
             END SELECT
+
+            DO ilevel = minlevel, maxlevel
+                CALL connect(ilevel, layers=2, s1=vff_f, corners=.TRUE.)
+            ENDDO
+
         ENDDO
 
     END SUBROUTINE init_multiphase_io
@@ -246,15 +275,16 @@ CONTAINS
 
         ! Local variables
         ! None
-
+        
         initErr = ABS( trueVol - apprVol )
 
-        WRITE(*,'(A23)')          "-----------------------"
-        WRITE(*,'(A23)')          "Multi-Phase VFF Init.  "
-        WRITE(*,'(A10,1X,I12)')   "iSub:     " , iSub
-        WRITE(*,'(A10,1X,I12)')   "jSub:     " , jSub
-        WRITE(*,'(A10,1X,I12)')   "kSub:     " , kSub
-        WRITE(*,'(A10,1X,E12.6)') "initErr:  " , initErr
+        WRITE(*,'(A32)')          "----------------------------------"
+        WRITE(*,'(A19,1X,I12)')   "iSub:              " , iSub
+        WRITE(*,'(A19,1X,I12)')   "jSub:              " , jSub
+        WRITE(*,'(A19,1X,I12)')   "kSub:              " , kSub
+        WRITE(*,'(A10,1X,E21.15)') "trueVol:  " , trueVol
+        WRITE(*,'(A10,1X,E21.15)') "apprVol:  " , apprVol
+        WRITE(*,'(A10,1X,E21.15)') "initErr:  " , initErr
         WRITE(*,'(A23)') ""
 
     END SUBROUTINE print_statistics
@@ -352,12 +382,12 @@ CONTAINS
                 END DO   
             ELSE IF ( test_multiphase == 'CylAdF' .OR. test_multiphase == 'CylAdC' ) THEN
                 IF ( itstep == 1 ) THEN
-                    DO i = 2, ii-1
-                        DO j = 2, jj-1
-                            DO k = 2, kk-1
+                    DO i = 1, ii
+                        DO j = 1, jj
+                            DO k = 1, kk
                                 IF ( vff(k,j,i) >= 0.0_realk ) THEN
                                     u(k,j,i) = 0.016_realk
-                                    v(k,j,i) = 0.016_realk
+                                    v(k,j,i) = 0.0_realk
                                     w(k,j,i) = 0.0_realk
                                 END IF
                             END DO

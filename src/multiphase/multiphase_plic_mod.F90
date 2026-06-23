@@ -1,18 +1,18 @@
-!====================================================================
-!  Module: multiphase_plic_mod
-!
-!  Responsibilities:
-!     - Tracks the cells containing an interfac
-!     - Computes the interface normal vector within a cell
-!     - Computes the distance of the interface alpha within a cell
-!
-!  Author:      Valentin Ruhs
-!  Created:     2026-02
-!  Last update: 2026-02
-!
-!====================================================================
+    !====================================================================
+    !  Module: multiphase_plic_mod
+    !
+    !  Responsibilities:
+    !     - Tracks the cells containing an interfac
+    !     - Computes the interface normal vector within a cell
+    !     - Computes the distance of the interface alpha within a cell
+    !
+    !  Author:      Valentin Ruhs
+    !  Created:     2026-02
+    !  Last update: 2026-02
+    !
+    !====================================================================
 
-MODULE multiphase_plic_mod
+    MODULE multiphase_plic_mod
 
     USE precision_mod, ONLY: intk, realk
     USE err_mod, ONLY: errr
@@ -29,7 +29,7 @@ MODULE multiphase_plic_mod
         MODULE PROCEDURE iface_recon_wrap_stag
     END INTERFACE
 
-CONTAINS
+    CONTAINS
 
     SUBROUTINE init_multiphase_plic()
 
@@ -89,7 +89,7 @@ CONTAINS
     END SUBROUTINE track_iface
 
     !================================================================
-    
+
     SUBROUTINE track_iface_vic(isIfaceVic, kk, jj, ii, isIface)
     !----------------------------------------------------------------
     !   What it does:
@@ -184,8 +184,8 @@ CONTAINS
 
                     ! Calculate normal vector length
                     length = SQRT( normx(k,j,i)**2.0_realk + &
-                                    normy(k,j,i)**2.0_realk + &
-                                    normz(k,j,i)**2.0_realk )
+                                   normy(k,j,i)**2.0_realk + &
+                                   normz(k,j,i)**2.0_realk )
 
                     ! Normalize with direction from high vff to low vff
                     IF ( length > tol ) THEN
@@ -313,14 +313,13 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         REAL(realk) :: m1, m2, m3, c1, c2, c3
-        REAL(realk) :: alphaStd(kk, jj, ii)
         REAL(realk) :: alphaMax(kk, jj, ii)
 
 
         ! Loop over cells
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
+        DO i = 2, ii-1
+            DO j = 2, jj-1
+                DO k = 2, kk-1
 
                     ! Only calculate interface for intersected cells
                     IF ( .NOT. isIface(k,j,i) ) THEN 
@@ -337,13 +336,12 @@ CONTAINS
                     ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
                     !         Journal of Computational Physics, Bd. 164, Nr. 1, S. 228–237, Okt. 2000, doi: 10.1006/jcph.2000.6567.
                     ! To enhance performance consider inlining
-                    CALL comp_alph_std(m1, m2, m3, c1, c2, c3, alphaStd(k,j,i), &
+                    CALL comp_alph_std(m1, m2, m3, c1, c2, c3, alpha(k,j,i), &
                         alphaMax(k,j,i), vff(k,j,i), ddx(i), ddy(j), ddz(k), tol)
 
                     ! 4. If necessary, transform alpha back to volume bounds [0,1] * dV
                     ! If the volume fraction function has a value above 0.5 the "inverse problem" is solved. Therefore, the result is no longer 
                     ! alpha, but alphaMax - alpha. It can be seen as a rotation of the voxel. This is the inverse rotation (see comp_alph_std)
-                    alpha(k,j,i) = alphaStd(k,j,i)
                     IF ( vff(k,j,i) > 0.5_realk ) THEN
                         alpha(k,j,i) = alphaMax(k,j,i) - alpha(k,j,i)
                     ENDIF
@@ -429,7 +427,7 @@ CONTAINS
     !   are used to compute the staggered volume fraction fields and
     !   their material properties.
     !----------------------------------------------------------------
-    
+
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         INTEGER(intk), INTENT(in) :: q
@@ -471,9 +469,9 @@ CONTAINS
         INTEGER(intk) :: k, j, i
         REAL(realk) :: alphaLeft, alphaRight, halfFractionLeft, halfFractionRight
 
-        DO i = 3, ii-2
-            DO j = 3, jj-2 
-                DO k = 3, kk-2 
+        DO i = 1, ii-1
+            DO j = 1, jj-1
+                DO k = 1, kk-1
                     IF ( isIface(k,j,i) .AND. isIface(k,j,i+1) ) THEN
                         alphaLeft  = alpha(k,j,i) - normx(k,j,i) * ddx(i) / 2.0_realk
                         alphaRight = alpha(k,j,i+1)
@@ -515,9 +513,9 @@ CONTAINS
         INTEGER(intk) :: k, j, i
         REAL(realk) :: alphaFront, alphaBack, halfFractionFront, halfFractionBack
 
-        DO i = 3, ii-2
-            DO j = 3, jj-2 
-                DO k = 3, kk-2 
+        DO i = 1, ii-1
+            DO j = 1, jj-1 
+                DO k = 1, kk-1 
                     IF ( isIface(k,j,i) .AND. isIface(k,j+1,i) ) THEN
                         alphaFront = alpha(k,j,i) - normy(k,j,i) * ddy(j) / 2.0_realk
                         alphaBack  = alpha(k,j+1,i)
@@ -559,9 +557,9 @@ CONTAINS
         INTEGER(intk) :: k, j, i
         REAL(realk) :: alphaBottom, alphaTop, halfFractionBottom, halfFractionTop
 
-        DO i = 3, ii-2
-            DO j = 3, jj-2 
-                DO k = 3, kk-2 
+        DO i = 1, ii-1
+            DO j = 1, jj-1 
+                DO k = 1, kk-1 
                     IF ( isIface(k,j,i) .AND. isIface(k+1,j,i) ) THEN
                         alphaBottom = alpha(k,j,i) - normz(k,j,i) * ddz(k) / 2.0_realk
                         alphaTop    = alpha(k+1,j,i)
@@ -702,7 +700,7 @@ CONTAINS
 
         ! Transform vff to a actual volume in bounds [0,0.5] * dV
         ! Rotate voxel into standart configuration (see comp_alph 4.)
-        vol = min(vff, 1.0_realk - vff) * ddx * ddy * ddz
+        vol = MIN(vff, 1.0_realk - vff) * ddx * ddy * ddz
         
         ! Solve the standart cases for alphaStd
         ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
@@ -726,7 +724,7 @@ CONTAINS
                 ! When the critical base area is exceeded the volume shape transforms to a chamfered rectangle prism instead of triangular prism
                 criticalBaseArea = 1.0_realk/2.0_realk * c2**2.0_realk * m2/m3
                 
-                IF ( baseArea <= criticalBaseArea ) THEN
+                IF ( baseArea < criticalBaseArea ) THEN
                     ! Here both interception lines of the interface with the coordinate axis are within the cell => triangular prism
                     alphaStd = SQRT(2.0_realk * baseArea * m2 * m3)
                 ELSE
@@ -739,10 +737,13 @@ CONTAINS
             alphaMax = mc1 + mc2 + mc3
 
             ! Define interval boundaries V1, V2, V3
-            V1 = mc1**2.0_realk * c1 / ( max(6.0_realk * m2 * m3, tol) )
+            V1 = mc1**2.0_realk * c1 / ( MAX(6.0_realk * m2 * m3, tol) )
             V2 = V1 + c1 * c2 * ( mc2 - mc1 ) / ( 2.0_realk * m3 )
             IF ( mc3 < mc1 + mc2 ) THEN
-                V3 = ( mc3**2.0_realk * ( 3.0_realk * ( mc1 + mc2 ) - mc3 ) + mc1**2.0_realk * ( mc1 - 3.0_realk * mc3 ) + mc2**2.0_realk * ( mc2 - 3.0_realk * mc3 ) ) / ( 6.0_realk * m1 * m2 * m3 )
+                V3 = ( mc3**2.0_realk * ( 3.0_realk * ( mc1 + mc2 ) - mc3 ) + &
+                        mc1**2.0_realk * ( mc1 - 3.0_realk * mc3 ) + &
+                        mc2**2.0_realk * ( mc2 - 3.0_realk * mc3 ) ) / &
+                        ( 6.0_realk * m1 * m2 * m3 )
             ELSE
                 V3 = c1 * c2 * ( mc1 + mc2 ) / ( 2.0_realk * m3 )
             ENDIF
@@ -759,8 +760,8 @@ CONTAINS
                 po = a1 / 3.0_realk - a2**2.0_realk / 9.0_realk
                 qo = ( a1 * a2 - 3.0_realk * a0 ) / 6.0_realk - a2**3.0_realk / 27.0_realk
                 
-                theta = acos(qo / (-po)**1.5_realk) / 3.0_realk
-                alphaStd = SQRT(-po) * ( SQRT(3.0_realk) * sin(theta) - cos(theta) ) - a2 / 3.0_realk
+                theta = ACOS(qo / (-po)**1.5_realk) / 3.0_realk
+                alphaStd = SQRT(-po) * ( SQRT(3.0_realk) * SIN(theta) - COS(theta) ) - a2 / 3.0_realk
             ELSE IF ( vol >= V3 .AND. mc3 <= mc1 + mc2 ) THEN
                 a2 = - 3.0_realk/2.0_realk * ( mc1 + mc2 + mc3 )
                 a1 = 3.0_realk/2.0_realk * ( mc1**2.0_realk + mc2**2.0_realk + mc3**2.0_realk )
@@ -768,8 +769,8 @@ CONTAINS
                 po = a1 / 3.0_realk - a2**2.0_realk / 9.0_realk
                 qo = ( a1 * a2 - 3.0_realk * a0 ) / 6.0_realk - a2**3.0_realk / 27.0_realk
                 
-                theta = acos(qo / (-po)**1.5_realk) / 3.0_realk
-                alphaStd = SQRT(-po) * ( SQRT(3.0_realk) * sin(theta) - cos(theta) ) - a2 / 3.0_realk
+                theta = ACOS(qo / (-po)**1.5_realk) / 3.0_realk
+                alphaStd = SQRT(-po) * ( SQRT(3.0_realk) * SIN(theta) - COS(theta) ) - a2 / 3.0_realk
             ELSE IF ( vol >= V3 .AND. mc3 > mc1 + mc2 ) THEN
                 alphaStd = m3 * vol / ( c1 * c2 ) + ( mc1 + mc2 ) / 2.0_realk
             ENDIF
@@ -823,7 +824,7 @@ CONTAINS
             IF ( mc2 < tol ) THEN
                 ! One-dimensional case
                 alphaMax = mc3
-                alphaStd = min(alphaLoc, alphaMax - alphaLoc)
+                alphaStd = MIN(alphaLoc, alphaMax - alphaLoc)
 
                 IF ( alphaStd <= 0.0_realk ) THEN
                     IF ( alphaLoc >= alphaMax ) THEN
@@ -837,7 +838,7 @@ CONTAINS
             ELSE
                 ! Two-dimensional cases
                 alphaMax = mc2 + mc3
-                alphaStd = min(alphaLoc, alphaMax - alphaLoc)
+                alphaStd = MIN(alphaLoc, alphaMax - alphaLoc)
 
                 IF ( alphaStd <= 0.0_realk ) THEN
                     IF ( alphaLoc >= alphaMax ) THEN
@@ -858,9 +859,9 @@ CONTAINS
         ELSE
             ! Three-dimensional cases
             alphaMax = mc1 + mc2 + mc3
-            alphaStd = min(alphaLoc, alphaMax - alphaLoc)
+            alphaStd = MIN(alphaLoc, alphaMax - alphaLoc)
 
-            V1 = mc1**2 * c1 / ( max(6.0_realk * m2 * m3, tol) )
+            V1 = mc1**2 * c1 / ( MAX(6.0_realk * m2 * m3, tol) )
 
             IF ( alphaStd <= 0.0_realk ) THEN
                 IF ( alphaLoc >= alphaMax ) THEN
@@ -873,14 +874,14 @@ CONTAINS
                 vol = alphaStd**3.0_realk / ( 6.0_realk * m1 * m2 * m3 )
             ELSE IF ( alphaStd < mc2 ) THEN
                 vol = ( alphaStd * c1 * ( alphaStd - mc1 ) ) / ( 2.0_realk * m2 * m3 ) + V1
-            ELSE IF ( alphaStd < min(mc1 + mc2, mc3) ) THEN
+            ELSE IF ( alphaStd < MIN(mc1 + mc2, mc3) ) THEN
                 vol = ( alphaStd**2.0_realk * ( 3.0_realk * ( mc1 + mc2 ) - alphaStd ) + mc1**2.0_realk * ( mc1 - 3.0_realk * alphaStd ) + mc2**2.0_realk * ( mc2 - 3.0_realk * alphaStd ) ) / ( 6.0_realk * m1 * m2 * m3 )
-            ELSE IF ( alphaStd >= min(mc1 + mc2, mc3) .AND. mc3 <= mc1 + mc2 ) THEN
+            ELSE IF ( alphaStd >= MIN(mc1 + mc2, mc3) .AND. mc3 <= mc1 + mc2 ) THEN
                 vol = ( alphaStd**2.0_realk * ( 3.0_realk * ( mc1 + mc2 + mc3 ) - 2.0_realk * alphaStd ) &
                     + mc1**2.0_realk * ( mc1 - 3.0_realk * alphaStd ) &
                     + mc2**2.0_realk * ( mc2 - 3.0_realk * alphaStd ) &
                     + mc3**2.0_realk * ( mc3 - 3.0_realk * alphaStd ) ) / ( 6.0_realk * m1 * m2 * m3 )
-            ELSE IF ( alphaStd >= min(mc1 + mc2, mc3) .AND. mc3 > mc1 + mc2 ) THEN
+            ELSE IF ( alphaStd >= MIN(mc1 + mc2, mc3) .AND. mc3 > mc1 + mc2 ) THEN
                 vol = ( c1 * c2 * ( 2.0_realk * alphaStd - ( mc1 + mc2 ) ) ) / ( 2.0_realk * m3 )
             ENDIF
         ENDIF
@@ -893,4 +894,4 @@ CONTAINS
 
     END SUBROUTINE comp_frac_std
 
-END MODULE multiphase_plic_mod
+    END MODULE multiphase_plic_mod

@@ -101,10 +101,12 @@ CONTAINS
                 CALL update_velocity(u, v, w, vff, itstep, dt)
             END IF
 
-            IF ( irk == 1 ) CALL multiphase_solve(u, v, w, vff, p, g, d, dt, itstep, uo, vo, wo)
-            
-            ! CALL connect(layers=2, s1=vff, corners=.TRUE.)
-        ELSE 
+            CALL multiphase_solve(u, v, w, vff, p, g, d, dtrki*dt, itstep, uo, vo, wo)
+
+            DO ilevel = minlevel, maxlevel
+                CALL connect(ilevel, layers=2, s1=vff, corners=.TRUE.)
+            ENDDO
+        ELSE
             ! TSTLE4 zeroize uo, vo, wo before use internally
             CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g)
             CALL boussinesqterm(uo, vo, wo)
@@ -136,7 +138,7 @@ CONTAINS
         DO ilevel = minlevel, maxlevel
             CALL connect(ilevel, 1, v1=u, v2=v, v3=w, &
                 normal=.true., forward=1)
-            CALL parent(ilevel, u, v, w, p, vff)
+            CALL parent(ilevel, u, v, w, p)
             CALL bound_flow%bound(ilevel, u, f2=v, f3=w, f4=p)
         END DO
 

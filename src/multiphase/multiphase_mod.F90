@@ -46,8 +46,7 @@ CONTAINS
         CALL init_multiphase_vof_transport()
         CALL init_multiphase_plic()
         CALL init_multiphase_io()
-        IF(.NOT. has_multiphase) RETURN        
-
+        IF(.NOT. has_multiphase) RETURN
         IF(.NOT. solve_multiphase) RETURN
 
 

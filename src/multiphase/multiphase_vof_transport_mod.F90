@@ -23,6 +23,8 @@ MODULE multiphase_vof_transport_mod
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, splitting_multiphase, permutation_multiphase
     USE multiphase_material_mod, ONLY: comp_material_property_field
     USE flowcore_mod, ONLY: gradp
+    USE connect2_mod, ONLY: connect
+    USE parent_mod, ONLY: parent
     
     IMPLICIT NONE
     PRIVATE 
@@ -84,13 +86,13 @@ CONTAINS
         REAL(realk) :: flux, fluxedProp, fluxWidth, fluxAlpha
 
         IF ( splitDir == 1 ) THEN 
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
+            DO i = 1, ii-1
+                DO j = 1, jj-1
+                    DO k = 1, kk-1
                         IF ( u(k,j,i) > tol ) THEN
                             IF ( isInterface(k,j,i) ) THEN
                                 ! CASE 1
-                                ! vff:      <1     E       
+                                !       W   <1     E       
                                 !       +----------+----------+
                                 !       |     |    |          |
                                 !       |     |   --> u       |
@@ -115,13 +117,13 @@ CONTAINS
                                 flux = fluxedProp  * ( abs( u(k,j,i) ) * dt / ddx(i) )
                             ELSE
                                 ! CASE 2
-                                ! vff:      =1     E       
+                                !       W   =1     E
                                 !       +----------+----------+
                                 !       |          |          |
                                 !       |         --> u       |
                                 !       |          |          |
                                 !       +----------+----------+
-                                ! 
+                                !
                                 ! Since there is no interface in the 
                                 ! upwind cell there is no need to 
                                 ! compute the proportion.
@@ -131,7 +133,7 @@ CONTAINS
                         ELSE IF ( u(k,j,i) < -tol ) THEN
                             IF ( isInterface(k,j,i+1) ) THEN
                                 ! CASE 3
-                                ! vff:             E       
+                                !       W          E     <1
                                 !       +----------+----------+
                                 !       |          |    |     |
                                 !       |       u <--   |     |
@@ -155,7 +157,7 @@ CONTAINS
                                 flux = fluxedProp * ( abs( u(k,j,i) ) * dt / ddx(i+1) )
                             ELSE
                                 ! CASE 4
-                                ! vff:             E    =1 
+                                !       W          E    =1 
                                 !       +----------+----------+
                                 !       |          |          |
                                 !       |       u <--         |
@@ -180,9 +182,9 @@ CONTAINS
                 END DO
             END DO
         ELSE IF ( splitDir == 2 ) THEN 
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
+            DO i = 1, ii-1
+                DO j = 1, jj-1
+                    DO k = 1, kk-1
                         IF ( v(k,j,i) > tol ) THEN
                             IF ( isInterface(k,j,i) ) THEN
                                 ! See explanation above.
@@ -218,9 +220,9 @@ CONTAINS
                 END DO
             END DO
         ELSE IF ( splitDir == 3 ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
+            DO i = 1, ii-1
+                DO j = 1, jj-1
+                    DO k = 1, kk-1
                         IF ( w(k,j,i) > tol ) THEN
                             IF ( isInterface(k,j,i) ) THEN
                                 ! See explanation above.
@@ -294,9 +296,9 @@ CONTAINS
         CALL comp_advr_centr(kk, jj, ii, q, u, v, w, advrE, advrN, advrT)
 
         IF ( splitDir == 1 ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
+            DO i = 1, ii-1
+                DO j = 1, jj-1
+                    DO k = 1, kk-1
                         IF ( advrE(k,j,i) > tol ) THEN
                             IF ( isInterface(k,j,i) ) THEN
                                 ! See explanation above.
@@ -338,9 +340,9 @@ CONTAINS
                 END DO
             END DO
         ELSE IF ( splitDir == 2 ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
+            DO i = 1, ii-1
+                DO j = 1, jj-1
+                    DO k = 1, kk-1
                         IF ( advrN(k,j,i) > tol ) THEN
                             IF ( isInterface(k,j,i) ) THEN
                                 ! See explanation above.
@@ -382,9 +384,9 @@ CONTAINS
                 END DO
             END DO
         ELSE IF ( splitDir == 3 ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
+            DO i = 1, ii-1
+                DO j = 1, jj-1
+                    DO k = 1, kk-1
                         IF ( advrT(k,j,i) > tol ) THEN
                             IF ( isInterface(k,j,i) ) THEN
                                 ! See explanation above.
@@ -603,7 +605,7 @@ CONTAINS
 
             IF ( .NOT. ALLOCATED(vffPrev) ) ALLOCATE(vffPrev(kk, jj, ii))
             vffPrev = vff
-
+            WRITE(*,*) i
             CALL adve_operator(kk, jj, ii, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, dt, itstep, tol, &
                 normx, normy, normz, alpha, &
                 vffiStag, vffjStag, vffkStag, diStag, djStag, dkStag, &
@@ -656,7 +658,7 @@ CONTAINS
         REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
 
         ! Local variables
-        INTEGER(intk) :: q, advSeq(3), l, splitDir
+        INTEGER(intk) :: q, advSeq(3), l, splitDir, i
         REAL(realk), ALLOCATABLE :: vffStag(:,:,:)
         REAL(realk), ALLOCATABLE :: dStag(:,:,:)
         REAL(realk), ALLOCATABLE :: normxStag(:,:,:), normyStag(:,:,:), normzStag(:,:,:)
@@ -669,7 +671,7 @@ CONTAINS
         REAL(realk), ALLOCATABLE :: advrE(:,:,:), advrN(:,:,:), advrT(:,:,:), advrSplitDir(:,:,:,:)
         REAL(realk), ALLOCATABLE :: uNew(:,:,:), vNew(:,:,:), wNew(:,:,:)
         REAL(realk), ALLOCATABLE :: mom4D(:,:,:,:), vffStag4D(:,:,:,:), cWYStag4D(:,:,:,:)
-        
+
         IF (.NOT. ALLOCATED(vffStag))             ALLOCATE(vffStag(kk,jj,ii))
         IF (.NOT. ALLOCATED(dStag))               ALLOCATE(dStag(kk,jj,ii))
         IF (.NOT. ALLOCATED(normxStag))           ALLOCATE(normxStag(kk,jj,ii))
@@ -798,7 +800,7 @@ CONTAINS
                 splitDir = advSeq(l)
 
                 DO q = 1, 3
-                    
+
                     vffStag = vffStag4D(:,:,:,q)
                     mom = mom4D(:,:,:,q)
                     cWYStag = cWYStag4D(:,:,:,q)
@@ -853,6 +855,10 @@ CONTAINS
 
         END IF
 
+        DO i = 1,kk
+            WRITE(*,*) i, SUM(vff(i,3:18,3:18))
+        ENDDO
+
     END SUBROUTINE
 
     !================================================================
@@ -877,12 +883,12 @@ CONTAINS
         REAL(realk) :: tauxxe, tauxxw, tauyxn, tauyxs, tauzxt, tauzxb
         REAL(realk) :: tauxye, tauxyw, tauyyn, tauyys, tauzyt, tauzyb
         REAL(realk) :: tauxze, tauxzw, tauyzn, tauyzs, tauzzt, tauzzb
-        
+
         CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, d)
 
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
+        DO i = 2, ii-1
+            DO j = 2, jj-1
+                DO k = 2, kk-1
                     ! Face values of dynamic viscosity on u-momentum cell
                     ! Harmonic mean for a more physical treatment at interfaces
                     ge = g(k, j, i+1)
@@ -923,9 +929,9 @@ CONTAINS
             END DO
         END DO
 
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
+        DO i = 2, ii-1
+            DO j = 2, jj-1
+                DO k = 2, kk-1
                     ! Face values of dynamic viscosity on v-momentum cell
                     ! Harmonic mean for a more physical treatment at interfaces
                     ge = g(k, j, i)*g(k, j, i+1) &
@@ -968,9 +974,9 @@ CONTAINS
             END DO
         END DO
 
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
+        DO i = 2, ii-1
+            DO j = 2, jj-1
+                DO k = 2, kk-1
                     ! Face values of dynamic viscosity on w-momentum cell
                     ! Harmonic mean for a more physical treatment at interfaces
                     ge = g(k, j, i)*g(k, j, i+1) &
@@ -1033,7 +1039,7 @@ CONTAINS
         INTEGER(intk) :: gradpflag
         REAL(realk) :: gpx, gpy, gpz
         INTEGER(intk) :: i, j, k
-        
+
         CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, d)
 
         CALL get_gradpxflag(gradpflag, igrid)
@@ -1097,9 +1103,9 @@ CONTAINS
         CALL get_component_specifics(kk, jj, ii, splitDir, vel1=velWY1, vel2=velWY2, vel3=velWY3, dx=dx, dy=dy, dz=dz, ddx=ddx, ddy=ddy, ddz=ddz, &
             i0=i0, j0=j0, k0=k0, deltaX=deltaX, deltaY=deltaY, deltaZ=deltaZ, velFld=velWY)
 
-        DO i = 2, ii-1
-            DO j = 2, jj-1
-                DO k = 2, kk-1
+        DO i = 2, ii
+            DO j = 2, jj
+                DO k = 2, kk
                     div(k,j,i) = ( velWY(k,j,i) - velWY(k-k0,j-j0,i-i0) ) / deltaX(ii)
                     vff(k,j,i) = vff(k,j,i) - dt * ( vffFlux(k,j,i) - vffFlux(k-k0,j-j0,i-i0) ) + dt * cWY(k,j,i) * div(k,j,i)
                 END DO
@@ -1152,17 +1158,17 @@ CONTAINS
                     a1 = velWY(k-k0,j-j0,i-i0)*dt/deltaX(i-i0)
                     a2 = velWY(k,j,i)*dt/deltaX(i)
 
-                    CALL comp_advr_inter(vel1, vel2, vel3, -0.5_realk*(1.0_realk + a1), "WENO", advrU)
-                    CALL comp_advr_inter(vel1, vel2, vel3,  0.5_realk*(1.0_realk - a2), "WENO", advrD)
-                    
+                    CALL comp_advr_inter(vel1, vel2, vel3, -0.5_realk*(1.0_realk + a1), "ENO", advrU)
+                    CALL comp_advr_inter(vel1, vel2, vel3,  0.5_realk*(1.0_realk - a2), "ENO", advrD)
+
                     momFlux(k,j,i) = ( rho1 * vffFlux(k,j,i) + rho2 * complVffFlux(k,j,i) ) * advrD
                 END DO
             END DO 
         END DO
 
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
+        DO i = 2, ii
+            DO j = 2, jj
+                DO k = 2, kk
                     div(k,j,i) = ( velWY(k,j,i) - velWY(k-k0,j-j0,i-i0) ) / deltaX(ii)
                     mom(k,j,i) = mom(k,j,i) - dt * ( momFlux(k,j,i) - momFlux(k-k0,j-j0,i-i0) ) + dt * (rho1-rho2) * velWY(k,j,i) * cWY(k,j,i) * div(k,j,i)
                 END DO
@@ -1223,9 +1229,9 @@ CONTAINS
         
         CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, dStag)
     
-        DO i = 4, ii-3
-            DO j = 4, jj-3
-                DO k = 4, kk-3
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
                     IF ( vff(k,j,i) >= 0.0_realk .AND. vff(k,j,i) <= 1.0_realk ) THEN
                         velo(k,j,i) = ( mom(k,j,i) / dStag(k,j,i) - vel(k,j,i) ) / dt
                     END IF
@@ -1299,7 +1305,7 @@ CONTAINS
 
         ! Local variables
         INTEGER(intk) :: k, j, i
-        return
+
         DO i = 1, ii
             DO j = 1, jj
                 DO k = 1, kk
@@ -1333,7 +1339,7 @@ CONTAINS
         LOGICAL :: isSolenoidal
         REAL(realk), PARAMETER :: eps = 1.0E-10_realk
         REAL(realk) :: uChar, lChar, L1Eps, L2Eps, LinfEps, L1Norm, L2Norm, LinfNorm
-
+        return
         isSolenoidal = .TRUE.
 
         DO i = 3, ii-2
@@ -1469,9 +1475,9 @@ CONTAINS
 
         CALL get_component_specifics(kk, jj, ii, q, i0=i0, j0=j0, k0=k0)        
 
-        DO i = 2, ii-1
-            DO j = 2, jj-1
-                DO k = 2, kk-1
+        DO i = 1, ii-1
+            DO j = 1, jj-1
+                DO k = 1, kk-1
                     advrE(k,j,i) = 0.5_realk * ( u(k,j,i) + u(k+k0,j+j0,i+i0) )
                     advrN(k,j,i) = 0.5_realk * ( v(k,j,i) + v(k+k0,j+j0,i+i0) )
                     advrT(k,j,i) = 0.5_realk * ( w(k,j,i) + w(k+k0,j+j0,i+i0) )
