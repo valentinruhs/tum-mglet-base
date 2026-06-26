@@ -137,7 +137,7 @@
     !   by taking into account its eight surrounding cells weighted
     !   with the three-dimensional stcl operator:
     !            / 1  2  1 \
-    !   stcl =  | 2  4  2 |
+    !   stcl =   | 2  4  2 |
     !            \ 1  2  1 /
     !   The gradient is approximated by a central-difference scheme:
     !   norm(.) = (upwind SUM - downwind SUM) / 2 * dd(.) * stcl SUM
@@ -469,9 +469,9 @@
         INTEGER(intk) :: k, j, i
         REAL(realk) :: alphaLeft, alphaRight, halfFractionLeft, halfFractionRight
 
-        DO i = 1, ii-1
-            DO j = 1, jj-1
-                DO k = 1, kk-1
+        DO i = 2, ii-1
+            DO j = 2, jj-1
+                DO k = 2, kk-1
                     IF ( isIface(k,j,i) .AND. isIface(k,j,i+1) ) THEN
                         alphaLeft  = alpha(k,j,i) - normx(k,j,i) * ddx(i) / 2.0_realk
                         alphaRight = alpha(k,j,i+1)
@@ -513,9 +513,9 @@
         INTEGER(intk) :: k, j, i
         REAL(realk) :: alphaFront, alphaBack, halfFractionFront, halfFractionBack
 
-        DO i = 1, ii-1
-            DO j = 1, jj-1 
-                DO k = 1, kk-1 
+        DO i = 2, ii-1
+            DO j = 2, jj-1 
+                DO k = 2, kk-1 
                     IF ( isIface(k,j,i) .AND. isIface(k,j+1,i) ) THEN
                         alphaFront = alpha(k,j,i) - normy(k,j,i) * ddy(j) / 2.0_realk
                         alphaBack  = alpha(k,j+1,i)
@@ -557,9 +557,9 @@
         INTEGER(intk) :: k, j, i
         REAL(realk) :: alphaBottom, alphaTop, halfFractionBottom, halfFractionTop
 
-        DO i = 1, ii-1
-            DO j = 1, jj-1 
-                DO k = 1, kk-1 
+        DO i = 2, ii-1
+            DO j = 2, jj-1 
+                DO k = 2, kk-1 
                     IF ( isIface(k,j,i) .AND. isIface(k+1,j,i) ) THEN
                         alphaBottom = alpha(k,j,i) - normz(k,j,i) * ddz(k) / 2.0_realk
                         alphaTop    = alpha(k+1,j,i)

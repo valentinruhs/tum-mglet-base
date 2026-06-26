@@ -25,6 +25,8 @@ MODULE multiphase_vof_transport_mod
     USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
     USE parent_mod, ONLY: parent
+    USE grids_mod, ONLY: minlevel, maxlevel
+    USE multiphase_io_mod, ONLY: apprVol
     
     IMPLICIT NONE
     PRIVATE 
@@ -605,7 +607,7 @@ CONTAINS
 
             IF ( .NOT. ALLOCATED(vffPrev) ) ALLOCATE(vffPrev(kk, jj, ii))
             vffPrev = vff
-            WRITE(*,*) i
+
             CALL adve_operator(kk, jj, ii, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, dt, itstep, tol, &
                 normx, normy, normz, alpha, &
                 vffiStag, vffjStag, vffkStag, diStag, djStag, dkStag, &
@@ -618,11 +620,13 @@ CONTAINS
 
             CALL pres_operator(kk, jj, ii, vffPrev, p, rdx, rdy, rdz, igrid, uo, vo, wo)
 
-            u = u + uo * dt
-            v = v + vo * dt
-            w = w + wo * dt
+            ! u = u + uo * dt
+            ! v = v + vo * dt
+            ! w = w + wo * dt
 
         END DO
+
+        CALL check_continuity(tol)
 
     END SUBROUTINE multiphase_solve
 
@@ -658,7 +662,7 @@ CONTAINS
         REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
 
         ! Local variables
-        INTEGER(intk) :: q, advSeq(3), l, splitDir, i
+        INTEGER(intk) :: q, advSeq(3), l, splitDir
         REAL(realk), ALLOCATABLE :: vffStag(:,:,:)
         REAL(realk), ALLOCATABLE :: dStag(:,:,:)
         REAL(realk), ALLOCATABLE :: normxStag(:,:,:), normyStag(:,:,:), normzStag(:,:,:)
@@ -769,6 +773,7 @@ CONTAINS
                 CALL comp_flux_cent(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
                 CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, u, v, w, dx, dy, dz, ddx, ddy, ddz, dt, tol, vff)
                 CALL clip_vff(kk, jj, ii, tol, vff)
+                CALL app_bcon()
 
             END DO
 
@@ -850,14 +855,11 @@ CONTAINS
                 CALL iface_recon_wrap(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
                 CALL comp_flux_cent(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
                 CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, u, v, w, dx, dy, dz, ddx, ddy, ddz, dt, tol, vff)
+                CALL app_bcon()
 
             END DO
 
         END IF
-
-        DO i = 1,kk
-            WRITE(*,*) i, SUM(vff(i,3:18,3:18))
-        ENDDO
 
     END SUBROUTINE
 
@@ -866,7 +868,7 @@ CONTAINS
     SUBROUTINE diff_operator(kk, jj, ii, u, v, w, vff, g, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
     !----------------------------------------------------------------
     !   What it does:
-    !    
+    !   
     !----------------------------------------------------------------
     
         ! Subroutine arguments
@@ -1103,9 +1105,9 @@ CONTAINS
         CALL get_component_specifics(kk, jj, ii, splitDir, vel1=velWY1, vel2=velWY2, vel3=velWY3, dx=dx, dy=dy, dz=dz, ddx=ddx, ddy=ddy, ddz=ddz, &
             i0=i0, j0=j0, k0=k0, deltaX=deltaX, deltaY=deltaY, deltaZ=deltaZ, velFld=velWY)
 
-        DO i = 2, ii
-            DO j = 2, jj
-                DO k = 2, kk
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
                     div(k,j,i) = ( velWY(k,j,i) - velWY(k-k0,j-j0,i-i0) ) / deltaX(ii)
                     vff(k,j,i) = vff(k,j,i) - dt * ( vffFlux(k,j,i) - vffFlux(k-k0,j-j0,i-i0) ) + dt * cWY(k,j,i) * div(k,j,i)
                 END DO
@@ -1166,9 +1168,9 @@ CONTAINS
             END DO 
         END DO
 
-        DO i = 2, ii
-            DO j = 2, jj
-                DO k = 2, kk
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
                     div(k,j,i) = ( velWY(k,j,i) - velWY(k-k0,j-j0,i-i0) ) / deltaX(ii)
                     mom(k,j,i) = mom(k,j,i) - dt * ( momFlux(k,j,i) - momFlux(k-k0,j-j0,i-i0) ) + dt * (rho1-rho2) * velWY(k,j,i) * cWY(k,j,i) * div(k,j,i)
                 END DO
@@ -1375,6 +1377,81 @@ CONTAINS
         END IF
 
     END SUBROUTINE check_solenoidality
+
+    !================================================================
+
+    SUBROUTINE check_continuity(tol)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        REAL(realk) :: tol
+
+        ! Local variables
+        TYPE(field_t), POINTER :: vff_f
+        TYPE(field_t), POINTER :: ddx_f, ddy_f, ddz_f
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: vff(:,:,:)
+        INTEGER(intk) :: kk, jj, ii, k, j, i, n, igrid
+        REAL(realk) :: volFl1
+
+        CALL get_field(vff_f, "VFF")
+        CALL get_field(ddx_f, "DDX")
+        CALL get_field(ddy_f, "DDY")
+        CALL get_field(ddz_f, "DDZ")
+
+        volFl1 = 0.0_realk
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL vff_f%get_ptr(vff, igrid)
+            CALL ddx_f%get_ptr(ddx, igrid)
+            CALL ddy_f%get_ptr(ddy, igrid)
+            CALL ddz_f%get_ptr(ddz, igrid)
+
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        volFl1 = volFl1 + vff(k,j,i) * ddx(i) * ddy(j) * ddz(k)
+                    ENDDO
+                ENDDO
+            ENDDO
+            
+        ENDDO
+
+        IF ( ABS(apprVol - volFl1) >= tol ) THEN
+            WRITE(*,*) "Continuity equation is violated: volumeError = ", ABS(apprVol - volFl1)
+        ENDIF
+
+    END SUBROUTINE check_continuity
+
+    !================================================================
+
+    SUBROUTINE app_bcon()
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        ! None
+
+        ! Local variables
+        TYPE(field_t), POINTER :: vff_f
+        INTEGER(intk) :: ilevel
+
+        CALL get_field(vff_f, "VFF")
+
+        DO ilevel = minlevel, maxlevel
+            CALL connect(ilevel, layers=2, s1=vff_f)
+        ENDDO
+
+    END SUBROUTINE app_bcon
 
     !================================================================
 
