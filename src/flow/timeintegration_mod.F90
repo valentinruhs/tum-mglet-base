@@ -100,12 +100,7 @@ CONTAINS
             IF ( test_multiphase /= "none" ) THEN
                 CALL update_velocity(u, v, w, vff, itstep, dt)
             END IF
-
-            CALL multiphase_solve(u, v, w, vff, p, g, d, dtrki*dt, itstep, uo, vo, wo)
-
-            DO ilevel = minlevel, maxlevel
-                CALL connect(ilevel, layers=2, s1=vff, corners=.TRUE.)
-            ENDDO
+            CALL multiphase_solve(u, v, w, vff, p, g, d, dt*dtrki, itstep, uo, vo, wo)
         ELSE
             ! TSTLE4 zeroize uo, vo, wo before use internally
             CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g)

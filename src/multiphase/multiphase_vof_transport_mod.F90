@@ -781,7 +781,6 @@ CONTAINS
             
             CALL check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz)
             CALL def_advection_sequence(itstep, advSeq)
-            CALL clip_vff(kk, jj, ii, tol, vff)
             CALL iface_recon_wrap(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
 
             DO q = 1, 3
@@ -855,13 +854,14 @@ CONTAINS
                 CALL iface_recon_wrap(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
                 CALL comp_flux_cent(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
                 CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, u, v, w, dx, dy, dz, ddx, ddy, ddz, dt, tol, vff)
+                CALL clip_vff(kk, jj, ii, tol, vff)
                 CALL app_bcon()
 
             END DO
 
         END IF
 
-    END SUBROUTINE
+    END SUBROUTINE adve_operator
 
     !================================================================
 
@@ -1448,7 +1448,7 @@ CONTAINS
         CALL get_field(vff_f, "VFF")
 
         DO ilevel = minlevel, maxlevel
-            CALL connect(ilevel, layers=2, s1=vff_f)
+            CALL connect(ilevel, layers=2, s1=vff_f, corners=.TRUE.)
         ENDDO
 
     END SUBROUTINE app_bcon
