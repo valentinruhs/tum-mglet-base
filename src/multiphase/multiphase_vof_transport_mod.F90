@@ -527,25 +527,13 @@ CONTAINS
 
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
         TYPE(field_t), POINTER :: rdx_f, rdy_f, rdz_f, rddx_f, rddy_f, rddz_f
-        TYPE(field_t), POINTER :: vffiStag_f, vffjStag_f, vffkStag_f
-        TYPE(field_t), POINTER :: diStag_f, djStag_f, dkStag_f
         TYPE(field_t), POINTER :: normx_f, normy_f, normz_f
-        TYPE(field_t), POINTER :: normxiStag_f, normyiStag_f, normziStag_f
-        TYPE(field_t), POINTER :: normxjStag_f, normyjStag_f, normzjStag_f
-        TYPE(field_t), POINTER :: normxkStag_f, normykStag_f, normzkStag_f
         TYPE(field_t), POINTER :: alpha_f
-        TYPE(field_t), POINTER :: alphaiStag_f, alphajStag_f, alphakStag_f
 
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:), ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:), rddx(:), rddy(:), rddz(:)
-        REAL(realk), POINTER, CONTIGUOUS :: vffiStag(:,:,:), vffjStag(:,:,:), vffkStag(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: diStag(:,:,:), djStag(:,:,:), dkStag(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: normxiStag(:,:,:), normyiStag(:,:,:), normziStag(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: normxjStag(:,:,:), normyjStag(:,:,:), normzjStag(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: normxkStag(:,:,:), normykStag(:,:,:), normzkStag(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: alphaiStag(:,:,:), alphajStag(:,:,:), alphakStag(:,:,:)
 
         REAL(realk), ALLOCATABLE :: vffPrev(:,:,:)
 
@@ -564,14 +552,8 @@ CONTAINS
         CALL get_field(rdx_f, "RDX"); CALL get_field(rdy_f, "RDY"); CALL get_field(rdz_f, "RDZ")
         CALL get_field(rddx_f, "RDDX"); CALL get_field(rddy_f, "RDDY"); CALL get_field(rddz_f, "RDDZ")
 
-        CALL get_field(vffiStag_f, "VFFiStag"); CALL get_field(vffjStag_f, "VFFjStag"); CALL get_field(vffkStag_f, "VFFkStag")
-        CALL get_field(diStag_f, "DiStag"); CALL get_field(djStag_f, "DjStag"); CALL get_field(dkStag_f, "DkStag")
         CALL get_field(normx_f, "NORMX"); CALL get_field(normy_f, "NORMY"); CALL get_field(normz_f, "NORMZ")
-        CALL get_field(normxiStag_f, "NORMXiStag"); CALL get_field(normyiStag_f, "NORMYiStag"); CALL get_field(normziStag_f, "NORMZiStag")
-        CALL get_field(normxjStag_f, "NORMXjStag"); CALL get_field(normyjStag_f, "NORMYjStag"); CALL get_field(normzjStag_f, "NORMZjStag")
-        CALL get_field(normxkStag_f, "NORMXkStag"); CALL get_field(normykStag_f, "NORMYkStag"); CALL get_field(normzkStag_f, "NORMZkStag")
-        CALL get_field(alpha_f, "ALPHA")
-        CALL get_field(alphaiStag_f, "ALPHAiStag"); CALL get_field(alphajStag_f, "ALPHAjStag"); CALL get_field(alphakStag_f, "ALPHAkStag")
+         CALL get_field(alpha_f, "ALPHA")
 
         DO i = 1, nmygrids
             igrid = mygrids(i)
@@ -596,25 +578,14 @@ CONTAINS
             CALL rdx_f%get_ptr(rdx, igrid); CALL rdy_f%get_ptr(rdy, igrid); CALL rdz_f%get_ptr(rdz, igrid)
             CALL rddx_f%get_ptr(rddx, igrid); CALL rddy_f%get_ptr(rddy, igrid); CALL rddz_f%get_ptr(rddz, igrid)
 
-            CALL vffiStag_f%get_ptr(vffiStag, igrid); CALL vffjStag_f%get_ptr(vffjStag, igrid); CALL vffkStag_f%get_ptr(vffkStag, igrid)
-            CALL diStag_f%get_ptr(diStag, igrid); CALL djStag_f%get_ptr(djStag, igrid); CALL dkStag_f%get_ptr(dkStag, igrid)
             CALL normx_f%get_ptr(normx, igrid); CALL normy_f%get_ptr(normy, igrid); CALL normz_f%get_ptr(normz, igrid)
-            CALL normxiStag_f%get_ptr(normxiStag, igrid); CALL normyiStag_f%get_ptr(normyiStag, igrid); CALL normziStag_f%get_ptr(normziStag, igrid)
-            CALL normxjStag_f%get_ptr(normxjStag, igrid); CALL normyjStag_f%get_ptr(normyjStag, igrid); CALL normzjStag_f%get_ptr(normzjStag, igrid)
-            CALL normxkStag_f%get_ptr(normxkStag, igrid); CALL normykStag_f%get_ptr(normykStag, igrid); CALL normzkStag_f%get_ptr(normzkStag, igrid)
             CALL alpha_f%get_ptr(alpha, igrid)
-            CALL alphaiStag_f%get_ptr(alphaiStag, igrid); CALL alphajStag_f%get_ptr(alphajStag, igrid); CALL alphakStag_f%get_ptr(alphakStag, igrid)
 
             IF ( .NOT. ALLOCATED(vffPrev) ) ALLOCATE(vffPrev(kk, jj, ii))
             vffPrev = vff
 
             CALL adve_operator(kk, jj, ii, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, dt, itstep, tol, &
-                normx, normy, normz, alpha, &
-                vffiStag, vffjStag, vffkStag, diStag, djStag, dkStag, &
-                normxiStag, normyiStag, normziStag, & 
-                normxjStag, normyjStag, normzjStag, &
-                normxkStag, normykStag, normzkStag, &
-                alphaiStag, alphajStag, alphakStag, uo, vo, wo)
+                normx, normy, normz, alpha, uo, vo, wo)
 
             CALL diff_operator(kk, jj, ii, u, v, w, vffPrev, g, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
 
@@ -627,18 +598,14 @@ CONTAINS
         END DO
 
         CALL check_continuity(tol)
+        CALL check_solenoidality(tol)
 
     END SUBROUTINE multiphase_solve
 
     !================================================================
 
     SUBROUTINE adve_operator(kk, jj, ii, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, dt, itstep, tol, &
-        normx, normy, normz, alpha, &
-        vffiStag, vffjStag, vffkStag, diStag, djStag, dkStag, &
-        normxiStag, normyiStag, normziStag, & 
-        normxjStag, normyjStag, normzjStag, &
-        normxkStag, normykStag, normzkStag, &
-        alphaiStag, alphajStag, alphakStag, uo, vo, wo)
+        normx, normy, normz, alpha, uo, vo, wo)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -653,24 +620,14 @@ CONTAINS
         REAL(realk), INTENT(in) :: tol, dt
         INTEGER(intk), INTENT(in) :: itstep
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii), alpha(kk, jj, ii)
-        REAL(realk), INTENT(out) :: vffiStag(kk, jj, ii), vffjStag(kk, jj, ii), vffkStag(kk, jj, ii)
-        REAL(realk), INTENT(out) :: diStag(kk, jj, ii), djStag(kk, jj, ii), dkStag(kk, jj, ii)
-        REAL(realk), INTENT(out) :: normxiStag(kk, jj, ii), normyiStag(kk, jj, ii), normziStag(kk, jj, ii)
-        REAL(realk), INTENT(out) :: normxjStag(kk, jj, ii), normyjStag(kk, jj, ii), normzjStag(kk, jj, ii)
-        REAL(realk), INTENT(out) :: normxkStag(kk, jj, ii), normykStag(kk, jj, ii), normzkStag(kk, jj, ii)
-        REAL(realk), INTENT(out) :: alphaiStag(kk, jj, ii), alphajStag(kk, jj, ii), alphakStag(kk, jj, ii)
         REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: q, advSeq(3), l, splitDir
         REAL(realk), ALLOCATABLE :: vffStag(:,:,:)
         REAL(realk), ALLOCATABLE :: dStag(:,:,:)
-        REAL(realk), ALLOCATABLE :: normxStag(:,:,:), normyStag(:,:,:), normzStag(:,:,:)
-        REAL(realk), ALLOCATABLE :: alphaStag(:,:,:)
         LOGICAL, ALLOCATABLE :: isInterface(:,:,:)
-        LOGICAL, ALLOCATABLE :: isInterfaceStag(:,:,:)
         LOGICAL, ALLOCATABLE :: isNearInterface(:,:,:)
-        LOGICAL, ALLOCATABLE :: isNearInterfaceStag(:,:,:)
         REAL(realk), ALLOCATABLE :: vffFlux(:,:,:), complVffFlux(:,:,:), mom(:,:,:), cWY(:,:,:), cWYStag(:,:,:)
         REAL(realk), ALLOCATABLE :: advrE(:,:,:), advrN(:,:,:), advrT(:,:,:), advrSplitDir(:,:,:,:)
         REAL(realk), ALLOCATABLE :: uNew(:,:,:), vNew(:,:,:), wNew(:,:,:)
@@ -678,14 +635,8 @@ CONTAINS
 
         IF (.NOT. ALLOCATED(vffStag))             ALLOCATE(vffStag(kk,jj,ii))
         IF (.NOT. ALLOCATED(dStag))               ALLOCATE(dStag(kk,jj,ii))
-        IF (.NOT. ALLOCATED(normxStag))           ALLOCATE(normxStag(kk,jj,ii))
-        IF (.NOT. ALLOCATED(normyStag))           ALLOCATE(normyStag(kk,jj,ii))
-        IF (.NOT. ALLOCATED(normzStag))           ALLOCATE(normzStag(kk,jj,ii))
-        IF (.NOT. ALLOCATED(alphaStag))           ALLOCATE(alphaStag(kk,jj,ii))
         IF (.NOT. ALLOCATED(isInterface))         ALLOCATE(isInterface(kk,jj,ii))
-        IF (.NOT. ALLOCATED(isInterfaceStag))     ALLOCATE(isInterfaceStag(kk,jj,ii))
         IF (.NOT. ALLOCATED(isNearInterface))     ALLOCATE(isNearInterface(kk,jj,ii))
-        IF (.NOT. ALLOCATED(isNearInterfaceStag)) ALLOCATE(isNearInterfaceStag(kk,jj,ii))
         IF (.NOT. ALLOCATED(vffFlux))             ALLOCATE(vffFlux(kk,jj,ii))
         IF (.NOT. ALLOCATED(complVffFlux))        ALLOCATE(complVffFlux(kk,jj,ii))
         IF (.NOT. ALLOCATED(mom))                 ALLOCATE(mom(kk,jj,ii))
@@ -704,14 +655,12 @@ CONTAINS
         
         IF ( splitting_multiphase == "component-wise" ) THEN
 
-            CALL check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz)
             CALL def_advection_sequence(itstep, advSeq)
             CALL iface_recon_wrap(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
 
             DO q = 1, 3
                 
                 CALL comp_stag_frac_wrap(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
-                CALL iface_recon_wrap(kk, jj, ii, q, vffStag, dx, dy, dz, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
                 CALL comp_material_property_field(kk, jj, ii, vffStag, rho1, rho2, dStag)
                 CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
                 CALL comp_cWY(kk, jj, ii, vffStag, cWYStag)
@@ -738,29 +687,6 @@ CONTAINS
                     CALL comp_velocity_change(kk, jj, ii, q, w, vffStag, mom, dt, wo)
                 END IF
 
-                IF ( q == 1 ) THEN
-                    vffiStag = vffStag
-                    diStag = dStag
-                    normxiStag = normxStag
-                    normyiStag = normyStag
-                    normziStag = normzStag
-                    alphaiStag = alphaStag
-                ELSE IF ( q == 2 ) THEN
-                    vffjStag = vffStag
-                    djStag = dStag
-                    normxjStag = normxStag
-                    normyjStag = normyStag
-                    normzjStag = normzStag
-                    alphajStag = alphaStag
-                ELSE IF ( q == 3 ) THEN
-                    vffkStag = vffStag
-                    dkStag = dStag
-                    normxkStag = normxStag
-                    normykStag = normyStag
-                    normzkStag = normzStag
-                    alphakStag = alphaStag
-                END IF
-
             END DO
 
             CALL comp_cWY(kk, jj, ii, vff, cWY)
@@ -778,15 +704,13 @@ CONTAINS
             END DO
 
         ELSE IF ( splitting_multiphase == "direction-wise" ) THEN
-            
-            CALL check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz)
+
             CALL def_advection_sequence(itstep, advSeq)
             CALL iface_recon_wrap(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
 
             DO q = 1, 3
 
                 CALL comp_stag_frac_wrap(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
-                CALL iface_recon_wrap(kk, jj, ii, vffStag, ddx, ddy, ddz, tol, normxStag, normyStag, normzStag, alphaStag, isInterfaceStag, isNearInterfaceStag)
                 CALL comp_material_property_field(kk, jj, ii, vffStag, rho1, rho2, dStag)
                 CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
                 CALL comp_cWY(kk, jj, ii, vffStag, cWYStag)
@@ -826,27 +750,61 @@ CONTAINS
                         CALL comp_velocity_change(kk, jj, ii, q, w, vffStag, mom, dt, wo)
                     END IF
 
+                END DO
+
+                CALL iface_recon_wrap(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+                CALL comp_flux_cent(kk, jj, ii, splitDir, vff, isInterface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWY, u, v, w, dx, dy, dz, ddx, ddy, ddz, dt, tol, vff)
+                CALL clip_vff(kk, jj, ii, tol, vff)
+                CALL app_bcon()
+
+            END DO
+
+        ELSE IF ( splitting_multiphase == "test" ) THEN
+
+            CALL def_advection_sequence(itstep, advSeq)
+            CALL iface_recon_wrap(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isInterface, isNearInterface)
+
+            DO q = 1, 3
+
+                CALL comp_stag_frac_wrap(kk, jj, ii, q, alpha, vff, isInterface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
+                CALL comp_material_property_field(kk, jj, ii, vffStag, rho1, rho2, dStag)
+                CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
+                CALL comp_cWY(kk, jj, ii, vffStag, cWYStag)
+
+                vffStag4D(:,:,:,q) = vffStag
+                mom4D(:,:,:,q) = mom
+                cWYStag4D(:,:,:,q) = cWYStag
+                
+            END DO
+
+            CALL comp_cWY(kk, jj, ii, vff, cWY)
+
+            DO l = 1, 3
+
+                splitDir = advSeq(l)
+
+                DO q = 1, 3
+
+                    vffStag = vffStag4D(:,:,:,q)
+                    mom = mom4D(:,:,:,q)
+                    cWYStag = cWYStag4D(:,:,:,q)
+
+                    CALL comp_advr_centr(kk, jj, ii, q, u, v, w, advrE, advrN, advrT)
+                    advrSplitDir(:,:,:,1) = advrE
+                    advrSplitDir(:,:,:,2) = advrN
+                    advrSplitDir(:,:,:,3) = advrT
+
+                    CALL comp_flux_stag(kk, jj, ii, q, splitDir, vff, isInterface, u, v, w, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
+                    CALL adv_mom(kk, jj, ii, splitDir, vffStag, vffFlux, complVffFlux, cWYStag, advrSplitDir(:,:,:,splitDir), dx, dy, dz, ddx, ddy, ddz, dt, mom)
+                    CALL adv_vof(kk, jj, ii, splitDir, vffFlux, cWYStag, advrE, advrN, advrT, dx, dy, dz, ddx, ddy, ddz, dt, tol, vffStag)
+
                     IF ( q == 1 ) THEN
-                        vffiStag = vffStag
-                        diStag = dStag
-                        normxiStag = normxStag
-                        normyiStag = normyStag
-                        normziStag = normzStag
-                        alphaiStag = alphaStag
+                        CALL comp_velocity_change(kk, jj, ii, q, u, vffStag, mom, dt, uo)
                     ELSE IF ( q == 2 ) THEN
-                        vffjStag = vffStag
-                        djStag = dStag
-                        normxjStag = normxStag
-                        normyjStag = normyStag
-                        normzjStag = normzStag
-                        alphajStag = alphaStag
+                        CALL comp_velocity_change(kk, jj, ii, q, v, vffStag, mom, dt, vo)
                     ELSE IF ( q == 3 ) THEN
-                        vffkStag = vffStag
-                        dkStag = dStag
-                        normxkStag = normxStag
-                        normykStag = normyStag
-                        normzkStag = normzStag
-                        alphakStag = alphaStag
+                        CALL comp_velocity_change(kk, jj, ii, q, w, vffStag, mom, dt, wo)
                     END IF
 
                 END DO
@@ -1324,57 +1282,75 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE check_solenoidality(kk, jj, ii, u, v, w, dx, dy, dz)
+    SUBROUTINE check_solenoidality(tol)
     !----------------------------------------------------------------
     !   What it does:
     !    
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk) :: tol
 
         ! Local variables
-        INTEGER(intk) :: k, j, i
-        REAL(realk) :: div(kk, jj, ii)
-        LOGICAL :: isSolenoidal
-        REAL(realk), PARAMETER :: eps = 1.0E-10_realk
-        REAL(realk) :: uChar, lChar, L1Eps, L2Eps, LinfEps, L1Norm, L2Norm, LinfNorm
-        return
-        isSolenoidal = .TRUE.
+        TYPE(field_t), POINTER :: u_f, v_f, w_f
+        TYPE(field_t), POINTER :: ddx_f, ddy_f, ddz_f
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:)
+        INTEGER(intk) :: kk, jj, ii, k, j, i, n, igrid
+        REAL(realk), ALLOCATABLE :: div(:,:,:)
+        REAL(realk) :: uChar, lChar, L1tol, L2tol, Linftol, L1Norm, L2Norm, LinfNorm
 
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
+        CALL get_field(u_f, "U")
+        CALL get_field(v_f, "V")
+        CALL get_field(w_f, "W")
+        CALL get_field(ddx_f, "DDX")
+        CALL get_field(ddy_f, "DDY")
+        CALL get_field(ddz_f, "DDZ")
 
-                    div(k,j,i) = ( u(k,j,i+1) - u(k,j,i) )/dx(i) + &
-                                 ( v(k,j+1,i) - v(k,j,i) )/dy(j) + &
-                                 ( w(k+1,j,i) - w(k,j,i) )/dz(k)
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
 
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL u_f%get_ptr(u, igrid)
+            CALL v_f%get_ptr(v, igrid)
+            CALL w_f%get_ptr(w, igrid)
+            CALL ddx_f%get_ptr(ddx, igrid)
+            CALL ddy_f%get_ptr(ddy, igrid)
+            CALL ddz_f%get_ptr(ddz, igrid)
+
+            IF ( .NOT. ALLOCATED(div) ) ALLOCATE(div(kk,jj,ii))
+
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        div(k,j,i) = ( u(k,j,i+1) - u(k,j,i) )/ddx(i) + &
+                                     ( v(k,j+1,i) - v(k,j,i) )/ddy(j) + &
+                                     ( w(k+1,j,i) - w(k,j,i) )/ddz(k)
+                    END DO
                 END DO
             END DO
-        END DO
 
-        uChar = MAX(MAXVAL(ABS(u(3:kk-2,3:jj-2,3:ii-2))), &
-                    MAXVAL(ABS(v(3:kk-2,3:jj-2,3:ii-2))), &
-                    MAXVAL(ABS(w(3:kk-2,3:jj-2,3:ii-2))))
-        lChar = MAX(MAXVAL(ABS(dx(3:ii-2))), &
-                    MAXVAL(ABS(dy(3:jj-2))), &
-                    MAXVAL(ABS(dz(3:kk-2))))
+            uChar = MAX(MAXVAL(ABS(u(3:kk-2,3:jj-2,3:ii-2))), &
+                        MAXVAL(ABS(v(3:kk-2,3:jj-2,3:ii-2))), &
+                        MAXVAL(ABS(w(3:kk-2,3:jj-2,3:ii-2))))
+            lChar = MAX(MAXVAL(ABS(ddx(3:ii-2))), &
+                        MAXVAL(ABS(ddy(3:jj-2))), &
+                        MAXVAL(ABS(ddz(3:kk-2))))
 
-        L1Eps = eps * uChar / lChar
-        L2Eps = eps * uChar / lChar * ( SIZE(div(3:kk-2,3:jj-2,3:ii-2)) )**(1.0_realk/2.0_realk)
-        LinfEps = eps * uChar / lChar * SIZE(div(3:kk-2,3:jj-2,3:ii-2))
-        
-        L1Norm = SUM( ABS(div(3:kk-2,3:jj-2,3:ii-2)) )
-        L2Norm = ( SUM( div(3:kk-2,3:jj-2,3:ii-2)**2.0_realk ) )**(1.0_realk/2.0_realk)
-        LinfNorm = MAXVAL( ABS(div(3:kk-2,3:jj-2,3:ii-2)) )
+            L1tol = tol * uChar / lChar
+            L2tol = tol * uChar / lChar * ( SIZE(div(3:kk-2,3:jj-2,3:ii-2)) )**(1.0_realk/2.0_realk)
+            Linftol = tol * uChar / lChar * SIZE(div(3:kk-2,3:jj-2,3:ii-2))
+            
+            L1Norm = SUM( ABS(div(3:kk-2,3:jj-2,3:ii-2)) )
+            L2Norm = ( SUM( div(3:kk-2,3:jj-2,3:ii-2)**2.0_realk ) )**(1.0_realk/2.0_realk)
+            LinfNorm = MAXVAL( ABS(div(3:kk-2,3:jj-2,3:ii-2)) )
 
-        IF ( L1Norm > L1Eps .OR. L2Norm > L2Eps .OR. LinfNorm > LinfEps ) THEN
-            isSolenoidal = .FALSE.
-            WRITE(*,*) "Velocity not solenoidal: L1 =", L1Norm, " L2 =", L2Norm, " Linf =", LinfNorm
-        END IF
+            IF ( L1Norm > L1tol .OR. L2Norm > L2tol .OR. LinfNorm > Linftol ) THEN
+                WRITE(*,*) "Velocity not solenoidal: L1 =", L1Norm, " L2 =", L2Norm, " Linf =", LinfNorm
+            END IF
+
+        ENDDO
 
     END SUBROUTINE check_solenoidality
 

@@ -96,51 +96,15 @@ CONTAINS
         ! Initialize multiphase fields
         CALL set_field("D", description=descriptiond , units=unitsd, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("DiStag", description=descriptiond , units=unitsd, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("DjStag", description=descriptiond , units=unitsd, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("DkStag", description=descriptiond , units=unitsd, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("VFF", description=descriptionvff , units=unitsvff, &
             dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("VFFiStag", description=descriptionvff , units=unitsvff, &
-        dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("VFFjStag", description=descriptionvff , units=unitsvff, &
-        dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("VFFkStag", description=descriptionvff , units=unitsvff, &
-        dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("NORMX", description=descriptionnorm , units=unitsnorm, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("NORMY", description=descriptionnorm , units=unitsnorm, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("NORMZ", description=descriptionnorm , units=unitsnorm, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("NORMXiStag", description=descriptionnorm , units=unitsnorm, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("NORMYiStag", description=descriptionnorm , units=unitsnorm, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("NORMZiStag", description=descriptionnorm , units=unitsnorm, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("NORMXjStag", description=descriptionnorm , units=unitsnorm, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("NORMYjStag", description=descriptionnorm , units=unitsnorm, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("NORMZjStag", description=descriptionnorm , units=unitsnorm, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("NORMXkStag", description=descriptionnorm , units=unitsnorm, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("NORMYkStag", description=descriptionnorm , units=unitsnorm, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("NORMZkStag", description=descriptionnorm , units=unitsnorm, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("ALPHA", description=descriptionalpha , units=unitsalpha, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("ALPHAiStag", description=descriptionalpha , units=unitsalpha, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("ALPHAjStag", description=descriptionalpha , units=unitsalpha, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
-        CALL set_field("ALPHAkStag", description=descriptionalpha , units=unitsalpha, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
 
     END SUBROUTINE init_multiphasecore
