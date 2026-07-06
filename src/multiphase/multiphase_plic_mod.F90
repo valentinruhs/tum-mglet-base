@@ -21,7 +21,7 @@
     PRIVATE 
 
     PUBLIC :: init_multiphase_plic, finish_multiphase_plic, iface_recon_wrap, &
-            comp_frac, comp_stag_frac_wrap
+            comp_frac, comp_stag_frac_wrap, track_iface, track_iface_vic
 
 
     INTERFACE iface_recon_wrap

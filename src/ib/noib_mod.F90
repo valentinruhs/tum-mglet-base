@@ -281,7 +281,7 @@ CONTAINS
     END SUBROUTINE divcal
 
 
-    PURE SUBROUTINE divcal_grid(kk, jj, ii, fak, div, u, v, w, rddx, rddy, &
+    SUBROUTINE divcal_grid(kk, jj, ii, fak, div, u, v, w, rddx, rddy, &
             rddz, bp, sdiv)
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
@@ -308,6 +308,8 @@ CONTAINS
                 END DO
             END DO
         END DO
+
+        WRITE(*,*) maxval(div)
 
         ! TODO: If SDIV is properly masked in the ghost layers, the indices
         ! here could be from 1 to ii etc. That will lead to ever so slightly

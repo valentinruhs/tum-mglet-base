@@ -138,7 +138,7 @@ CONTAINS
         END DO
 
         ! TODO: check dtrk
-        ! CALL mgpoisl(u, v, w, p, dtrk*dt, ittot, irk)
+        CALL mgpoisl(u, v, w, p, dtrk*dt, ittot, irk)
         CALL lesmodel(g)
 
         IF (ib%type == "GHOSTCELL") THEN

@@ -18,7 +18,7 @@ MODULE multiphase_vof_transport_mod
     USE fields_mod, ONLY: get_field
     USE grids_mod, ONLY: get_mgdims, get_mgbasb, get_gradpxflag
     USE err_mod, ONLY: errr
-    USE multiphase_plic_mod, ONLY: comp_frac, iface_recon_wrap, comp_stag_frac_wrap
+    USE multiphase_plic_mod, ONLY: comp_frac, iface_recon_wrap, comp_stag_frac_wrap, track_iface, track_iface_vic
     USE rungekutta_mod, ONLY: rk_2n_t
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, splitting_multiphase, permutation_multiphase
     USE multiphase_material_mod, ONLY: comp_material_property_field
@@ -27,6 +27,7 @@ MODULE multiphase_vof_transport_mod
     USE parent_mod, ONLY: parent
     USE grids_mod, ONLY: minlevel, maxlevel
     USE multiphase_io_mod, ONLY: apprVol
+    USE err_mod, ONLY: errr
     
     IMPLICIT NONE
     PRIVATE 
@@ -295,7 +296,7 @@ CONTAINS
         REAL(realk) :: advr(kk, jj, ii)
 
         CALL get_spatial_extents(kk, jj, ii, q, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
-        CALL comp_advr_linear_interpolation(kk, jj, ii, q, splitDir, u, v, w, advr)
+        CALL comp_advr_linear_interpolation(kk, jj, ii, splitDir, u, v, w, advr)
 
         IF ( splitDir == 1 ) THEN
             DO i = 1, ii-1
@@ -667,8 +668,8 @@ CONTAINS
 
                     l = advSeq(splitDir)
 
-                    CALL comp_advr_linear_interpolation(kk, jj, ii, q, l, u, v, w, advr)
-                    CALL comp_adve_quick(kk, jj, ii, q, l, u, v, w, advr, adve)
+                    CALL comp_advr_linear_interpolation(kk, jj, ii, l, u, v, w, advr)
+                    CALL comp_adve_quick(kk, jj, ii, q, l, u, v, w, advr, vffStag, tol, adve)
                     CALL comp_flux_stag(kk, jj, ii, q, l, vff, isInterface, u, v, w, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
                     CALL adv_mom(kk, jj, ii, q, l, u, v, w, advr, adve, vffStag, vffFlux, complVffFlux, cWYStag, dx, dy, dz, ddx, ddy, ddz, dt, mom)
                     CALL adv_vof(kk, jj, ii, l, vffFlux, cWYStag, advr, dx, dy, dz, ddx, ddy, ddz, dt, tol, vffStag)
@@ -728,8 +729,8 @@ CONTAINS
                     mom = mom4D(:,:,:,q)
                     cWYStag = cWYStag4D(:,:,:,q)
 
-                    CALL comp_advr_linear_interpolation(kk, jj, ii, q, l, u, v, w, advr)
-                    CALL comp_adve_quick(kk, jj, ii, q, l, u, v, w, advr, adve)
+                    CALL comp_advr_linear_interpolation(kk, jj, ii, l, u, v, w, advr)
+                    CALL comp_adve_quick(kk, jj, ii, q, l, u, v, w, advr, vffStag, tol, adve)
                     CALL comp_flux_stag(kk, jj, ii, q, l, vff, isInterface, u, v, w, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
                     CALL adv_mom(kk, jj, ii, q, l, u, v, w, advr, adve, vffStag, vffFlux, complVffFlux, cWYStag, dx, dy, dz, ddx, ddy, ddz, dt, mom)
                     CALL adv_vof(kk, jj, ii, l, vffFlux, cWYStag, advr, dx, dy, dz, ddx, ddy, ddz, dt, tol, vffStag)
@@ -932,7 +933,7 @@ CONTAINS
         INTEGER(intk) :: gradpflag
         REAL(realk) :: gpx, gpy, gpz
         INTEGER(intk) :: i, j, k
-        return
+
         CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, d)
 
         CALL get_gradpxflag(gradpflag, igrid)
@@ -988,7 +989,6 @@ CONTAINS
         INTEGER(intk) :: i, j, k
         INTEGER(intk) :: il, jl, kl
         REAL(realk) :: dsx(ii), dsy(jj), dsz(kk)
-        REAL(realk) :: ind(3)
         REAL(realk) :: div(kk, jj, ii)
 
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
@@ -997,11 +997,7 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    ind(1) = merge(1.0_realk, 0.0_realk, il == 1_intk)
-                    ind(2) = merge(1.0_realk, 0.0_realk, jl == 1_intk)
-                    ind(2) = merge(1.0_realk, 0.0_realk, kl == 1_intk)
-
-                    div(k,j,i) = ( vel(k,j,i) - vel(k-kl,j-jl,i-il) ) / ( dsx(i) ) 
+                    div(k,j,i) = ( vel(k,j,i) - vel(k-kl,j-jl,i-il) ) / ( il * dsx(i) + jl * dsy(j) + kl * dsz(k) )
                     vff(k,j,i) = vff(k,j,i) - dt * ( vffFlux(k,j,i) - vffFlux(k-kl,j-jl,i-il) ) + dt * cWY(k,j,i) * div(k,j,i)
                 END DO
             END DO
@@ -1035,7 +1031,7 @@ CONTAINS
         REAL(realk) :: vel(kk,jj,ii)
         REAL(realk) :: dStag(kk, jj, ii)
         REAL(realk) :: momFlux(kk, jj, ii)
-        REAL(realk) :: div(kk, jj, ii)
+        REAL(realk) :: div, com
 
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
         CALL get_spatial_extents(kk, jj, ii, l, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
@@ -1054,8 +1050,9 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    div(k,j,i) = ( advr(k,j,i) - advr(k-kl,j-jl,i-il) ) / dsx(i)
-                    mom(k,j,i) = mom(k,j,i) - dt * ( momFlux(k,j,i) - momFlux(k-kl,j-jl,i-il) ) + dt * (rho1-rho2) * vel(k,j,i) * cWY(k,j,i) * div(k,j,i)
+                    div = ( advr(k,j,i) - advr(k-kl,j-jl,i-il) ) / ( il * dsx(i) + jl * dsy(j) + kl * dsz(k) )
+                    com = ( rho1 * cWY(k,j,i) + rho2 * (1.0_realk - cWY(k,j,i)) ) * div
+                    mom(k,j,i) = mom(k,j,i) - dt * ( momFlux(k,j,i) - momFlux(k-kl,j-jl,i-il) ) + dt * vel(k,j,i) * com
                 END DO
             END DO
         END DO
@@ -1358,8 +1355,8 @@ CONTAINS
 
     !================================================================
 
-    PURE SUBROUTINE comp_adve_quick(kk, jj, ii, q, l, u, v, w, &
-        advr, adve)
+    SUBROUTINE comp_adve_quick(kk, jj, ii, q, l, u, v, w, &
+        advr, vff, tol, adve)
     !----------------------------------------------------------------
     !   What it does:
     !   QUICK interpolation to compute the advected veloctiy
@@ -1380,24 +1377,38 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii, q, l
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: advr(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vff(kk,jj,ii)
+        REAL(realk), INTENT(in) :: tol
         REAL(realk), INTENT(out) :: adve(kk, jj, ii)
 
         ! Loval variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kl, jl, il
         REAL(realk) :: vel(kk,jj,ii)
-        REAL(realk) :: ind(2)
+        LOGICAL :: isIface(kk, jj, ii), isIfaceVic(kk, jj, ii)
+        REAL(realk) :: signInd(2), iFacInd(2)
 
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
         CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
+        CALL track_iface(isIface, kk, jj, ii, vff, tol)
+        CALL track_iface_vic(isIfaceVic, kk, jj, ii, isIface)
 
         DO i = 2, ii-2
             DO j = 2, jj-2
                 DO k = 2, kk-2
-                    ind(1) = merge(1.0_realk, 0.0_realk, advr(k,j,i) >= 0.0_realk)
-                    ind(2) = 1.0_realk - ind(1)
-                    adve(k,j,i) = ind(1) * ( 0.75_realk * vel(k,j,i) + 0.375_realk * vel(k+kl,j+jl,i+il) - 0.125_realk * vel(k-kl,j-jl,i-il) ) + &
-                                  ind(2) * ( 0.75_realk * vel(k+kl,j+jl,i+il) + 0.375_realk * vel(k,j,i) - 0.125_realk * vel(k+2*kl,j+2*jl,i+2*il) )
+                    signInd(1) = merge(1.0_realk, 0.0_realk, advr(k,j,i) >= 0.0_realk)
+                    signInd(2) = 1.0_realk - signInd(1)
+                    iFacInd(1) = merge(1.0_realk, 0.0_realk, isIfaceVic(k,j,i))
+                    iFacInd(2) = 1.0_realk - iFacInd(1)
+
+                    adve(k,j,i) = iFacInd(1) * ( signInd(1) * vel(k,j,i) + &
+                                                 signInd(2) * vel(k+kl,j+jl,i+il) ) + &
+                                  iFacInd(2) * ( signInd(1) * ( 0.750_realk * vel(k,j,i) + &
+                                                                0.375_realk * vel(k+kl,j+jl,i+il) - &
+                                                                0.125_realk * vel(k-kl,j-jl,i-il) ) + &
+                                                 signInd(2) * ( 0.750_realk * vel(k+kl,j+jl,i+il) + &
+                                                                0.375_realk * vel(k,j,i) - &
+                                                                0.125_realk * vel(k+2*kl,j+2*jl,i+2*il) ) )
                 END DO
             END DO
         END DO
@@ -1406,7 +1417,7 @@ CONTAINS
 
     !================================================================
 
-    PURE SUBROUTINE comp_advr_linear_interpolation(kk, jj, ii, q, l, u, v, w, advr)
+    SUBROUTINE comp_advr_linear_interpolation(kk, jj, ii, l, u, v, w, advr)
     !----------------------------------------------------------------
     !   What it does:
     !   Linear interpolation to compute the advecting velocity
@@ -1421,7 +1432,7 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii, q, l
+        INTEGER(intk), INTENT(in) :: kk, jj, ii, l
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(out) :: advr(kk, jj, ii)
 
@@ -1431,7 +1442,7 @@ CONTAINS
         REAL(realk) :: vel(kk,jj,ii)
 
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
-        CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
+        CALL get_condit_velocity(kk, jj, ii, l, u, v, w, vel)
 
         DO i = 1, ii-1
             DO j = 1, jj-1
@@ -1445,15 +1456,15 @@ CONTAINS
 
     !================================================================
 
-    PURE SUBROUTINE get_spatial_indices(kk, jj, ii, dirOrCom, io, jo, ko)
+    SUBROUTINE get_spatial_indices(kk, jj, ii, lOrq, io, jo, ko)
     !----------------------------------------------------------------
     !   What it does:
-    !   Depending on the direction (dir) of component (com) the 
+    !   Depending on the direction (l) of component (q) the 
     !   indices io, jo and ko are set to 0 or 1. 
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii, dirOrCom
+        INTEGER(intk), INTENT(in) :: kk, jj, ii, lOrq
         INTEGER(intk), INTENT(out) :: io, jo, ko
 
         ! Local variables
@@ -1461,29 +1472,31 @@ CONTAINS
 
         io = 0_intk ; jo = 0_intk ; ko = 0_intk
 
-        IF ( dirOrCom == 1 ) THEN
+        IF ( lOrq == 1 ) THEN
             io = 1_intk
-        ELSE IF ( dirOrCom == 2 ) THEN
+        ELSE IF ( lOrq == 2 ) THEN
             jo = 1_intk
-        ELSE IF ( dirOrCom == 3 ) THEN
+        ELSE IF ( lOrq == 3 ) THEN
             ko = 1_intk
+        ELSE
+            CALL errr(__FILE__, __LINE__)
         END IF
 
     END SUBROUTINE get_spatial_indices
 
     !================================================================
 
-    PURE SUBROUTINE get_spatial_extents(kk, jj, ii, dirOrCom, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
+    SUBROUTINE get_spatial_extents(kk, jj, ii, lOrq, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
     !----------------------------------------------------------------
     !   What it does:
-    !   Depending on the direction (dir) of component (com) the 
+    !   Depending on the direction (l) of component (q) the 
     !   extents ds(.) are set to d(.) or dd(.). The term ds(.) stands
     !   for spacing in (.)-direction and is a neutral specification
     !   for face-to-face or center-to-center distance.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii, dirOrCom
+        INTEGER(intk), INTENT(in) :: kk, jj, ii, lOrq
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(out) :: dsx(ii), dsy(jj), dsz(kk)
@@ -1491,45 +1504,47 @@ CONTAINS
         ! Local variables
         ! None
 
-        IF ( dirOrCom == 1 ) THEN
+        dsx = ddx ; dsy = ddy ; dsz = ddz
+
+        IF ( lOrq == 1 ) THEN
             dsx = dx
-            dsy = ddy
-            dsz = ddz
-        ELSE IF ( dirOrCom == 2 ) THEN
-            dsx = ddx
+        ELSE IF ( lOrq == 2 ) THEN
             dsy = dy
-            dsz = ddz
-        ELSE IF ( dirOrCom == 3 ) THEN
-            dsx = ddx
-            dsy = ddy
+        ELSE IF ( lOrq == 3 ) THEN
             dsz = dz
+        ELSE
+            CALL errr(__FILE__, __LINE__)
         END IF
 
     END SUBROUTINE get_spatial_extents
 
     !================================================================
 
-    PURE SUBROUTINE get_condit_velocity(kk, jj, ii, dirOrCom, u, v, w, vel)
+    SUBROUTINE get_condit_velocity(kk, jj, ii, lOrq, u, v, w, vel)
     !----------------------------------------------------------------
     !   What it does:
-    !   Depending on the direction (dir) of component (com) the 
+    !   Depending on the direction (l) of component (q) the 
     !   specific velocity (vel) is set to u, v or w.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii, dirOrCom
+        INTEGER(intk), INTENT(in) :: kk, jj, ii, lOrq
         REAL(realk), INTENT(in) :: u(kk,jj,ii), v(kk,jj,ii), w(kk,jj,ii)
         REAL(realk), INTENT(out) :: vel(kk,jj,ii)
 
         ! Local variables
         ! None
 
-        IF ( dirOrCom == 1 ) THEN
+        vel = 0.0_realk
+
+        IF ( lOrq == 1 ) THEN
             vel = u
-        ELSE IF ( dirOrCom == 2 ) THEN
+        ELSE IF ( lOrq == 2 ) THEN
             vel = v
-        ELSE IF ( dirOrCom == 3 ) THEN
+        ELSE IF ( lOrq == 3 ) THEN
             vel = w
+        ELSE
+            CALL errr(__FILE__, __LINE__)
         END IF
 
     END SUBROUTINE get_condit_velocity
