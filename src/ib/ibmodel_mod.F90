@@ -61,7 +61,7 @@ MODULE ibmodel_mod
             TYPE(field_t), INTENT(in) :: u
             TYPE(field_t), INTENT(in) :: v
             TYPE(field_t), INTENT(in) :: w
-            TYPE(field_t), INTENT(inout) :: fak
+            REAL(realk), INTENT(in) :: fak
             CHARACTER(len=1), INTENT(in), OPTIONAL :: ctyp
         END SUBROUTINE divcal_i
     END INTERFACE

@@ -236,7 +236,7 @@ CONTAINS
         TYPE(field_t), INTENT(in) :: u
         TYPE(field_t), INTENT(in) :: v
         TYPE(field_t), INTENT(in) :: w
-        TYPE(field_t), INTENT(inout) :: fak
+        REAL(realk), INTENT(in) :: fak
         CHARACTER(len=1), INTENT(in), OPTIONAL :: ctyp
 
         ! Local variables
@@ -245,7 +245,7 @@ CONTAINS
         TYPE(field_t), POINTER :: rddx_f, rddy_f, rddz_f
         REAL(realk), CONTIGUOUS, POINTER :: rddx(:), rddy(:), rddz(:)
         REAL(realk), CONTIGUOUS, POINTER :: div_p(:, :, :), u_p(:, :, :), &
-            v_p(:, :, :), w_p(:, :, :), fak_p(:, :, :)
+            v_p(:, :, :), w_p(:, :, :)
 
         CALL start_timer(240)
 
@@ -270,9 +270,8 @@ CONTAINS
                 CALL u%get_ptr(u_p, igrid)
                 CALL v%get_ptr(v_p, igrid)
                 CALL w%get_ptr(w_p, igrid)
-                CALL fak%get_ptr(fak_p, igrid)
 
-                CALL divcal_grid(kk, jj, ii, fak_p, div_p, u_p, &
+                CALL divcal_grid(kk, jj, ii, fak, div_p, u_p, &
                     v_p, w_p, rddx, rddy, rddz)
             END DO
         END DO
@@ -285,7 +284,7 @@ CONTAINS
             rddz, bp, sdiv)
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: fak(kk, jj, ii)
+        REAL(realk), INTENT(in) :: fak
         REAL(realk), INTENT(inout) :: div(kk, jj, ii)
         REAL(realk), INTENT(in) :: u(kk, jj, ii)
         REAL(realk), INTENT(in) :: v(kk, jj, ii)
@@ -302,14 +301,12 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    div(k, j, i) = fak(k, j, i)*((u(k, j, i) - u(k, j, i-1))*rddx(i) &
+                    div(k, j, i) = fak*((u(k, j, i) - u(k, j, i-1))*rddx(i) &
                         + (v(k, j, i) - v(k, j-1, i))*rddy(j) &
                         + (w(k, j, i) - w(k-1, j, i))*rddz(k))
                 END DO
             END DO
         END DO
-
-        WRITE(*,*) maxval(div)
 
         ! TODO: If SDIV is properly masked in the ghost layers, the indices
         ! here could be from 1 to ii etc. That will lead to ever so slightly
@@ -318,7 +315,7 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        div(k, j, i) = div(k, j, i) + fak(k, j, i)*sdiv(k, j, i)
+                        div(k, j, i) = div(k, j, i) + fak*sdiv(k, j, i)
                     END DO
                 END DO
             END DO

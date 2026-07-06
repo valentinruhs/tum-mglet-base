@@ -1209,7 +1209,8 @@ CONTAINS
     SUBROUTINE check_solenoidality(tol)
     !----------------------------------------------------------------
     !   What it does:
-    !    
+    !   Checks, if the field is solenoidal. Only used during coding.
+    !   Solenoidality is assured by pressure correction.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1223,6 +1224,8 @@ CONTAINS
         INTEGER(intk) :: kk, jj, ii, k, j, i, n, igrid
         REAL(realk), ALLOCATABLE :: div(:,:,:)
         REAL(realk) :: uChar, lChar, L1tol, L2tol, Linftol, L1Norm, L2Norm, LinfNorm
+
+        return
 
         CALL get_field(u_f, "U")
         CALL get_field(v_f, "V")

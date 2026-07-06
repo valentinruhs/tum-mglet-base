@@ -385,7 +385,7 @@ CONTAINS
                     DO i = 1, ii
                         DO j = 1, jj
                             DO k = 1, kk
-                                IF ( vff(k,j,i) >= 0.0_realk ) THEN
+                                IF ( vff(k,j,i) > 0.0_realk ) THEN
                                     u(k,j,i) = 0.016_realk
                                     v(k,j,i) = 0.016_realk
                                     w(k,j,i) = 0.0_realk

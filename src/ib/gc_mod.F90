@@ -281,7 +281,7 @@ CONTAINS
         TYPE(field_t), INTENT(in) :: u
         TYPE(field_t), INTENT(in) :: v
         TYPE(field_t), INTENT(in) :: w
-        TYPE(field_t), INTENT(inout) :: fak
+        REAL(realk), INTENT(in) :: fak
         CHARACTER(len=1), INTENT(in), OPTIONAL :: ctyp
 
         ! Local variables
@@ -292,7 +292,7 @@ CONTAINS
         TYPE(field_t), POINTER :: sdiv_f, bp_f
         REAL(realk), CONTIGUOUS, POINTER :: rddx(:), rddy(:), rddz(:)
         REAL(realk), CONTIGUOUS, POINTER :: sdiv(:, :, :), bp(:, :, :), &
-            div_p(:, :, :), u_p(:, :, :), v_p(:, :, :), w_p(:, :, :), fak_p(:, :, :)
+            div_p(:, :, :), u_p(:, :, :), v_p(:, :, :), w_p(:, :, :)
 
         CALL start_timer(240)
 
@@ -334,11 +334,10 @@ CONTAINS
                 CALL u%get_ptr(u_p, igrid)
                 CALL v%get_ptr(v_p, igrid)
                 CALL w%get_ptr(w_p, igrid)
-                CALL fak%get_ptr(fak_p, igrid)
 
                 IF (use_sdiv) CALL sdiv_f%get_ptr(sdiv, igrid)
 
-                CALL this%divcal_grid(kk, jj, ii, fak_p, div_p, &
+                CALL this%divcal_grid(kk, jj, ii, fak, div_p, &
                     u_p, v_p, w_p, rddx, rddy, rddz, bp, sdiv)
             END DO
         END DO
