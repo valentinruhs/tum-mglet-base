@@ -22,6 +22,8 @@ MODULE multiphase_io_mod
     USE multiphasecore_mod, ONLY: test_multiphase
     USE connect2_mod, ONLY: connect
     USE grids_mod, ONLY: minlevel, maxlevel
+    USE flowcore_mod, ONLY: uinf
+    USE multiphasecore_mod, ONLY: gmol1, gmol2
 
     IMPLICIT NONE
     PRIVATE 
@@ -30,7 +32,7 @@ MODULE multiphase_io_mod
     REAL(realk), PROTECTED :: initErr
     REAL(realk), PROTECTED :: apprVol
 
-    PUBLIC :: init_multiphase_io, finish_multiphase_io, update_velocity, apprVol
+    PUBLIC :: init_multiphase_io, finish_multiphase_io, update_velocity, apprVol, validate_velocity
 
 CONTAINS
 
@@ -239,6 +241,25 @@ CONTAINS
                     CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 ENDDO
                 !----------------------------------------------------
+                CASE ( 'StFstP' ) ! Stokes First Problem
+                !----------------------------------------------------
+                iSub = 1 ; jSub = 1024 ; kSub = 1
+                ! Outer loop over cells
+                DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
+                    inside = 0.0_realk
+                    ! Inner loop over (.)Sub for refinement
+                    DO dj = 0, jSub-1
+                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
+                        IF ( y <= 0.5_realk ) THEN
+                            inside = inside + 1.0_realk
+                        ENDIF
+                    ENDDO
+                    vff(k,j,i) = inside / (iSub * jSub * kSub)
+                ENDDO ; ENDDO ; ENDDO
+                trueVol = 0.5_realk * 1.0_realk * ( maxz - minz )
+                apprVol = apprVol + SUM(vff) * ( dx(1) * dy(1) * dz(1) )
+                CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
+                !----------------------------------------------------
             END SELECT
         ENDDO
 
@@ -385,7 +406,7 @@ CONTAINS
                     DO i = 1, ii
                         DO j = 1, jj
                             DO k = 1, kk
-                                IF ( vff(k,j,i) > 0.0_realk ) THEN
+                                IF ( vff(k,j,i) >= 0.0_realk ) THEN
                                     u(k,j,i) = 0.016_realk
                                     v(k,j,i) = 0.016_realk
                                     w(k,j,i) = 0.0_realk
@@ -394,10 +415,86 @@ CONTAINS
                         END DO
                     END DO  
                 END IF
+            ELSE IF ( test_multiphase == 'StFstP' ) THEN
+                IF ( itstep == 1 ) THEN
+                    u = 0.0_realk
+                    v = 0.0_realk
+                    w = 0.0_realk
+                ENDIF
             END IF
 
         END DO
 
     END SUBROUTINE
+
+    !================================================================
+
+    SUBROUTINE validate_velocity(u_f, v_f, w_f, itstep, dt)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        TYPE(field_t), INTENT(in) :: u_f
+        TYPE(field_t), INTENT(in) :: v_f
+        TYPE(field_t), INTENT(in) :: w_f
+        INTEGER(intk), INTENT(in) :: itstep
+        REAL(realk), INTENT(in) :: dt
+
+        ! Local variables
+        INTEGER(intk) :: n, igrid
+        TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
+        INTEGER(intk) :: kk, jj, ii, k, j, i
+        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: u, v, w
+        REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), ALLOCATABLE :: trueVel(:,:,:)
+
+        CALL get_field(dx_f, "DX")
+        CALL get_field(dy_f, "DY")
+        CALL get_field(dz_f, "DZ")
+
+        CALL get_field(ddx_f, "DDX")
+        CALL get_field(ddy_f, "DDY")
+        CALL get_field(ddz_f, "DDZ")
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL u_f%get_ptr(u, igrid)
+            CALL v_f%get_ptr(v, igrid)
+            CALL w_f%get_ptr(w, igrid)
+
+            CALL dx_f%get_ptr(dx, igrid)
+            CALL dy_f%get_ptr(dy, igrid)
+            CALL dz_f%get_ptr(dz, igrid)
+
+            CALL ddx_f%get_ptr(ddx, igrid)
+            CALL ddy_f%get_ptr(ddy, igrid)
+            CALL ddz_f%get_ptr(ddz, igrid)
+
+            IF ( test_multiphase == 'StFstP' ) THEN
+                IF (.NOT. ALLOCATED(trueVel)) ALLOCATE(trueVel(kk,jj,ii))
+                DO i = 3, ii-2
+                    DO j = 3, jj-2
+                        DO k = 3, kk-2
+                            trueVel(k,j,i) = uinf(1) - uinf(1) * ERF(( ABS(ddy(1)) / 2 + (j-3) * ABS(ddy(1)) )/( SQRT(4.0_realk * gmol1 * itstep * dt) ))
+                        ENDDO
+                    ENDDO
+                ENDDO
+                DO j = 3, jj-2
+                    WRITE(*,*) "ERROR at j = ", j, ": ", ABS(u(7,j,7) - trueVel(7,j,7))
+                    ! WRITE(*,*) u(7,j,7), trueVel(7,j,7)
+                ENDDO
+            ELSE 
+                return
+            ENDIF
+
+        ENDDO
+
+    END SUBROUTINE validate_velocity
 
 END MODULE multiphase_io_mod

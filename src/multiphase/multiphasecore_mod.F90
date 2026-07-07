@@ -36,8 +36,9 @@ MODULE multiphasecore_mod
     ! Physical parameters
     REAL(realk), PROTECTED :: rho1, rho2
     REAL(realk), PROTECTED :: gmol1, gmol2
+    REAL(realk), PROTECTED :: grav(3)
 
-    PUBLIC :: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase, test_multiphase, splitting_multiphase, permutation_multiphase, rho1, rho2, gmol1, gmol2
+    PUBLIC :: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase, test_multiphase, splitting_multiphase, permutation_multiphase, rho1, rho2, gmol1, gmol2, grav
 
 CONTAINS
 
@@ -90,6 +91,13 @@ CONTAINS
         CALL multiphaseconf%get_value("/gmol2", gmol2)
         IF (gmol1 <= 0.0_realk .OR. gmol2 <= 0.0_realk) THEN
             WRITE(*, *) "Viscosities must be positive. gmol1 = ", gmol1, ", gmol2 = ", gmol2
+            CALL errr(__FILE__, __LINE__)
+        END IF
+
+        ! Read gravity
+        CALL multiphaseconf%get_array("/gravity", grav)
+        IF ( MINVAL(grav) < 0.0_realk ) THEN
+            WRITE(*, *) "Gravity must be positive. grav = ", grav
             CALL errr(__FILE__, __LINE__)
         END IF
 

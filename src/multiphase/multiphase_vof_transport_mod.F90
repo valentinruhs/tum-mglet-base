@@ -20,7 +20,7 @@ MODULE multiphase_vof_transport_mod
     USE err_mod, ONLY: errr
     USE multiphase_plic_mod, ONLY: comp_frac, iface_recon_wrap, comp_stag_frac_wrap, track_iface, track_iface_vic
     USE rungekutta_mod, ONLY: rk_2n_t
-    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, splitting_multiphase, permutation_multiphase
+    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, splitting_multiphase, permutation_multiphase
     USE multiphase_material_mod, ONLY: comp_material_property_field
     USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
@@ -590,7 +590,9 @@ CONTAINS
 
             CALL diff_operator(kk, jj, ii, u, v, w, vffPrev, g, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
 
-            CALL pres_operator(kk, jj, ii, vffPrev, p, rdx, rdy, rdz, igrid, uo, vo, wo)
+            CALL pres_operator(kk, jj, ii, vff, p, rdx, rdy, rdz, igrid, uo, vo, wo)
+
+            CALL exte_operator(kk, jj, ii, vff, dx, dy, dz, ddx, ddy, ddz, uo, vo, wo)
 
             u = u + uo * dt
             v = v + vo * dt
@@ -777,7 +779,7 @@ CONTAINS
         REAL(realk) :: tauxxe, tauxxw, tauyxn, tauyxs, tauzxt, tauzxb
         REAL(realk) :: tauxye, tauxyw, tauyyn, tauyys, tauzyt, tauzyb
         REAL(realk) :: tauxze, tauxzw, tauyzn, tauyzs, tauzzt, tauzzb
-        return
+
         CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, d)
 
         DO i = 2, ii-1
@@ -966,6 +968,39 @@ CONTAINS
         END DO
 
     END SUBROUTINE pres_operator
+
+    !================================================================
+
+    SUBROUTINE exte_operator(kk, jj, ii, vff, dx, dy, dz, ddx, ddy, ddz, uo, vo, wo)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
+
+        ! Local variables
+        INTEGER(intk) :: i, j, k
+        REAL(realk) :: d(kk, jj, ii)
+        return
+        CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, d)
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    uo(i,j,i) = uo(k,j,i) - grav(1) ! * 0.5 * ( d(k,j,i) + d(k,j,i+1) )
+                    vo(i,j,i) = vo(k,j,i) - grav(2) ! * 0.5 * ( d(k,j,i) + d(k,j+1,i) )
+                    wo(i,j,i) = wo(k,j,i) - grav(3) ! * 0.5 * ( d(k,j,i) + d(k+1,j,i) )
+                ENDDO
+            ENDDO
+        ENDDO
+
+    END SUBROUTINE exte_operator
 
     !================================================================
 

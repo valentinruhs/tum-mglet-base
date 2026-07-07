@@ -14,7 +14,7 @@ MODULE timeintegration_mod
     USE coriolisterm_mod, ONLY: coriolisterm
     USE multiphase_vof_transport_mod, ONLY : multiphase_solve
     USE multiphasecore_mod, ONLY: solve_multiphase, test_multiphase
-    USE multiphase_io_mod, ONLY: update_velocity
+    USE multiphase_io_mod, ONLY: update_velocity, validate_velocity
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -100,7 +100,8 @@ CONTAINS
             IF ( test_multiphase /= "none" ) THEN
                 CALL update_velocity(u, v, w, vff, itstep, dt)
             END IF
-            CALL multiphase_solve(u, v, w, vff, p, g, d, dt*dtrki, itstep, uo, vo, wo)
+            IF ( irk == 3 ) CALL multiphase_solve(u, v, w, vff, p, g, d, dt, itstep, uo, vo, wo)
+            IF ( irk == 3 ) CALL validate_velocity(u, v, w, itstep, dt)
         ELSE
             ! TSTLE4 zeroize uo, vo, wo before use internally
             CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g)
