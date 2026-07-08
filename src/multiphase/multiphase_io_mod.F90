@@ -23,7 +23,7 @@ MODULE multiphase_io_mod
     USE connect2_mod, ONLY: connect
     USE grids_mod, ONLY: minlevel, maxlevel
     USE flowcore_mod, ONLY: uinf
-    USE multiphasecore_mod, ONLY: gmol1, gmol2
+    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
 
     IMPLICIT NONE
     PRIVATE 
@@ -250,7 +250,7 @@ CONTAINS
                     ! Inner loop over (.)Sub for refinement
                     DO dj = 0, jSub-1
                         y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
-                        IF ( y <= 0.5_realk ) THEN
+                        IF ( y <= 0.98_realk ) THEN
                             inside = inside + 1.0_realk
                         ENDIF
                     ENDDO
@@ -443,13 +443,14 @@ CONTAINS
         REAL(realk), INTENT(in) :: dt
 
         ! Local variables
-        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: n, igrid, m
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
         INTEGER(intk) :: kk, jj, ii, k, j, i
         REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: u, v, w
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
-        REAL(realk), ALLOCATABLE :: trueVel(:,:,:)
+        REAL(realk), ALLOCATABLE :: trueVel(:,:,:), trueVel1(:,:,:), trueVel2(:,:,:)
+        REAL(realk) :: beta(100), betaHat(100), mu1, mu2, alpha, kappa, a, aHat, h, sigma, yHat, tHat, sum1, sum2
 
         CALL get_field(dx_f, "DX")
         CALL get_field(dy_f, "DY")
@@ -478,16 +479,70 @@ CONTAINS
 
             IF ( test_multiphase == 'StFstP' ) THEN
                 IF (.NOT. ALLOCATED(trueVel)) ALLOCATE(trueVel(kk,jj,ii))
+                IF (.NOT. ALLOCATED(trueVel1)) ALLOCATE(trueVel1(kk,jj,ii))
+                IF (.NOT. ALLOCATED(trueVel2)) ALLOCATE(trueVel2(kk,jj,ii))
+                ! the betas are the positive roots of: cot(beta) + sigma * cot(kappa * beta * a)
+                ! see: C.-O. Ng, “Starting flow in channels with boundary slip,” Meccanica, 
+                !      vol. 52, no. 1–2, pp. 45–67, Jan. 2017, doi: 10.1007/s11012-016-0384-4.
+                beta = [2.02874692,   4.91314414,   7.97860382,  11.08545113,  14.20732414, &
+                        17.33624008,  20.46900432,  23.60409645,  26.74070244,  29.87834767, &
+                        33.01673692,  36.15567701,  39.29503625,  42.4347218,   45.57466633, &
+                        48.71481984,  51.8551444,   54.99561074,  58.13619589,  61.27688161, &
+                        64.41765317,  67.55849862,  70.69940809,  73.84037342,  76.98138776, &
+                        80.12244535,  83.26354128,  86.40467136,  89.54583198,  92.68702005, &
+                        95.82823284,  98.969468,   102.11072345, 105.25199736, 108.39328812, &
+                        111.5345943,  114.67591462, 117.81724793, 120.95859322, 124.09994956, &
+                        127.24131613, 130.38269218, 133.52407702, 136.66547003, 139.80687066, &
+                        142.9482784,  146.08969276, 149.23111333, 152.3725397,  155.51397152, &
+                        158.65540844, 161.79685016, 164.93829639, 168.07974686, 171.22120134, &
+                        174.36265958, 177.50412138, 180.64558653, 183.78705486, 186.92852619, &
+                        190.07000035, 193.21147719, 196.35295657, 199.49443836, 202.63592243, &
+                        205.77740865, 208.91889692, 212.06038713, 215.20187918, 218.34337298, &
+                        221.48486842, 224.62636544, 227.76786394, 230.90936384, 234.05086508, &
+                        237.19236758, 240.33387128, 243.4753761,  246.61688199, 249.75838889, &
+                        252.89989674, 256.04140548, 259.18291507, 262.32442544, 265.46593656, &
+                        268.60744837, 271.74896082, 274.89047388, 278.03198749, 281.17350161, &
+                        284.31501621, 287.45653123, 290.59804665, 293.73956242, 296.88107851, &
+                        300.02259486, 303.16411146, 306.30562826, 309.44714522, 312.5886623]
+
+                mu1 = gmol1 * rho1
+                mu2 = gmol2 * rho2
+                alpha = mu2 / mu1
+                kappa = SQRT(gmol1 / gmol2) ; sigma = kappa * ( mu2 / mu1 )
+                a = 1.0_realk / 50 ; h = 50.0_realk / 51
+                aHat = a / h ; betaHat = beta * h
+                
+                trueVel1 = 0.0_realk
+                trueVel2 = 0.0_realk
                 DO i = 3, ii-2
                     DO j = 3, jj-2
                         DO k = 3, kk-2
                             trueVel(k,j,i) = uinf(1) - uinf(1) * ERF(( ABS(ddy(1)) / 2 + (j-3) * ABS(ddy(1)) )/( SQRT(4.0_realk * gmol1 * itstep * dt) ))
+                            yHat = ( ABS(ddy(1)) / 2 + (j-3) * ABS(ddy(1)) ) / h
+                            tHat = itstep * dt * ( gmol1 / h**2.0_realk )
+
+                            sum1 = 0.0_realk
+                            sum2 = 0.0_realk
+                            DO m = 1, 100
+                                sum1 = sum1 + ( sin(kappa * betaHat(m) * aHat)**2.0_realk * sin(betaHat(m) * ( 1.0_realk + yHat )) ) / &
+                                    ( betaHat(m) * ( sin(kappa * betaHat(m) * aHat)**2.0_realk + sigma * kappa * aHat * sin(betaHat(m))**2.0_realk ) ) * &
+                                    EXP(-betaHat(m)**2.0_realk * tHat)
+                                sum2 = sum2 + ( sin(betaHat(m)) * sin(kappa * betaHat(m) * aHat) * sin(kappa * betaHat(m) * (aHat - yHat)) ) / &
+                                    ( betaHat(m) * ( sin(kappa * betaHat(m) * aHat)**2.0_realk + sigma * kappa * aHat * sin(betaHat(m))**2.0_realk ) ) * &
+                                    EXP(-betaHat(m)**2.0_realk * tHat)
+                            ENDDO
+
+                            IF ( ABS(ddy(1)) / 2 + (j-3) * ABS(ddy(1)) <= 0.5 ) THEN
+                                trueVel1(k,j,i) = ( alpha * aHat - yhat ) / ( alpha * aHat + 1.0_realk ) - 2.0_realk * sum1
+                            ELSE
+                                trueVel2(k,j,i) = ( alpha * aHat - yhat ) / ( alpha * aHat + 1.0_realk ) - 2.0_realk * sum2
+                            ENDIF
                         ENDDO
                     ENDDO
                 ENDDO
                 DO j = 3, jj-2
-                    WRITE(*,*) "ERROR at j = ", j, ": ", ABS(u(7,j,7) - trueVel(7,j,7))
-                    ! WRITE(*,*) u(7,j,7), trueVel(7,j,7)
+                    ! WRITE(*,*) "ERROR at j = ", j, ": ", ABS(u(7,j,7) - trueVel(7,j,7))
+                    WRITE(*,*) u(7,j,7), trueVel(7,j,7), u(7,j,7)/uinf(1), trueVel1(7,j,7), trueVel2(7,j,7)
                 ENDDO
             ELSE 
                 return
