@@ -1,7 +1,7 @@
 {
     "time": {
         "dt": 0.1,
-        "mtstep": 3,
+        "mtstep": 300,
 	"itinfo": 1,
         "tstat": 10.0,
 	"read": false
@@ -38,6 +38,6 @@
 	"rho2" : 1.0,
 	"gmol1" : 0.0001,
 	"gmol2" : 0.0001,
-	"gravity" : [0.0, 0.05, 0.0]
+	"gravity" : [0.0, 0.0, 0.0]
     }   
 }

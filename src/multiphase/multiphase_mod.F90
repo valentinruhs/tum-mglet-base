@@ -21,6 +21,7 @@ MODULE multiphase_mod
     USE multiphase_material_mod, ONLY: init_multiphase_material, finish_multiphase_material
     USE multiphase_io_mod, ONLY: init_multiphase_io, finish_multiphase_io
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
+    USE multiphase_utils_mod, ONLY: init_multiphase_utils, finish_multiphase_utils
     USE precision_mod, ONLY: intk, realk
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_mgbasb
     USE fields_mod, ONLY: get_field
@@ -42,6 +43,7 @@ CONTAINS
         ! None
 
         CALL init_multiphasecore()
+        CALL init_multiphase_utils()
         CALL init_multiphase_material()
         CALL init_multiphase_vof_transport()
         CALL init_multiphase_plic()
@@ -68,6 +70,7 @@ CONTAINS
         CALL finish_multiphase_vof_transport()
         CALL finish_multiphase_material()
         CALL finish_multiphase_io()
+        CALL finish_multiphase_utils()
         CALL finish_multiphasecore()
 
     END SUBROUTINE finish_multiphase

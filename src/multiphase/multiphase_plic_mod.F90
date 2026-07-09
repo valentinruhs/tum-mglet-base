@@ -16,18 +16,13 @@
 
     USE precision_mod, ONLY: intk, realk
     USE err_mod, ONLY: errr
+    USE multiphase_utils_mod, ONLY: get_spatial_indices, get_spatial_extents
         
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: init_multiphase_plic, finish_multiphase_plic, iface_recon_wrap, &
-            comp_frac, comp_stag_frac_wrap, track_iface, track_iface_vic
-
-
-    INTERFACE iface_recon_wrap
-        MODULE PROCEDURE iface_recon_wrap_pres
-        MODULE PROCEDURE iface_recon_wrap_stag
-    END INTERFACE
+    PUBLIC :: init_multiphase_plic, finish_multiphase_plic, iface_reconstruction, &
+            comp_frac, comp_stag_frac, track_iface, track_iface_vic
 
     CONTAINS
 
@@ -206,7 +201,7 @@
 
     !================================================================
 
-    SUBROUTINE iface_recon_wrap_pres(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isIface, isIfaceVic)
+    SUBROUTINE iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isIface, isIfaceVic)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine is just a wrapper for the subroutines, which
@@ -234,55 +229,7 @@
             CALL track_iface_vic(isIfaceVic, kk, jj, ii, isIface)
         ENDIF
 
-    END SUBROUTINE iface_recon_wrap_pres
-
-    !================================================================
-
-    SUBROUTINE iface_recon_wrap_stag(kk, jj, ii, q, vff, dx, dy, dz, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isIface, isIfaceVic)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   The subroutine is just a wrapper for the subroutines, which
-    !   are used to reconstrunct the interface in cells.
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: q
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(in) :: tol
-        REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
-        REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
-        LOGICAL, INTENT(out) :: isIface(kk, jj, ii)
-        LOGICAL, INTENT(out), OPTIONAL :: isIfaceVic(kk, jj, ii)
-
-        ! Local variables
-        REAL(realk) :: deltaX(ii), deltaY(jj), deltaZ(kk)
-
-        IF ( q == 1 ) THEN
-            deltaX = dx
-            deltaY = ddy
-            deltaZ = ddz
-        ELSE IF ( q == 2 ) THEN
-            deltaX = ddx
-            deltaY = dy
-            deltaZ = ddz
-        ELSE IF ( q == 3 ) THEN
-            deltaX = ddx
-            deltaY = ddy
-            deltaZ = dz
-        ENDIF
-
-        CALL track_iface(isIface, kk, jj, ii, vff, tol)
-        CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, vff, deltaX, deltaY, deltaZ, tol)
-        CALL comp_alph(alpha, kk, jj, ii, vff, isIface, deltaX, deltaY, deltaZ, normx, normy, normz, tol)
-
-        IF ( PRESENT(isIfaceVic) ) THEN
-            CALL track_iface_vic(isIfaceVic, kk, jj, ii, isIface)
-        ENDIF
-
-    END SUBROUTINE iface_recon_wrap_stag
+    END SUBROUTINE iface_reconstruction
 
     !================================================================
 
@@ -420,168 +367,83 @@
 
     !================================================================
 
-    SUBROUTINE comp_stag_frac_wrap(kk, jj, ii, q, alpha, vff, isIface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
+    SUBROUTINE comp_stag_frac(kk, jj, ii, q, vff, alpha, isIface, ddx, ddy ,ddz, normx, normy, normz, tol, vffStag)
     !----------------------------------------------------------------
     !   What it does:
-    !   The subroutine is just a wrapper for the subroutines, which
-    !   are used to compute the staggered volume fraction fields and
-    !   their material properties.
+    !   Compute the volume fraction field for the staggered cells
+    !   depending on q. The staggered cells are either moved by
+    !   1/2 ddx, 1/2 ddy or 1/2 ddz.
     !----------------------------------------------------------------
 
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: q
-        REAL(realk), INTENT(in) :: alpha(kk, jj, ii), vff(kk, jj, ii)
+    ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii, q
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
         LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: tol
         REAL(realk), INTENT(out) :: vffStag(kk, jj, ii)
-        
-        ! Local variables
-        ! None
-
-        IF ( q == 1 ) THEN
-            CALL comp_iStag_vff(kk, jj, ii, vffStag, alpha, vff, isIface, ddx, ddy, ddz, normx, normy, normz, tol)
-        ELSE IF ( q == 2 ) THEN
-            CALL comp_jStag_vff(kk, jj, ii, vffStag, alpha, vff, isIface, ddx, ddy, ddz, normx, normy, normz, tol)
-        ELSE IF ( q == 3 ) THEN
-            CALL comp_kStag_vff(kk, jj, ii, vffStag, alpha, vff, isIface, ddx, ddy, ddz, normx, normy, normz, tol)
-        ENDIF
-
-    END SUBROUTINE comp_stag_frac_wrap
-
-    !================================================================
-
-    SUBROUTINE comp_iStag_vff(kk, jj, ii, vffiStag, alpha, vff, isIface, ddx, ddy, ddz, normx, normy, normz, tol)
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(out) :: vffiStag(kk, jj, ii)
-        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
-        REAL(realk), INTENT(in) :: tol
 
         ! Local variables
         INTEGER(intk) :: k, j, i
-        REAL(realk) :: alphaLeft, alphaRight, halfFractionLeft, halfFractionRight
+        INTEGER(intk) :: kq, jq, iq
+        REAL(realk) :: alphaOffset, iqInd(2), jqInd(2), kqInd(2)
+        REAL(realk) :: alphaMi, vffMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi, ddsMi, halfFractionMi
+        REAL(realk) :: alphaPl, vffPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl, ddsPl, halfFractionPl
+
+        CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
+
+        iqInd(1) = MERGE(1.0_realk, 0.0_realk, iq == 1_intk)
+        iqInd(2) = 1.0_realk - iqInd(1)
+        jqInd(1) = MERGE(1.0_realk, 0.0_realk, jq == 1_intk)
+        jqInd(2) = 1.0_realk - jqInd(1)
+        kqInd(1) = MERGE(1.0_realk, 0.0_realk, kq == 1_intk)
+        kqInd(2) = 1.0_realk - kqInd(1)
 
         DO i = 2, ii-1
             DO j = 2, jj-1
                 DO k = 2, kk-1
-                    IF ( isIface(k,j,i) .AND. isIface(k,j,i+1) ) THEN
-                        alphaLeft  = alpha(k,j,i) - normx(k,j,i) * ddx(i) / 2.0_realk
-                        alphaRight = alpha(k,j,i+1)
-                        CALL comp_frac(halfFractionLeft,  alphaLeft,  vff(k,j,i),   ddx(i) / 2.0_realk,   ddy(j), ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
-                        CALL comp_frac(halfFractionRight, alphaRight, vff(k,j,i+1), ddx(i+1) / 2.0_realk, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
-                        vffiStag(k,j,i) = ( halfFractionLeft * ddx(i) + halfFractionRight * ddx(i+1) ) / ( ddx(i) + ddx(i+1) ) 
-                    ELSE IF ( isIface(k,j,i) .AND. .NOT. isIface(k,j,i+1) ) THEN
-                        alphaLeft  = alpha(k,j,i) - normx(k,j,i) * ddx(i) / 2.0_realk
-                        CALL comp_frac(halfFractionLeft,  alphaLeft,  vff(k,j,i),   ddx(i) / 2.0_realk,   ddy(j), ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
-                        vffiStag(k,j,i) = ( halfFractionLeft * ddx(i) + vff(k,j,i+1) * ddx(i+1) ) / ( ddx(i) + ddx(i+1) )
-                    ELSE IF ( .NOT. isIface(k,j,i) .AND. isIface(k,j,i+1) ) THEN
-                        alphaRight = alpha(k,j,i+1)
-                        CALL comp_frac(halfFractionRight, alphaRight, vff(k,j,i+1), ddx(i+1) / 2.0_realk, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
-                        vffiStag(k,j,i) = ( vff(k,j,i) * ddx(i) + halfFractionRight * ddx(i+1) ) / ( ddx(i) + ddx(i+1) )
+                    alphaOffset = ( iq * normx(k,j,i) * ddx(i) + jq * normy(k,j,i) * ddy(j) + kq * normz(k,j,i) * ddz(k) ) / 2.0_realk
+
+                    alphaMi = alpha(k,j,i) - alphaOffset
+                    vffMi = vff(k,j,i)
+                    ddxMi = iqInd(2) * ddx(i) + iqInd(1) * ddx(i) / 2.0_realk
+                    ddyMi = jqInd(2) * ddy(j) + jqInd(1) * ddy(j) / 2.0_realk
+                    ddzMi = kqInd(2) * ddz(k) + kqInd(1) * ddz(k) / 2.0_realk
+                    normxMi = normx(k,j,i)
+                    normyMi = normy(k,j,i)
+                    normzMi = normz(k,j,i)
+                    ddsMi = iq * ddxMi + jq * ddyMi + kq * ddzMi
+
+                    alphaPl = alpha(k+kq,j+jq,i+iq)
+                    vffPl = vff(k+kq,j+jq,i+iq)
+                    ddxPl = iqInd(2) * ddx(i+iq) + iqInd(1) * ddx(i+iq) / 2.0_realk
+                    ddyPl = jqInd(2) * ddy(j+jq) + jqInd(1) * ddy(j+jq) / 2.0_realk
+                    ddzPl = kqInd(2) * ddz(k+kq) + kqInd(1) * ddz(k+kq) / 2.0_realk
+                    normxPl = normx(k+kq,j+jq,i+iq)
+                    normyPl = normy(k+kq,j+jq,i+iq)
+                    normzPl = normz(k+kq,j+jq,i+iq)
+                    ddsPl = iq * ddxPl + jq * ddyPl + kq * ddzPl
+
+                    IF ( isIface(k,j,i) .AND. isIface(k+kq,j+jq,i+iq) ) THEN
+                        CALL comp_frac(halfFractionMi, alphaMi, vffMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi, tol)
+                        CALL comp_frac(halfFractionPl, alphaPl, vffPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl, tol)
+                        vffStag(k,j,i) = ( halfFractionMi * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
+                    ELSE IF ( isIface(k,j,i) .AND. .NOT. isIface(k+kq,j+jq,i+iq) ) THEN
+                        CALL comp_frac(halfFractionMi, alphaMi, vffMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi, tol)
+                        vffStag(k,j,i) = ( halfFractionMi * ddsMi + vff(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
+                    ELSE IF ( .NOT. isIface(k,j,i) .AND. isIface(k+kq,j+jq,i+iq) ) THEN
+                        CALL comp_frac(halfFractionPl, alphaPl, vffPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl, tol)
+                        vffStag(k,j,i) = ( vff(k,j,i) * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE
-                        vffiStag(k,j,i) = ( vff(k,j,i) * ddx(i) + vff(k,j,i+1) * ddx(i+1) ) / ( ddx(i) + ddx(i+1) )
+                        vffStag(k,j,i) = ( vff(k,j,i) * ddsMi + vff(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
                     ENDIF
                 ENDDO
             ENDDO
         ENDDO
 
-    END SUBROUTINE comp_iStag_vff
-
-    !================================================================
-
-    SUBROUTINE comp_jStag_vff(kk, jj, ii, vffjStag, alpha, vff, isIface, ddx, ddy, ddz, normx, normy, normz, tol)
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(out) :: vffjStag(kk, jj, ii)
-        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
-        REAL(realk), INTENT(in) :: tol
-
-        ! Local variables
-        INTEGER(intk) :: k, j, i
-        REAL(realk) :: alphaFront, alphaBack, halfFractionFront, halfFractionBack
-
-        DO i = 2, ii-1
-            DO j = 2, jj-1 
-                DO k = 2, kk-1 
-                    IF ( isIface(k,j,i) .AND. isIface(k,j+1,i) ) THEN
-                        alphaFront = alpha(k,j,i) - normy(k,j,i) * ddy(j) / 2.0_realk
-                        alphaBack  = alpha(k,j+1,i)
-                        CALL comp_frac(halfFractionFront,  alphaFront, vff(k,j,i),   ddx(i),   ddy(j) / 2.0_realk,   ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
-                        CALL comp_frac(halfFractionBack,   alphaBack,  vff(k,j+1,i), ddx(i),   ddy(j+1) / 2.0_realk, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
-                        vffjStag(k,j,i) = ( halfFractionFront * ddy(j) + halfFractionBack * ddy(j+1) ) / ( ddy(j) + ddy(j+1) ) 
-                    ELSE IF ( isIface(k,j,i) .AND. .NOT. isIface(k,j+1,i) ) THEN
-                        alphaFront = alpha(k,j,i) - normy(k,j,i) * ddy(j) / 2.0_realk
-                        CALL comp_frac(halfFractionFront,  alphaFront, vff(k,j,i),   ddx(i),   ddy(j) / 2.0_realk,   ddz(k), normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
-                        vffjStag(k,j,i) = ( halfFractionFront * ddy(j) + vff(k,j+1,i) * ddy(j+1) ) / ( ddy(j) + ddy(j+1) )
-                    ELSE IF ( .NOT. isIface(k,j,i) .AND. isIface(k,j+1,i) ) THEN
-                        alphaBack = alpha(k,j+1,i)
-                        CALL comp_frac(halfFractionBack,   alphaBack, vff(k,j+1,i),  ddx(i),   ddy(j+1) / 2.0_realk, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
-                        vffjStag(k,j,i) = ( vff(k,j,i) * ddy(j) + halfFractionBack * ddy(j+1) ) / ( ddy(j) + ddy(j+1) )
-                    ELSE
-                        vffjStag(k,j,i) = ( vff(k,j,i) * ddy(j) + vff(k,j+1,i) * ddy(j+1) ) / ( ddy(j) + ddy(j+1) )
-                    ENDIF
-                ENDDO
-            ENDDO
-        ENDDO
-
-    END SUBROUTINE comp_jStag_vff
-
-    !================================================================
-
-    SUBROUTINE comp_kStag_vff(kk, jj, ii, vffkStag, alpha, vff, isIface, ddx, ddy, ddz, normx, normy, normz, tol)
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(out) :: vffkStag(kk, jj, ii)
-        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
-        REAL(realk), INTENT(in) :: tol
-
-        ! Local variables
-        INTEGER(intk) :: k, j, i
-        REAL(realk) :: alphaBottom, alphaTop, halfFractionBottom, halfFractionTop
-
-        DO i = 2, ii-1
-            DO j = 2, jj-1 
-                DO k = 2, kk-1 
-                    IF ( isIface(k,j,i) .AND. isIface(k+1,j,i) ) THEN
-                        alphaBottom = alpha(k,j,i) - normz(k,j,i) * ddz(k) / 2.0_realk
-                        alphaTop    = alpha(k+1,j,i)
-                        CALL comp_frac(halfFractionBottom, alphaBottom, vff(k,j,i),   ddx(i), ddy(j), ddz(k) / 2.0_realk,   normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
-                        CALL comp_frac(halfFractionTop,    alphaTop,    vff(k+1,j,i), ddx(i), ddy(j), ddz(k+1) / 2.0_realk, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
-                        vffkStag(k,j,i) = ( halfFractionBottom * ddz(k) + halfFractionTop * ddz(k+1) ) / ( ddz(k) + ddz(k+1) )
-                    ELSE IF ( isIface(k,j,i) .AND. .NOT. isIface(k+1,j,i) ) THEN
-                        alphaBottom = alpha(k,j,i) - normz(k,j,i) * ddz(k) / 2.0_realk
-                        CALL comp_frac(halfFractionBottom, alphaBottom, vff(k,j,i),   ddx(i), ddy(j), ddz(k) / 2.0_realk,   normx(k,j,i),   normy(k,j,i),   normz(k,j,i),   tol)
-                        vffkStag(k,j,i) = ( halfFractionBottom * ddz(k) + vff(k+1,j,i) * ddz(k+1) ) / ( ddz(k) + ddz(k+1) )
-                    ELSE IF ( .NOT. isIface(k,j,i) .AND. isIface(k+1,j,i) ) THEN
-                        alphaTop    = alpha(k+1,j,i)
-                        CALL comp_frac(halfFractionTop,    alphaTop,    vff(k+1,j,i), ddx(i), ddy(j), ddz(k+1) / 2.0_realk, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
-                        vffkStag(k,j,i) = ( vff(k,j,i) * ddz(k) + halfFractionTop * ddz(k+1) ) / ( ddz(k) + ddz(k+1) )
-                    ELSE
-                        vffkStag(k,j,i) = ( vff(k,j,i) * ddz(k) + vff(k+1,j,i) * ddz(k+1) ) / ( ddz(k) + ddz(k+1) )
-                    ENDIF
-                ENDDO
-            ENDDO
-        ENDDO
-
-    END SUBROUTINE comp_kStag_vff
+    END SUBROUTINE comp_stag_frac
 
     !================================================================
 

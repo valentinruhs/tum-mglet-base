@@ -20,6 +20,7 @@ MODULE multiphase_material_mod
     USE fields_mod, ONLY: get_field
     USE grids_mod, ONLY: get_mgdims, get_mgbasb
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
+    USE err_mod, ONLY: errr
 
     IMPLICIT NONE
     PRIVATE
@@ -75,7 +76,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_material_property_field(kk, jj, ii, vff, propertyFluid1, propertyFluid2, propertyField)
+    SUBROUTINE comp_material_property_field(kk, jj, ii, vff, propertyFluid1, propertyFluid2, propertyField, harmonic)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine computes the weighted material property for
@@ -86,18 +87,19 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: propertyFluid1, propertyFluid2
-        REAL(realk), INTENT(out) :: propertyField(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: propertyField(kk, jj, ii)
+        LOGICAL, OPTIONAL :: harmonic
 
         ! Local variables
-        INTEGER(intk) :: k, j, i
+        ! None
 
-        DO i = 1, ii
-            DO j = 1, jj
-                DO k = 1, kk
-                    propertyField(k,j,i) = propertyFluid1 * vff(k,j,i) + propertyFluid2 * ( 1.0_realk - vff(k,j,i) )
-                END DO
-            END DO
-        END DO
+        IF ( .NOT. PRESENT(harmonic) ) THEN
+            propertyField = vff * ( propertyFluid1 - propertyFluid2 ) + propertyFluid2
+        ELSEIF ( harmonic ) THEN
+            propertyField = 1.0_realk / ( vff * ( 1.0_realk / propertyFluid1 - 1.0_realk / propertyFluid2 ) + 1.0_realk / propertyFluid2 )
+        ELSE 
+            CALL errr(__FILE__, __LINE__)
+        ENDIF
 
     END SUBROUTINE comp_material_property_field
 

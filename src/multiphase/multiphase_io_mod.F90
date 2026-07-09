@@ -23,7 +23,7 @@ MODULE multiphase_io_mod
     USE connect2_mod, ONLY: connect
     USE grids_mod, ONLY: minlevel, maxlevel
     USE flowcore_mod, ONLY: uinf
-    USE multiphasecore_mod, ONLY: gmol1, gmol2
+    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
 
     IMPLICIT NONE
     PRIVATE 
@@ -481,7 +481,7 @@ CONTAINS
                 DO i = 3, ii-2
                     DO j = 3, jj-2
                         DO k = 3, kk-2
-                            trueVel(k,j,i) = uinf(1) - uinf(1) * ERF(( ABS(ddy(1)) / 2 + (j-3) * ABS(ddy(1)) )/( SQRT(4.0_realk * gmol1 * itstep * dt) ))
+                            trueVel(k,j,i) = uinf(1) - uinf(1) * ERF(( ABS(ddy(1)) / 2 + (j-3) * ABS(ddy(1)) )/( SQRT(4.0_realk * gmol1/rho1 * itstep * dt) ))
                         ENDDO
                     ENDDO
                 ENDDO
