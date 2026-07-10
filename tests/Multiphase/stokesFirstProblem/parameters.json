@@ -34,8 +34,8 @@
 	"test": "StFstP",
 	"splitting" : "direction-wise",
 	"permutation" : 3,
-	"rho1" : 1.0,
-	"rho2" : 1.0,
+	"rho1" : 1000.0,
+	"rho2" : 1000.0,
 	"gmol1" : 0.0001,
 	"gmol2" : 0.0001,
 	"gravity" : [0.0, 0.0, 0.0]

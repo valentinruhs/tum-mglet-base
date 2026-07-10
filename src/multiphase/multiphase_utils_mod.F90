@@ -19,7 +19,7 @@ MODULE multiphase_utils_mod
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: init_multiphase_utils, finish_multiphase_utils, get_spatial_indices, get_spatial_extents, get_condit_velocity
+    PUBLIC :: init_multiphase_utils, finish_multiphase_utils, get_spatial_indices, get_spatial_factors, get_spatial_extents, get_condit_velocity
 
 CONTAINS
 
@@ -76,6 +76,36 @@ CONTAINS
         END IF
 
     END SUBROUTINE get_spatial_indices
+
+    !================================================================
+
+    SUBROUTINE get_spatial_factors(kk, jj, ii, lOrq, fx, fy, fz)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Depending on the direction (l) of component (q) the 
+    !   factors fx, fy and fz are set to 0.0 or 1.0. 
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii, lOrq
+        REAL(realk), INTENT(out) :: fx, fy, fz
+
+        ! Local variables
+        ! None
+
+        fx = 0.0_realk ; fy = 0.0_realk ; fz = 0.0_realk
+
+        IF ( lOrq == 1 ) THEN
+            fx = 1.0_realk
+        ELSE IF ( lOrq == 2 ) THEN
+            fy = 1.0_realk
+        ELSE IF ( lOrq == 3 ) THEN
+            fz = 1.0_realk
+        ELSE
+            CALL errr(__FILE__, __LINE__)
+        END IF
+
+    END SUBROUTINE get_spatial_factors
 
     !================================================================
 

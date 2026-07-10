@@ -1576,7 +1576,7 @@ CONTAINS
                 END DO
             END IF
         ELSE 
-            CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, d)
+            CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, 'ARI', d)
             IF (PRESENT(bp)) THEN
                 DO i = 2, ii-1
                     DO j = 2, jj-1

@@ -16,7 +16,7 @@
 
     USE precision_mod, ONLY: intk, realk
     USE err_mod, ONLY: errr
-    USE multiphase_utils_mod, ONLY: get_spatial_indices, get_spatial_extents
+    USE multiphase_utils_mod, ONLY: get_spatial_indices, get_spatial_factors
         
     IMPLICIT NONE
     PRIVATE 
@@ -388,18 +388,13 @@
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kq, jq, iq
-        REAL(realk) :: alphaOffset, iqInd(2), jqInd(2), kqInd(2)
+        REAL(realk) :: fx, fy, fz
+        REAL(realk) :: alphaOffset
         REAL(realk) :: alphaMi, vffMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi, ddsMi, halfFractionMi
         REAL(realk) :: alphaPl, vffPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl, ddsPl, halfFractionPl
 
         CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
-
-        iqInd(1) = MERGE(1.0_realk, 0.0_realk, iq == 1_intk)
-        iqInd(2) = 1.0_realk - iqInd(1)
-        jqInd(1) = MERGE(1.0_realk, 0.0_realk, jq == 1_intk)
-        jqInd(2) = 1.0_realk - jqInd(1)
-        kqInd(1) = MERGE(1.0_realk, 0.0_realk, kq == 1_intk)
-        kqInd(2) = 1.0_realk - kqInd(1)
+        CALL get_spatial_factors(kk, jj, ii, q, fx, fy, fz)
 
         DO i = 2, ii-1
             DO j = 2, jj-1
@@ -408,9 +403,9 @@
 
                     alphaMi = alpha(k,j,i) - alphaOffset
                     vffMi = vff(k,j,i)
-                    ddxMi = iqInd(2) * ddx(i) + iqInd(1) * ddx(i) / 2.0_realk
-                    ddyMi = jqInd(2) * ddy(j) + jqInd(1) * ddy(j) / 2.0_realk
-                    ddzMi = kqInd(2) * ddz(k) + kqInd(1) * ddz(k) / 2.0_realk
+                    ddxMi = ( 1.0_realk - fx ) * ddx(i) + fx * ddx(i) / 2.0_realk
+                    ddyMi = ( 1.0_realk - fy ) * ddy(j) + fy * ddy(j) / 2.0_realk
+                    ddzMi = ( 1.0_realk - fz ) * ddz(k) + fz * ddz(k) / 2.0_realk
                     normxMi = normx(k,j,i)
                     normyMi = normy(k,j,i)
                     normzMi = normz(k,j,i)
@@ -418,9 +413,9 @@
 
                     alphaPl = alpha(k+kq,j+jq,i+iq)
                     vffPl = vff(k+kq,j+jq,i+iq)
-                    ddxPl = iqInd(2) * ddx(i+iq) + iqInd(1) * ddx(i+iq) / 2.0_realk
-                    ddyPl = jqInd(2) * ddy(j+jq) + jqInd(1) * ddy(j+jq) / 2.0_realk
-                    ddzPl = kqInd(2) * ddz(k+kq) + kqInd(1) * ddz(k+kq) / 2.0_realk
+                    ddxPl = ( 1.0_realk - fx ) * ddx(i+iq) + fx * ddx(i+iq) / 2.0_realk
+                    ddyPl = ( 1.0_realk - fy ) * ddy(j+jq) + fy * ddy(j+jq) / 2.0_realk
+                    ddzPl = ( 1.0_realk - fz ) * ddz(k+kq) + fz * ddz(k+kq) / 2.0_realk
                     normxPl = normx(k+kq,j+jq,i+iq)
                     normyPl = normy(k+kq,j+jq,i+iq)
                     normzPl = normz(k+kq,j+jq,i+iq)

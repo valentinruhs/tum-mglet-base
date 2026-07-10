@@ -55,8 +55,8 @@ CONTAINS
             CALL g_f%get_ptr(g, igrid)
             CALL vff_f%get_ptr(vff, igrid)
 
-            CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, d)
-            CALL comp_material_property_field(kk, jj, ii, vff, gmol1, gmol2, g)
+            CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, 'ARI', d)
+            CALL comp_material_property_field(kk, jj, ii, vff, gmol1, gmol2, 'HAR', g)
         END DO
 
     END SUBROUTINE init_multiphase_material
@@ -76,7 +76,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_material_property_field(kk, jj, ii, vff, propertyFluid1, propertyFluid2, propertyField, harmonic)
+    SUBROUTINE comp_material_property_field(kk, jj, ii, vff, propertyFluid1, propertyFluid2, average, propertyField)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine computes the weighted material property for
@@ -87,15 +87,15 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: propertyFluid1, propertyFluid2
+        CHARACTER(len=3), INTENT(in) :: average
         REAL(realk), INTENT(inout) :: propertyField(kk, jj, ii)
-        LOGICAL, OPTIONAL :: harmonic
 
         ! Local variables
         ! None
 
-        IF ( .NOT. PRESENT(harmonic) ) THEN
+        IF ( average == 'ARI' ) THEN
             propertyField = vff * ( propertyFluid1 - propertyFluid2 ) + propertyFluid2
-        ELSEIF ( harmonic ) THEN
+        ELSEIF ( average == 'HAR' ) THEN
             propertyField = 1.0_realk / ( vff * ( 1.0_realk / propertyFluid1 - 1.0_realk / propertyFluid2 ) + 1.0_realk / propertyFluid2 )
         ELSE 
             CALL errr(__FILE__, __LINE__)

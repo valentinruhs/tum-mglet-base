@@ -486,8 +486,8 @@ CONTAINS
                     ENDDO
                 ENDDO
                 DO j = 3, jj-2
-                    WRITE(*,*) "ERROR at j = ", j, ": ", ABS(u(7,j,7) - trueVel(7,j,7))
-                    ! WRITE(*,*) u(7,j,7), trueVel(7,j,7)
+                    ! WRITE(*,*) "ERROR at j = ", j, ": ", ABS(u(7,j,7) - trueVel(7,j,7))
+                    WRITE(*,*) u(7,j,7), trueVel(7,j,7)
                 ENDDO
             ELSE 
                 return
