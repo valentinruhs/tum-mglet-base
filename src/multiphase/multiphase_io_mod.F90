@@ -443,13 +443,14 @@ CONTAINS
         REAL(realk), INTENT(in) :: dt
 
         ! Local variables
-        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: n, igrid, m
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
         INTEGER(intk) :: kk, jj, ii, k, j, i
         REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: u, v, w
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
-        REAL(realk), ALLOCATABLE :: trueVel(:,:,:)
+        REAL(realk), ALLOCATABLE :: trueVel(:,:,:), trueVel1(:,:,:), trueVel2(:,:,:)
+        REAL(realk) :: beta(100), betaHat(100), alpha, kappa, a, aHat, h, sigma, yHat, tHat, sum1, sum2
 
         CALL get_field(dx_f, "DX")
         CALL get_field(dy_f, "DY")
@@ -478,16 +479,68 @@ CONTAINS
 
             IF ( test_multiphase == 'StFstP' ) THEN
                 IF (.NOT. ALLOCATED(trueVel)) ALLOCATE(trueVel(kk,jj,ii))
+                IF (.NOT. ALLOCATED(trueVel1)) ALLOCATE(trueVel1(kk,jj,ii))
+                IF (.NOT. ALLOCATED(trueVel2)) ALLOCATE(trueVel2(kk,jj,ii))
+                ! the betas are the positive roots of: cot(beta) + sigma * cot(kappa * beta * a)
+                ! see: C.-O. Ng, “Starting flow in channels with boundary slip,” Meccanica, 
+                !      vol. 52, no. 1–2, pp. 45–67, Jan. 2017, doi: 10.1007/s11012-016-0384-4.
+                beta = [ 1.57079633,  4.71238898,  7.85398163, 10.99557429, 14.13716694, &
+                        17.27875959, 20.42035225, 23.56194490, 26.70353756, 29.84513021, &
+                        32.98672286, 36.12831552, 39.26990817, 42.41150082, 45.55309348, &
+                        48.69468613, 51.83627878, 54.97787144, 58.11946409, 61.26105675, &
+                        64.40264940, 67.54424205, 70.68583471, 73.82742736, 76.96902001, &
+                        80.11061267, 83.25220532, 86.39379797, 89.53539063, 92.67698328, &
+                        95.81857593, 98.96016859, 102.10176124, 105.24335390, 108.38494655, &
+                        111.52653920, 114.66813186, 117.80972451, 120.95131716, 124.09290982, &
+                        127.23450247, 130.37609512, 133.51768778, 136.65928043, 139.80087308, &
+                        142.94246574, 146.08405839, 149.22565105, 152.36724370, 155.50883635, &
+                        158.65042901, 161.79202166, 164.93361431, 168.07520697, 171.21679962, &
+                        174.35839227, 177.49998493, 180.64157758, 183.78317024, 186.92476289, &
+                        190.06635554, 193.20794820, 196.34954085, 199.49113350, 202.63272616, &
+                        205.77431881, 208.91591146, 212.05750412, 215.19909677, 218.34068942, &
+                        221.48228208, 224.62387473, 227.76546739, 230.90706004, 234.04865269, &
+                        237.19024535, 240.33183800, 243.47343065, 246.61502331, 249.75661596, &
+                        252.89820861, 256.03980127, 259.18139392, 262.32298657, 265.46457923, &
+                        268.60617188, 271.74776454, 274.88935719, 278.03094984, 281.17254250, &
+                        284.31413515, 287.45572780, 290.59732046, 293.73891311, 296.88050576, &
+                        300.02209842, 303.16369107, 306.30528373, 309.44687638, 312.58846903 ]
+
+                alpha = gmol2 / gmol1
+                kappa = SQRT(gmol1 / rho1 * rho2 / gmol2) ; sigma = kappa * ( gmol2 / gmol1 )
+                a = 0.5_realk ; h = 0.5_realk
+                aHat = a / h ; betaHat = beta * h
+                
+                trueVel1 = 0.0_realk
+                trueVel2 = 0.0_realk
                 DO i = 3, ii-2
                     DO j = 3, jj-2
                         DO k = 3, kk-2
-                            trueVel(k,j,i) = uinf(1) - uinf(1) * ERF(( ABS(ddy(1)) / 2 + (j-3) * ABS(ddy(1)) )/( SQRT(4.0_realk * gmol1/rho1 * itstep * dt) ))
+                            trueVel(k,j,i) = uinf(1) - uinf(1) * ERF(( ABS(ddy(1)) / 2 + (j-3) * ABS(ddy(1)) )/( SQRT(4.0_realk * gmol1 / rho1 * itstep * dt) ))
+                            yHat = ( ABS(ddy(1)) / 2 + (j-3) * ABS(ddy(1)) ) / h
+                            tHat = itstep * dt * ( ( gmol1 / rho1 ) / h**2.0_realk )
+
+                            sum1 = 0.0_realk
+                            sum2 = 0.0_realk
+                            DO m = 1, 100
+                                sum1 = sum1 + ( sin(kappa * betaHat(m) * aHat)**2.0_realk * sin(betaHat(m) * ( 1.0_realk + yHat )) ) / &
+                                    ( betaHat(m) * ( sin(kappa * betaHat(m) * aHat)**2.0_realk + sigma * kappa * aHat * sin(betaHat(m))**2.0_realk ) ) * &
+                                    EXP(-betaHat(m)**2.0_realk * tHat)
+                                sum2 = sum2 + ( sin(betaHat(m)) * sin(kappa * betaHat(m) * aHat) * sin(kappa * betaHat(m) * (aHat - yHat)) ) / &
+                                    ( betaHat(m) * ( sin(kappa * betaHat(m) * aHat)**2.0_realk + sigma * kappa * aHat * sin(betaHat(m))**2.0_realk ) ) * &
+                                    EXP(-betaHat(m)**2.0_realk * tHat)
+                            ENDDO
+
+                            IF ( yHat <= 0.0 ) THEN
+                                trueVel1(k,j,i) = ( alpha * aHat - yhat ) / ( alpha * aHat + 1.0_realk ) - 2.0_realk * sum1
+                            ELSE
+                                trueVel2(k,j,i) = ( alpha * aHat - yhat ) / ( alpha * aHat + 1.0_realk ) - 2.0_realk * sum2
+                            ENDIF
                         ENDDO
                     ENDDO
                 ENDDO
                 DO j = 3, jj-2
                     ! WRITE(*,*) "ERROR at j = ", j, ": ", ABS(u(7,j,7) - trueVel(7,j,7))
-                    WRITE(*,*) u(7,j,7), trueVel(7,j,7)
+                    WRITE(*,*) u(7,j,7) / uinf(1), trueVel(7,j,7) / uinf(1), trueVel1(7,j,7), trueVel2(7,j,7)
                 ENDDO
             ELSE 
                 return

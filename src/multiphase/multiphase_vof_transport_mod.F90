@@ -764,7 +764,7 @@ CONTAINS
         REAL(realk) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii), alpha(kk, jj, ii)
         LOGICAL :: isIface(kk, jj, ii)
         REAL(realk) :: vffStag(kk, jj, ii)
-        REAL(realk) :: ge(kk, jj, ii), gn(kk, jj, ii), gt(kk, jj, ii)
+        REAL(realk) :: ge(kk, jj, ii, 3), gn(kk, jj, ii, 3), gt(kk, jj, ii, 3)
         REAL(realk) :: tauxxe, tauxxw, tauxyn, tauxys, tauxzt, tauxzb
         REAL(realk) :: tauyxe, tauyxw, tauyyn, tauyys, tauyzt, tauyzb
         REAL(realk) :: tauzxe, tauzxw, tauzyn, tauzys, tauzzt, tauzzb
@@ -776,56 +776,78 @@ CONTAINS
         DO q = 1, 3
 
             CALL comp_stag_frac(kk, jj, ii, q, vff, alpha, isIface, ddx, ddy, ddz, normx, normy, normz, tol, vffStag)
-            CALL comp_mean_harm(kk, jj, ii, q, vffStag, g, ge, gn, gt)
-            ! CALL comp_mean_arit(kk, jj, ii, q, vff, g, ge, gn, gt)
-
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        ! Normal stresses
-                        tauxxe = ge(k,j,i) * 2.0_realk * (u(k,j,i+1) - u(k,j,i)) * rddx(i+1)
-                        tauxxw = ge(k,j,i-1) * 2.0_realk * (u(k,j,i) - u(k,j,i-1)) * rddx(i)
-                        tauyyn = gn(k,j,i) * 2.0_realk * (v(k,j+1,i) - v(k,j,i)) * rddy(j+1)
-                        tauyys = gn(k,j-1,i) * 2.0_realk * (v(k,j,i) - v(k,j-1,i)) * rddy(j)
-                        tauzzt = gt(k,j,i) * 2.0_realk * (w(k+1,j,i) - w(k,j,i)) * rddz(k+1)
-                        tauzzb = gt(k-1,j,i) * 2.0_realk * (w(k,j,i) - w(k-1,j,i)) * rddz(k)
-
-                        ! Shear stresses
-                        tauxyn = gn(k,j,i) * ( (u(k,j+1,i) - u(k,j,i)) * rdy(j) + (v(k,j,i+1) - v(k,j,i)) * rdx(i) )
-                        tauxys = gn(k,j-1,i) * ( (u(k,j,i) - u(k,j-1,i)) * rdy(j-1) + (v(k,j-1,i+1) - v(k,j-1,i)) * rdx(i) )
-                        tauyxe = ge(k,j,i) * ( (u(k,j+1,i) - u(k,j,i)) * rdy(j) + (v(k,j,i+1) - v(k,j,i)) * rdx(i) )
-                        tauyxw = ge(k,j,i-1) * ( (u(k,j+1,i-1) - u(k,j,i-1)) * rdy(j) + (v(k,j,i) - v(k,j,i-1)) * rdx(i-1) )
-
-                        tauxzt = gt(k,j,i) * ( (u(k+1,j,i) - u(k,j,i)) * rdz(k) + (w(k,j,i+1) - w(k,j,i)) * rdx(i) )
-                        tauxzb = gt(k-1,j,i) * ( (u(k,j,i) - u(k-1,j,i)) * rdz(k-1) + (w(k-1,j,i+1) - w(k-1,j,i)) * rdx(i) )
-                        tauzxe = ge(k,j,i) * ( (u(k+1,j,i) - u(k,j,i)) * rdz(k) + (w(k,j,i+1) - w(k,j,i)) * rdx(i) )
-                        tauzxw = ge(k,j,i-1) * ( (u(k+1,j,i-1) - u(k,j,i-1)) * rdz(k) + (w(k,j,i) - w(k,j,i-1)) * rdx(i-1) )
-
-                        tauyzt = gt(k,j,i) * ( (v(k+1,j,i) - v(k,j,i)) * rdz(k) + (w(k,j+1,i) - w(k,j,i)) * rdy(j) )
-                        tauyzb = gt(k-1,j,i) * ( (v(k,j,i) - v(k-1,j,i)) * rdz(k-1) + (w(k-1,j+1,i) - w(k-1,j,i)) * rdy(j) )
-                        tauzyn = gn(k,j,i) * ( (v(k+1,j,i) - v(k,j,i)) * rdz(k) + (w(k,j+1,i) - w(k,j,i)) * rdy(j) )
-                        tauzys = gn(k,j-1,i) * ( (v(k+1,j-1,i) - v(k,j-1,i)) * rdz(k) + (w(k,j,i) - w(k,j-1,i)) * rdy(j-1) )
-
-                        ! Change due to diffusion
-                        uo(k,j,i) = uo(k,j,i) + 2.0_realk / ( d(k,j,i) + d(k,j,i+1) ) * &
-                            ( ( tauxxe - tauxxw ) * rdx(i) + &
-                              ( tauxyn - tauxys ) * rddy(j) + &
-                              ( tauxzt - tauxzb ) * rddz(k) )
-
-                        vo(k,j,i) = vo(k,j,i) + 2.0_realk / ( d(k,j,i) + d(k,j+1,i) ) * &
-                            ( ( tauyxe - tauyxw ) * rddx(i) + &
-                              ( tauyyn - tauyys ) * rdy(j) + &
-                              ( tauyzt - tauyzb ) * rddz(k) )
-
-                        wo(k,j,i) = wo(k,j,i) + 2.0_realk / ( d(k,j,i) + d(k,j,i+1) ) * &
-                            ( ( tauzxe - tauzxw ) * rddx(i) + &
-                              ( tauzyn - tauzys ) * rddy(j) + &
-                              ( tauzzt - tauzzb ) * rdz(k) )
-                    ENDDO
-                ENDDO
-            ENDDO
+            CALL comp_mean_harm(kk, jj, ii, q, vffStag, g, ge(:,:,:,q), gn(:,:,:,q), gt(:,:,:,q))
+            ! CALL comp_mean_arit(kk, jj, ii, q, vffStag, g, ge, gn, gt)
 
         ENDDO
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    ! Normal stresses
+                    tauxxe = ge(k,j,i,1) * 2.0_realk * (u(k,j,i+1) - u(k,j,i)) * rddx(i+1)
+                    tauxxw = ge(k,j,i-1,1) * 2.0_realk * (u(k,j,i) - u(k,j,i-1)) * rddx(i)
+
+                    ! Shear stresses
+                    tauxyn = gn(k,j,i,1) * ( (u(k,j+1,i) - u(k,j,i)) * rdy(j)   + (v(k,j,i+1) - v(k,j,i))     * rdx(i) )
+                    tauxys = gn(k,j-1,i,1) * ( (u(k,j,i) - u(k,j-1,i)) * rdy(j-1) + (v(k,j-1,i+1) - v(k,j-1,i)) * rdx(i) )
+                    tauxzt = gt(k,j,i,1) * ( (u(k+1,j,i) - u(k,j,i)) * rdz(k)   + (w(k,j,i+1) - w(k,j,i))     * rdx(i) )
+                    tauxzb = gt(k-1,j,i,1) * ( (u(k,j,i) - u(k-1,j,i)) * rdz(k-1) + (w(k-1,j,i+1) - w(k-1,j,i)) * rdx(i) )
+
+                    ! Change due to diffusion
+                    uo(k,j,i) = uo(k,j,i) + 2.0_realk/( d(k,j,i) + d(k,j,i+1) ) * &
+                        ( ( tauxxe - tauxxw ) * rdx(i) + &
+                          ( tauxyn - tauxys ) * rddy(j) + &
+                          ( tauxzt - tauxzb ) * rddz(k) )
+                END DO
+            END DO
+        END DO
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    ! Shear stresses
+                    tauyxe = ge(k,j,i,2) * ( (u(k,j+1,i) - u(k,j,i))     * rdy(j) + (v(k,j,i+1) - v(k,j,i)) * rdx(i)   )
+                    tauyxw = ge(k,j,i-1,2) * ( (u(k,j+1,i-1) - u(k,j,i-1)) * rdy(j) + (v(k,j,i) - v(k,j,i-1)) * rdx(i-1) )
+
+                    ! Normal stresses
+                    tauyyn = gn(k,j,i,2) * 2.0_realk * (v(k,j+1,i) - v(k,j,i)) * rddy(j+1)
+                    tauyys = gn(k,j-1,i,2) * 2.0_realk * (v(k,j,i) - v(k,j-1,i)) * rddy(j)
+                    
+                    ! Shear stresses
+                    tauyzt = gt(k,j,i,2) * ( (v(k+1,j,i) - v(k,j,i)) * rdz(k)   + (w(k,j+1,i) - w(k,j,i))     * rdy(j) )
+                    tauyzb = gt(k-1,j,i,2) * ( (v(k,j,i) - v(k-1,j,i)) * rdz(k-1) + (w(k-1,j+1,i) - w(k-1,j,i)) * rdy(j) )
+
+                    ! Change due to diffusion
+                    vo(k,j,i) = vo(k,j,i) + 2.0_realk/( d(k,j,i) + d(k,j+1,i) ) * &
+                        ( ( tauyxe - tauyxw ) * rddx(i) + &
+                          ( tauyyn - tauyys ) * rdy(j) + &
+                          ( tauyzt - tauyzb ) * rddz(k) )
+                END DO
+            END DO
+        END DO
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    ! Shear stresses
+                    tauzxe = ge(k,j,i,3) * ( (u(k+1,j,i) - u(k,j,i))     * rdz(k) + (w(k,j,i+1) - w(k,j,i)) * rdx(i)   )
+                    tauzxw = ge(k,j,i-1,3) * ( (u(k+1,j,i-1) - u(k,j,i-1)) * rdz(k) + (w(k,j,i) - w(k,j,i-1)) * rdx(i-1) )
+                    tauzyn = gn(k,j,i,3) * ( (v(k+1,j,i) - v(k,j,i))     * rdz(k) + (w(k,j+1,i) - w(k,j,i)) * rdy(j)   )
+                    tauzys = gn(k,j-1,i,3) * ( (v(k+1,j-1,i) - v(k,j-1,i)) * rdz(k) + (w(k,j,i) - w(k,j-1,i)) * rdy(j-1) )
+                    
+                    ! Normal stresses
+                    tauzzt = gt(k,j,i,3) * 2.0_realk * (w(k+1,j,i) - w(k,j,i)) * rddz(k+1)
+                    tauzzb = gt(k-1,j,i,3) * 2.0_realk * (w(k,j,i) - w(k-1,j,i)) * rddz(k)
+
+                    ! Change due to diffusion
+                    wo(k,j,i) = wo(k,j,i) + 2.0_realk/( d(k,j,i) + d(k,j,i+1) ) * &
+                        ( ( tauzxe - tauzxw ) * rddx(i) + &
+                          ( tauzyn - tauzys ) * rddy(j) + &
+                          ( tauzzt - tauzzb ) * rdz(k) )
+                END DO
+            END DO
+        END DO
 
     END SUBROUTINE diff_operator
 
@@ -1369,16 +1391,23 @@ CONTAINS
 
     !     ! Loval variables
     !     INTEGER(intk) :: k, j, i
+    !     REAL(realk) :: fx, fy, fz
+
+    !     CALL get_spatial_factors(kk, jj, ii, q, fx, fy, fz)
 
     !     DO i = 2, ii-2
     !         DO j = 2, jj-2
     !             DO k = 2, kk-2
 
-    !                 SELECT CASE (q)
-    !                 CASE (1); ge(k,j,i) = g(k,j,i+1) ; gn(k,j,i) =  ; gt(k,j,i) = 
-    !                 CASE (2); ge(k,j,i) =  ; gn(k,j,i) = g(k,j+1,i) ; gt(k,j,i) = 
-    !                 CASE (3); ge(k,j,i) =  ; gn(k,j,i) = ; gt(k,j,i) = g(k+1,j,i)
-    !                 END SELECT
+    !                 ge(k,j,i) = fx * g(k,j,i+1) + &
+    !                             fy * ( vff(k,j,i+1) * gmol1 + ( 1.0_realk - vff(k,j,i+1) ) * gmol2 ) + &
+    !                             fz * ( vff(k,j,i+1) * gmol1 + ( 1.0_realk - vff(k,j,i+1) ) * gmol2 )
+    !                 gn(k,j,i) = fx * ( vff(k,j+1,i) * gmol1 + ( 1.0_realk - vff(k,j+1,i) ) * gmol2 ) + &
+    !                             fy * g(k,j+1,i) + &
+    !                             fz * ( vff(k,j+1,i) * gmol1 + ( 1.0_realk - vff(k,j+1,i) ) * gmol2 )
+    !                 gt(k,j,i) = fx * ( vff(k+1,j,i) * gmol1 + ( 1.0_realk - vff(k+1,j,i) ) * gmol2 ) + &
+    !                             fy * ( vff(k+1,j,i) * gmol1 + ( 1.0_realk - vff(k+1,j,i) ) * gmol2 ) + &
+    !                             fz * g(k+1,j,i)
 
     !             ENDDO
     !         ENDDO
