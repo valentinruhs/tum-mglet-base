@@ -102,32 +102,52 @@ CONTAINS
                 DO k = 2, kk-2
                     IF ( vel(k,j,i) > tol ) THEN
                         IF ( isIface(k,j,i) ) THEN
+                            ! Compute characteristic length and norm
                             dds = fx * ddx(i) + fy * ddy(j) + fz * ddz(k)
                             norms = fx * normx(k,j,i) + fy * normy(k,j,i) + fz * normz(k,j,i)
+
+                            ! Compute face fluxwidth and proper alpha
                             fluxWidth = abs( vel(k,j,i) ) * dt
                             fluxAlpha = alpha(k,j,i) - norms * ( dds - fluxWidth )
+
+                            ! Compute dimensions of fluxed cuboid
                             dimX = fx * fluxWidth + fy * ddy(j) + fz * ddz(k)
                             dimY = fx * ddx(i) + fy * fluxWidth + fz * ddz(k)
                             dimZ = fx * ddx(i) + fy * ddy(j) + fz * fluxWidth
+
+                            ! Compute vff in fluxed cuboid
                             CALL comp_frac(fluxedProp, fluxAlpha, vff(k,j,i), dimX, dimY, dimZ, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
                             flux = fluxedProp  * ( fluxWidth / dds )
                         ELSE
+                            ! Compute characteristic length
                             dds = fx * ddx(i) + fy * ddy(j) + fz * ddz(k)
+
+                            ! Compute face fluxwidth
                             fluxWidth = abs( vel(k,j,i) ) * dt
                             flux = vff(k,j,i) * ( fluxWidth / dds )
                         END IF
                     ELSE IF ( vel(k,j,i) < -tol ) THEN
                         IF ( isIface(k+kl,j+jl,i+il) ) THEN
+                            ! Compute characteristic length
                             dds = fx * ddx(i+1) + fy * ddy(j+1) + fz * ddz(k+1)
+
+                            ! Compute face fluxwidth and proper alpha
                             fluxWidth = abs( vel(k,j,i) ) * dt
                             fluxAlpha = alpha(k+kl,j+jl,i+il)
+
+                            ! Compute dimensions of fluxed cuboid
                             dimX = fx * fluxWidth + fy * ddy(j+1) + fz * ddz(k+1)
                             dimY = fx * ddx(i+1) + fy * fluxWidth + fz * ddz(k+1)
                             dimZ = fx * ddx(i+1) + fy * ddy(j+1) + fz * fluxWidth
+
+                            ! Compute vff in fluxed cuboid
                             CALL comp_frac(fluxedProp, fluxAlpha, vff(k+kl,j+jl,i+il), dimX, dimY, dimZ, normx(k+kl,j+jl,i+il), normy(k+kl,j+jl,i+il), normz(k+kl,j+jl,i+il), tol)
                             flux = fluxedProp * ( fluxWidth / dds )
                         ELSE
+                            ! Compute characteristic length
                             dds = fx * ddx(i+1) + fy * ddy(j+1) + fz * ddz(k+1)
+
+                            ! Compute face fluxwidth
                             fluxWidth = abs( vel(k,j,i) ) * dt
                             flux = vff(k+kl,j+jl,i+il) * ( fluxWidth / dds )
                         END IF
@@ -143,18 +163,18 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_flux_stag(kk, jj, ii, q, splitDir, vff, isIface, u, v, w, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complementvffFlux)
+    SUBROUTINE comp_flux_stag(kk, jj, ii, q, l, vff, isIface, u, v, w, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complementvffFlux)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the volume fraction fluxes depending on the current
-    !   split direction for the three staggered girds. It is 
-    !   distinguished between several cases depending on the velocity 
-    !   direction and volume fraction field.
+    !   split direction. It is distinguished between several cases 
+    !   depending on the velocity direction and volume fraction 
+    !   field.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii, q
-        INTEGER(intk), INTENT(in) :: splitDir
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: q, l
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
@@ -164,155 +184,67 @@ CONTAINS
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol
-        REAL(realk), INTENT(inout) :: vffFlux(kk, jj, ii), complementvffFlux(kk, jj, ii)
+        REAL(realk), INTENT(out) :: vffFlux(kk, jj, ii), complementvffFlux(kk, jj, ii)
 
         ! Local variables
-        REAL(realk) :: dsx(ii), dsy(jj), dsz(kk)
         INTEGER(intk) :: k, j, i
-        REAL(realk) :: flux, complementFlux, fluxedProp, fluxWidth, fluxAlpha
-        REAL(realk) :: advr(kk, jj, ii)
+        INTEGER(intk) :: kl, jl, il
+        REAL(realk) :: fx, fy, fz
+        REAL(realk) :: advr(kk, jj, ii), ds, dds, norms
+        REAL(realk) :: dimX, dimY, dimZ
+        REAL(realk) :: flux, fluxedProp, fluxWidth, fluxAlpha, complementFlux
 
-        CALL get_spatial_extents(kk, jj, ii, q, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
-        CALL comp_advr_linear_interpolation(kk, jj, ii, splitDir, u, v, w, advr)
+        CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
+        CALL get_spatial_factors(kk, jj, ii, l, fx, fy, fz)
+        CALL comp_advr_linear_interpolation(kk, jj, ii, l, u, v, w, advr)
 
-        IF ( splitDir == 1 ) THEN
-            DO i = 2, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        IF ( advr(k,j,i) > tol ) THEN
-                            IF ( isIface(k,j,i) ) THEN
-                                ! See explanation above.
-                                fluxWidth = abs( advr(k,j,i) ) * dt
-                                fluxAlpha = alpha(k,j,i) - normx(k,j,i) * ( dsx(i)/2.0_realk - fluxWidth )
+        DO i = 2, ii-2
+            DO j = 2, jj-2
+                DO k = 2, kk-2
+                    IF ( ABS(advr(k,j,i)) > tol ) THEN
+                        IF ( isIface(k+kl,j+jl,i+il) ) THEN
+                            ! Compute characteristic lengths and norm
+                            ds = fx * dx(i+1) + fy * dy(j+1) + fz * dz(k+1)
+                            dds = fx * ddx(i+1) + fy * ddy(j+1) + fz * ddz(k+1)
+                            norms = fx * normx(k,j,i+1) + fy * normy(k,j+1,i) + fz * normz(k+1,j,i)
 
-                                CALL comp_frac(fluxedProp, fluxAlpha, vff(k,j,i), fluxWidth, ddy(j), ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
-                                
-                                flux = fluxedProp  * ( abs( advr(k,j,i) ) * dt / dsx(i) )
-                                complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advr(k,j,i) ) * dt / dsx(i) )
-                            ELSE
-                                ! See explanation above.
-                                flux = vff(k,j,i) * ( abs( advr(k,j,i) ) * dt / dsx(i) )
-                                complementFlux = max( 1.0_realk - vff(k,j,i), 0.0_realk ) * ( abs( advr(k,j,i) ) * dt / dsx(i) )
-                            END IF
-                        ELSE IF ( advr(k,j,i) < -tol ) THEN
-                            IF ( isIface(k,j,i+1) ) THEN
-                                ! See explanation above.
-                                fluxWidth = abs( advr(k,j,i) ) * dt
-                                fluxAlpha = alpha(k,j,i+1) - normx(k,j,i+1) * dsx(i+1)/2.0_realk
+                            ! Compute face fluxwidth and proper alpha
+                            fluxWidth = abs( advr(k,j,i) ) * dt
+                            fluxAlpha = alpha(k+kl,j+jl,i+il) - norms * ( dds / 2.0_realk - fluxWidth )
 
-                                CALL comp_frac(fluxedProp, fluxAlpha, vff(k,j,i+1), fluxWidth, ddy(j), ddz(k), normx(k,j,i+1), normy(k,j,i+1), normz(k,j,i+1), tol)
+                            ! Compute dimensions of fluxed cuboid
+                            dimX = fx * fluxWidth + fy * ddy(j+1) + fz * ddz(k+1)
+                            dimY = fx * ddx(i+1) + fy * fluxWidth + fz * ddz(k+1)
+                            dimZ = fx * ddx(i+1) + fy * ddy(j+1) + fz * fluxWidth
 
-                                flux = fluxedProp * ( abs( advr(k,j,i) ) * dt / dsx(i+1) )
-                                complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advr(k,j,i) ) * dt / dsx(i+1) )
-                            ELSE
-                                ! See explanation above.
-                                flux = vff(k,j,i+1) * ( abs( advr(k,j,i) ) * dt / dsx(i+1) )
-                                complementFlux = max( 1.0_realk - vff(k,j,i+1), 0.0_realk ) * ( abs( advr(k,j,i) ) * dt / dsx(i+1) )
-                            END IF
+                            ! Compute vff in fluxed cuboid
+                            CALL comp_frac(fluxedProp, fluxAlpha, vff(k+kl,j+jl,i+il), dimX, dimY, dimZ, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
+                            flux = fluxedProp  * ( fluxWidth / ds )
+                            complementFlux = ( 1.0_realk - fluxedProp ) * ( fluxwidth / ds )
                         ELSE
-                            ! See explanation above.
-                            flux = 0.0_realk
-                            complementFlux = 0.0_realk
+                            ! Compute characteristic length
+                            ds = fx * dx(i+1) + fy * dy(j+1) + fz * dz(k+1)
+                            dds = fx * ddx(i+1) + fy * ddy(j+1) + fz * ddz(k+1)
+
+                            ! Compute face fluxwidth
+                            fluxWidth = abs( advr(k,j,i) ) * dt
+                            flux = vff(k+kl,j+jl,i+il) * ( fluxWidth / ds )
+                            complementFlux = ( 1.0_realk - vff(k+kl,j+jl,i+il) ) * ( fluxWidth / ds )
                         END IF
-                        vffFlux(k,j,i) = sign( 1.0_realk, advr(k,j,i) ) * flux / dt
-                        complementvffFlux(k,j,i) = sign( 1.0_realk, advr(k,j,i) ) * complementFlux / dt
-                    END DO
+                    ELSE
+                        flux = 0.0_realk
+                        complementFlux = 0.0_realk
+                    END IF
+                    vffFlux(k,j,i) = sign( 1.0_realk, advr(k,j,i) ) * flux / dt
+                    complementvffFlux(k,j,i) = sign( 1.0_realk, advr(k,j,i) ) * complementFlux / dt
                 END DO
             END DO
-        ELSE IF ( splitDir == 2 ) THEN
-            DO i = 3, ii-2
-                DO j = 2, jj-2
-                    DO k = 3, kk-2
-                        IF ( advr(k,j,i) > tol ) THEN
-                            IF ( isIface(k,j,i) ) THEN
-                                ! See explanation above.
-                                fluxWidth = abs( advr(k,j,i) ) * dt
-                                fluxAlpha = alpha(k,j,i) - normy(k,j,i) * ( dsy(j)/2.0_realk - fluxWidth )
-
-                                CALL comp_frac(fluxedProp, fluxAlpha, vff(k,j,i), ddx(i), fluxWidth, ddz(k), normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
-
-                                flux = fluxedProp * ( abs( advr(k,j,i) ) * dt / dsy(j) )
-                                complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advr(k,j,i) ) * dt / dsy(j) )
-                            ELSE
-                                ! See explanation above.
-                                flux = vff(k,j,i) * ( abs( advr(k,j,i) ) * dt / dsy(j) )
-                                complementFlux = max( 1.0_realk - vff(k,j,i), 0.0_realk ) * ( abs( advr(k,j,i) ) * dt / dsy(j) )
-                            END IF
-                        ELSE IF ( advr(k,j,i) < -tol ) THEN
-                            IF ( isIface(k,j+1,i) ) THEN
-                                ! See explanation above.
-                                fluxWidth = abs( advr(k,j,i) ) * dt
-                                fluxAlpha = alpha(k,j+1,i) - normy(k,j+1,i) * dsy(j+1)/2.0_realk
-
-                                CALL comp_frac(fluxedProp, fluxAlpha, vff(k,j+1,i), ddx(i), fluxWidth, ddz(k), normx(k,j+1,i), normy(k,j+1,i), normz(k,j+1,i), tol)
-
-                                flux = fluxedProp * ( abs( advr(k,j,i) ) * dt / dsy(j+1) )
-                                complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advr(k,j,i) ) * dt / dsy(j+1) )
-                            ELSE
-                                ! See explanation above.
-                                flux = vff(k,j+1,i) * ( abs( advr(k,j,i) ) * dt / dsy(j+1) )
-                                complementFlux = max( 1.0_realk - vff(k,j+1,i), 0.0_realk ) * ( abs( advr(k,j,i) ) * dt / dsy(j+1) )
-                            END IF
-                        ELSE
-                            ! See explanation above.
-                            flux = 0.0_realk
-                            complementFlux = 0.0_realk
-                        END IF
-                        vffFlux(k,j,i) = sign( 1.0_realk, advr(k,j,i) ) * flux / dt
-                        complementvffFlux(k,j,i) = sign( 1.0_realk, advr(k,j,i) ) * complementFlux / dt
-                    END DO
-                END DO
-            END DO
-        ELSE IF ( splitDir == 3 ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 2, kk-2
-                        IF ( advr(k,j,i) > tol ) THEN
-                            IF ( isIface(k,j,i) ) THEN
-                                ! See explanation above.
-                                fluxWidth = abs( advr(k,j,i) ) * dt
-                                fluxAlpha = alpha(k,j,i) - normz(k,j,i) * ( dsz(k)/2.0_realk - fluxWidth )
-
-                                CALL comp_frac(fluxedProp, fluxAlpha, vff(k,j,i), ddx(i), ddy(j), fluxWidth, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
-
-                                flux = fluxedProp * ( abs( advr(k,j,i) ) * dt / dsz(k) )
-                                complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advr(k,j,i) ) * dt / dsz(k) )
-                            ELSE
-                                ! See explanation above.
-                                flux = vff(k,j,i) * ( abs( advr(k,j,i) ) * dt / dsz(k) )
-                                complementFlux = max( 1.0_realk - vff(k,j,i), 0.0_realk ) * ( abs( advr(k,j,i) ) * dt / dsz(k) )
-                            END IF
-                        ELSE IF ( advr(k,j,i) < -tol ) THEN
-                            IF ( isIface(k+1,j,i) ) THEN
-                                ! See explanation above.
-                                fluxWidth = abs( advr(k,j,i) ) * dt
-                                fluxAlpha = alpha(k+1,j,i) - normz(k+1,j,i) * dsz(k+1)/2.0_realk
-
-                                CALL comp_frac(fluxedProp, fluxAlpha, vff(k+1,j,i), ddx(i), ddy(j), fluxWidth, normx(k+1,j,i), normy(k+1,j,i), normz(k+1,j,i), tol)
-
-                                flux = fluxedProp * ( abs( advr(k,j,i) ) * dt / dsz(k+1) )
-                                complementFlux = ( 1.0_realk - fluxedProp ) * ( abs( advr(k,j,i) ) * dt / dsz(k+1) )
-                            ELSE
-                                ! See explanation above.
-                                flux = vff(k+1,j,i) * ( abs( advr(k,j,i) ) * dt / dsz(k+1) )
-                                complementFlux = max( 1.0_realk - vff(k+1,j,i), 0.0_realk ) * ( abs( advr(k,j,i) ) * dt / dsz(k+1) )
-                            END IF
-                        ELSE
-                            ! See explanation above.
-                            flux = 0.0_realk
-                            complementFLux = 0.0_realk
-                        END IF
-                        vffFlux(k,j,i) = sign( 1.0_realk, advr(k,j,i) ) * flux / dt
-                        complementvffFlux(k,j,i) = sign( 1.0_realk, advr(k,j,i) ) * complementFlux / dt
-                    END DO
-                END DO
-            END DO
-        END IF
+        END DO
 
     END SUBROUTINE comp_flux_stag
 
     !================================================================
-    
+
     PURE SUBROUTINE def_advection_sequence(iteration, advSeq)
     !----------------------------------------------------------------
     !   What it does:
@@ -1439,9 +1371,9 @@ CONTAINS
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
         CALL get_condit_velocity(kk, jj, ii, l, u, v, w, vel)
 
-        DO i = 1, ii-1
-            DO j = 1, jj-1
-                DO k = 1, kk-1
+        DO i = 2, ii-2
+            DO j = 2, jj-2
+                DO k = 2, kk-2
                     advr(k,j,i) = 0.5_realk * ( vel(k,j,i) + vel(k+kl,j+jl,i+il) )
                 END DO
             END DO
