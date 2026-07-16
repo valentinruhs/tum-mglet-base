@@ -16,7 +16,7 @@
 
     USE precision_mod, ONLY: intk, realk
     USE err_mod, ONLY: errr
-    USE multiphase_utils_mod, ONLY: get_spatial_indices, get_spatial_factors
+    USE multiphase_utils_mod, ONLY: get_spatial_indices
         
     IMPLICIT NONE
     PRIVATE 
@@ -388,13 +388,11 @@
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kq, jq, iq
-        REAL(realk) :: fx, fy, fz
         REAL(realk) :: alphaOffset
         REAL(realk) :: alphaMi, vffMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi, ddsMi, halfFractionMi
         REAL(realk) :: alphaPl, vffPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl, ddsPl, halfFractionPl
 
         CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
-        CALL get_spatial_factors(kk, jj, ii, q, fx, fy, fz)
 
         DO i = 2, ii-1
             DO j = 2, jj-1
@@ -403,9 +401,9 @@
 
                     alphaMi = alpha(k,j,i) - alphaOffset
                     vffMi = vff(k,j,i)
-                    ddxMi = ( 1.0_realk - fx ) * ddx(i) + fx * ddx(i) / 2.0_realk
-                    ddyMi = ( 1.0_realk - fy ) * ddy(j) + fy * ddy(j) / 2.0_realk
-                    ddzMi = ( 1.0_realk - fz ) * ddz(k) + fz * ddz(k) / 2.0_realk
+                    ddxMi = ( 1.0_realk - iq ) * ddx(i) + iq * ddx(i) / 2.0_realk
+                    ddyMi = ( 1.0_realk - jq ) * ddy(j) + jq * ddy(j) / 2.0_realk
+                    ddzMi = ( 1.0_realk - kq ) * ddz(k) + kq * ddz(k) / 2.0_realk
                     normxMi = normx(k,j,i)
                     normyMi = normy(k,j,i)
                     normzMi = normz(k,j,i)
@@ -413,9 +411,9 @@
 
                     alphaPl = alpha(k+kq,j+jq,i+iq)
                     vffPl = vff(k+kq,j+jq,i+iq)
-                    ddxPl = ( 1.0_realk - fx ) * ddx(i+iq) + fx * ddx(i+iq) / 2.0_realk
-                    ddyPl = ( 1.0_realk - fy ) * ddy(j+jq) + fy * ddy(j+jq) / 2.0_realk
-                    ddzPl = ( 1.0_realk - fz ) * ddz(k+kq) + fz * ddz(k+kq) / 2.0_realk
+                    ddxPl = ( 1.0_realk - iq ) * ddx(i+iq) + iq * ddx(i+iq) / 2.0_realk
+                    ddyPl = ( 1.0_realk - jq ) * ddy(j+jq) + jq * ddy(j+jq) / 2.0_realk
+                    ddzPl = ( 1.0_realk - kq ) * ddz(k+kq) + kq * ddz(k+kq) / 2.0_realk
                     normxPl = normx(k+kq,j+jq,i+iq)
                     normyPl = normy(k+kq,j+jq,i+iq)
                     normzPl = normz(k+kq,j+jq,i+iq)

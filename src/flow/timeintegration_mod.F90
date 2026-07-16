@@ -100,8 +100,13 @@ CONTAINS
             IF ( test_multiphase /= "none" ) THEN
                 CALL update_velocity(u, v, w, vff, itstep, dt)
             END IF
-            IF ( irk == 3 ) CALL multiphase_solve(u, v, w, vff, p, g, d, dt, itstep, uo, vo, wo)
-            IF ( irk == 3 ) CALL validate_velocity(u, v, w, itstep, dt)
+            write(*,*) dtrki
+            CALL multiphase_solve(u, v, w, vff, p, g, d, dt*dtrki, itstep, uo, vo, wo)
+            CALL validate_velocity(u, v, w, itstep, dt)
+
+            CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
+            CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
+            CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
         ELSE
             ! TSTLE4 zeroize uo, vo, wo before use internally
             CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g)

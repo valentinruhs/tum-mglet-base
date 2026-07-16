@@ -28,7 +28,7 @@ MODULE multiphase_vof_transport_mod
     USE grids_mod, ONLY: minlevel, maxlevel
     USE multiphase_io_mod, ONLY: apprVol
     USE err_mod, ONLY: errr
-    USE multiphase_utils_mod, ONLY: get_spatial_indices, get_spatial_factors, get_spatial_extents, get_condit_velocity
+    USE multiphase_utils_mod, ONLY: get_spatial_indices, get_spatial_extents, get_condit_velocity
     
     IMPLICIT NONE
     PRIVATE 
@@ -88,13 +88,11 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kl, jl, il
-        REAL(realk) :: fx, fy, fz
         REAL(realk) :: vel(kk, jj, ii), dds, norms
         REAL(realk) :: dimX, dimY, dimZ
         REAL(realk) :: flux, fluxedProp, fluxWidth, fluxAlpha
 
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
-        CALL get_spatial_factors(kk, jj, ii, l, fx, fy, fz)
         CALL get_condit_velocity(kk, jj, ii, l, u, v, w, vel)
 
         DO i = 2, ii-2
@@ -103,24 +101,24 @@ CONTAINS
                     IF ( vel(k,j,i) > tol ) THEN
                         IF ( isIface(k,j,i) ) THEN
                             ! Compute characteristic length and norm
-                            dds = fx * ddx(i) + fy * ddy(j) + fz * ddz(k)
-                            norms = fx * normx(k,j,i) + fy * normy(k,j,i) + fz * normz(k,j,i)
+                            dds = il * ddx(i) + jl * ddy(j) + kl * ddz(k)
+                            norms = il * normx(k,j,i) + jl * normy(k,j,i) + kl * normz(k,j,i)
 
                             ! Compute face fluxwidth and proper alpha
                             fluxWidth = abs( vel(k,j,i) ) * dt
                             fluxAlpha = alpha(k,j,i) - norms * ( dds - fluxWidth )
 
                             ! Compute dimensions of fluxed cuboid
-                            dimX = fx * fluxWidth + fy * ddy(j) + fz * ddz(k)
-                            dimY = fx * ddx(i) + fy * fluxWidth + fz * ddz(k)
-                            dimZ = fx * ddx(i) + fy * ddy(j) + fz * fluxWidth
+                            dimX = il * fluxWidth + jl * ddy(j) + kl * ddz(k)
+                            dimY = il * ddx(i) + jl * fluxWidth + kl * ddz(k)
+                            dimZ = il * ddx(i) + jl * ddy(j) + kl * fluxWidth
 
                             ! Compute vff in fluxed cuboid
                             CALL comp_frac(fluxedProp, fluxAlpha, vff(k,j,i), dimX, dimY, dimZ, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
                             flux = fluxedProp  * ( fluxWidth / dds )
                         ELSE
                             ! Compute characteristic length
-                            dds = fx * ddx(i) + fy * ddy(j) + fz * ddz(k)
+                            dds = il * ddx(i) + jl * ddy(j) + kl * ddz(k)
 
                             ! Compute face fluxwidth
                             fluxWidth = abs( vel(k,j,i) ) * dt
@@ -129,23 +127,23 @@ CONTAINS
                     ELSE IF ( vel(k,j,i) < -tol ) THEN
                         IF ( isIface(k+kl,j+jl,i+il) ) THEN
                             ! Compute characteristic length
-                            dds = fx * ddx(i+1) + fy * ddy(j+1) + fz * ddz(k+1)
+                            dds = il * ddx(i+1) + jl * ddy(j+1) + kl * ddz(k+1)
 
                             ! Compute face fluxwidth and proper alpha
                             fluxWidth = abs( vel(k,j,i) ) * dt
                             fluxAlpha = alpha(k+kl,j+jl,i+il)
 
                             ! Compute dimensions of fluxed cuboid
-                            dimX = fx * fluxWidth + fy * ddy(j+1) + fz * ddz(k+1)
-                            dimY = fx * ddx(i+1) + fy * fluxWidth + fz * ddz(k+1)
-                            dimZ = fx * ddx(i+1) + fy * ddy(j+1) + fz * fluxWidth
+                            dimX = il * fluxWidth + jl * ddy(j+1) + kl * ddz(k+1)
+                            dimY = il * ddx(i+1) + jl * fluxWidth + kl * ddz(k+1)
+                            dimZ = il * ddx(i+1) + jl * ddy(j+1) + kl * fluxWidth
 
                             ! Compute vff in fluxed cuboid
                             CALL comp_frac(fluxedProp, fluxAlpha, vff(k+kl,j+jl,i+il), dimX, dimY, dimZ, normx(k+kl,j+jl,i+il), normy(k+kl,j+jl,i+il), normz(k+kl,j+jl,i+il), tol)
                             flux = fluxedProp * ( fluxWidth / dds )
                         ELSE
                             ! Compute characteristic length
-                            dds = fx * ddx(i+1) + fy * ddy(j+1) + fz * ddz(k+1)
+                            dds = il * ddx(i+1) + jl * ddy(j+1) + kl * ddz(k+1)
 
                             ! Compute face fluxwidth
                             fluxWidth = abs( vel(k,j,i) ) * dt
@@ -189,13 +187,11 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kl, jl, il
-        REAL(realk) :: fx, fy, fz
         REAL(realk) :: advr(kk, jj, ii), ds, dds, norms
         REAL(realk) :: dimX, dimY, dimZ
         REAL(realk) :: flux, fluxedProp, fluxWidth, fluxAlpha, complementFlux
 
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
-        CALL get_spatial_factors(kk, jj, ii, l, fx, fy, fz)
         CALL comp_advr_linear_interpolation(kk, jj, ii, l, u, v, w, advr)
 
         DO i = 2, ii-2
@@ -204,18 +200,18 @@ CONTAINS
                     IF ( ABS(advr(k,j,i)) > tol ) THEN
                         IF ( isIface(k+kl,j+jl,i+il) ) THEN
                             ! Compute characteristic lengths and norm
-                            ds = fx * dx(i+1) + fy * dy(j+1) + fz * dz(k+1)
-                            dds = fx * ddx(i+1) + fy * ddy(j+1) + fz * ddz(k+1)
-                            norms = fx * normx(k,j,i+1) + fy * normy(k,j+1,i) + fz * normz(k+1,j,i)
+                            ds = il * dx(i+1) + jl * dy(j+1) + kl * dz(k+1)
+                            dds = il * ddx(i+1) + jl * ddy(j+1) + kl * ddz(k+1)
+                            norms = il * normx(k,j,i+1) + jl * normy(k,j+1,i) + kl * normz(k+1,j,i)
 
                             ! Compute face fluxwidth and proper alpha
                             fluxWidth = abs( advr(k,j,i) ) * dt
                             fluxAlpha = alpha(k+kl,j+jl,i+il) - norms * ( dds / 2.0_realk - fluxWidth )
 
                             ! Compute dimensions of fluxed cuboid
-                            dimX = fx * fluxWidth + fy * ddy(j+1) + fz * ddz(k+1)
-                            dimY = fx * ddx(i+1) + fy * fluxWidth + fz * ddz(k+1)
-                            dimZ = fx * ddx(i+1) + fy * ddy(j+1) + fz * fluxWidth
+                            dimX = il * fluxWidth + jl * ddy(j+1) + kl * ddz(k+1)
+                            dimY = il * ddx(i+1) + jl * fluxWidth + kl * ddz(k+1)
+                            dimZ = il * ddx(i+1) + jl * ddy(j+1) + kl * fluxWidth
 
                             ! Compute vff in fluxed cuboid
                             CALL comp_frac(fluxedProp, fluxAlpha, vff(k+kl,j+jl,i+il), dimX, dimY, dimZ, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
@@ -223,8 +219,8 @@ CONTAINS
                             complementFlux = ( 1.0_realk - fluxedProp ) * ( fluxwidth / ds )
                         ELSE
                             ! Compute characteristic length
-                            ds = fx * dx(i+1) + fy * dy(j+1) + fz * dz(k+1)
-                            dds = fx * ddx(i+1) + fy * ddy(j+1) + fz * ddz(k+1)
+                            ds = il * dx(i+1) + jl * dy(j+1) + kl * dz(k+1)
+                            dds = il * ddx(i+1) + jl * ddy(j+1) + kl * ddz(k+1)
 
                             ! Compute face fluxwidth
                             fluxWidth = abs( advr(k,j,i) ) * dt
@@ -403,9 +399,9 @@ CONTAINS
 
             CALL exte_operator(kk, jj, ii, vff, dx, dy, dz, ddx, ddy, ddz, uo, vo, wo)
 
-            u = u + uo * dt
-            v = v + vo * dt
-            w = w + wo * dt
+            ! u = u + uo * dt
+            ! v = v + vo * dt
+            ! w = w + wo * dt
 
         END DO
 
@@ -768,18 +764,16 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: i, j, k
         INTEGER(intk) :: il, jl, kl
-        REAL(realk) :: fx, fy, fz
         REAL(realk) :: dsx(ii), dsy(jj), dsz(kk)
         REAL(realk) :: div(kk, jj, ii)
 
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
-        CALL get_spatial_factors(kk, jj, ii, l, fx, fy, fz)
         CALL get_spatial_extents(kk, jj, ii, l, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
 
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    div(k,j,i) = ( vel(k,j,i) - vel(k-kl,j-jl,i-il) ) / ( fx * dsx(i) + fy * dsy(j) + fz * dsz(k) )
+                    div(k,j,i) = ( vel(k,j,i) - vel(k-kl,j-jl,i-il) ) / ( il * dsx(i) + jl * dsy(j) + kl * dsz(k) )
                     vff(k,j,i) = vff(k,j,i) - dt * ( vffFlux(k,j,i) - vffFlux(k-kl,j-jl,i-il) ) + dt * cWY(k,j,i) * div(k,j,i)
                 END DO
             END DO
@@ -809,7 +803,7 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: i, j, k
         INTEGER(intk) :: il, jl, kl
-        REAL(realk) :: fx, fy, fz
+        INTEGER(intk) :: iq, jq, kq
         REAL(realk) :: dsx(ii), dsy(jj), dsz(kk)
         REAL(realk) :: vel(kk,jj,ii)
         REAL(realk) :: dStag(kk, jj, ii)
@@ -817,7 +811,7 @@ CONTAINS
         REAL(realk) :: div, com
 
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
-        CALL get_spatial_factors(kk, jj, ii, q, fx, fy, fz)
+        CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
         CALL get_spatial_extents(kk, jj, ii, l, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
         CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
 
@@ -834,7 +828,7 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    div = ( advr(k,j,i) - advr(k-kl,j-jl,i-il) ) / ( fx * dsx(i) + fy * dsy(j) + fz * dsz(k) )
+                    div = ( advr(k,j,i) - advr(k-kl,j-jl,i-il) ) / ( iq * dsx(i) + jq * dsy(j) + kq * dsz(k) )
                     com = ( rho1 * cWY(k,j,i) + rho2 * (1.0_realk - cWY(k,j,i)) ) * div
                     mom(k,j,i) = mom(k,j,i) - dt * ( momFlux(k,j,i) - momFlux(k-kl,j-jl,i-il) ) + dt * vel(k,j,i) * com
                 END DO
@@ -1158,23 +1152,23 @@ CONTAINS
 
         ! Loval variables
         INTEGER(intk) :: k, j, i
-        REAL(realk) :: fx, fy, fz
+        INTEGER(intk) :: kq, jq, iq
 
-        CALL get_spatial_factors(kk, jj, ii, q, fx, fy, fz)
+        CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
 
         DO i = 2, ii-2
             DO j = 2, jj-2
                 DO k = 2, kk-2
 
-                    ge(k,j,i) = fx * g(k,j,i+1) + &
-                                fy * 1.0_realk / ( vff(k,j,i+1) / gmol1 + ( 1.0_realk - vff(k,j,i+1) ) / gmol2 ) + &
-                                fz * 1.0_realk / ( vff(k,j,i+1) / gmol1 + ( 1.0_realk - vff(k,j,i+1) ) / gmol2 )
-                    gn(k,j,i) = fx * 1.0_realk / ( vff(k,j+1,i) / gmol1 + ( 1.0_realk - vff(k,j+1,i) ) / gmol2 ) + &
-                                fy * g(k,j+1,i) + &
-                                fz * 1.0_realk / ( vff(k,j+1,i) / gmol1 + ( 1.0_realk - vff(k,j+1,i) ) / gmol2 )
-                    gt(k,j,i) = fx * 1.0_realk / ( vff(k+1,j,i) / gmol1 + ( 1.0_realk - vff(k+1,j,i) ) / gmol2 ) + &
-                                fy * 1.0_realk / ( vff(k+1,j,i) / gmol1 + ( 1.0_realk - vff(k+1,j,i) ) / gmol2 ) + &
-                                fz * g(k+1,j,i)
+                    ge(k,j,i) = iq * g(k,j,i+1) + &
+                                jq * 1.0_realk / ( vff(k,j,i+1) / gmol1 + ( 1.0_realk - vff(k,j,i+1) ) / gmol2 ) + &
+                                kq * 1.0_realk / ( vff(k,j,i+1) / gmol1 + ( 1.0_realk - vff(k,j,i+1) ) / gmol2 )
+                    gn(k,j,i) = iq * 1.0_realk / ( vff(k,j+1,i) / gmol1 + ( 1.0_realk - vff(k,j+1,i) ) / gmol2 ) + &
+                                jq * g(k,j+1,i) + &
+                                kq * 1.0_realk / ( vff(k,j+1,i) / gmol1 + ( 1.0_realk - vff(k,j+1,i) ) / gmol2 )
+                    gt(k,j,i) = iq * 1.0_realk / ( vff(k+1,j,i) / gmol1 + ( 1.0_realk - vff(k+1,j,i) ) / gmol2 ) + &
+                                jq * 1.0_realk / ( vff(k+1,j,i) / gmol1 + ( 1.0_realk - vff(k+1,j,i) ) / gmol2 ) + &
+                                kq * g(k+1,j,i)
 
                 ENDDO
             ENDDO
@@ -1200,23 +1194,23 @@ CONTAINS
 
     !     ! Loval variables
     !     INTEGER(intk) :: k, j, i
-    !     REAL(realk) :: fx, fy, fz
+    !     INTEGER(intk) :: kq, jq, iq
 
-    !     CALL get_spatial_factors(kk, jj, ii, q, fx, fy, fz)
+    !     CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
 
     !     DO i = 2, ii-2
     !         DO j = 2, jj-2
     !             DO k = 2, kk-2
 
     !                 ge(k,j,i) = fx * g(k,j,i+1) + &
-    !                             fy * ( vff(k,j,i+1) * gmol1 + ( 1.0_realk - vff(k,j,i+1) ) * gmol2 ) + &
-    !                             fz * ( vff(k,j,i+1) * gmol1 + ( 1.0_realk - vff(k,j,i+1) ) * gmol2 )
+    !                             jl * ( vff(k,j,i+1) * gmol1 + ( 1.0_realk - vff(k,j,i+1) ) * gmol2 ) + &
+    !                             kl * ( vff(k,j,i+1) * gmol1 + ( 1.0_realk - vff(k,j,i+1) ) * gmol2 )
     !                 gn(k,j,i) = fx * ( vff(k,j+1,i) * gmol1 + ( 1.0_realk - vff(k,j+1,i) ) * gmol2 ) + &
-    !                             fy * g(k,j+1,i) + &
-    !                             fz * ( vff(k,j+1,i) * gmol1 + ( 1.0_realk - vff(k,j+1,i) ) * gmol2 )
+    !                             jl * g(k,j+1,i) + &
+    !                             kl * ( vff(k,j+1,i) * gmol1 + ( 1.0_realk - vff(k,j+1,i) ) * gmol2 )
     !                 gt(k,j,i) = fx * ( vff(k+1,j,i) * gmol1 + ( 1.0_realk - vff(k+1,j,i) ) * gmol2 ) + &
-    !                             fy * ( vff(k+1,j,i) * gmol1 + ( 1.0_realk - vff(k+1,j,i) ) * gmol2 ) + &
-    !                             fz * g(k+1,j,i)
+    !                             jl * ( vff(k+1,j,i) * gmol1 + ( 1.0_realk - vff(k+1,j,i) ) * gmol2 ) + &
+    !                             kl * g(k+1,j,i)
 
     !             ENDDO
     !         ENDDO
