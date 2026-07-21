@@ -100,9 +100,9 @@ CONTAINS
             IF ( test_multiphase /= "none" ) THEN
                 CALL update_velocity(u, v, w, vff, itstep, dt)
             END IF
-            write(*,*) dtrki
+
             CALL multiphase_solve(u, v, w, vff, p, g, d, dt*dtrki, itstep, uo, vo, wo)
-            CALL validate_velocity(u, v, w, itstep, dt)
+            ! CALL validate_velocity(u, v, w, itstep, dt)
 
             CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
             CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)

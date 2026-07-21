@@ -1,7 +1,7 @@
 {
     "time": {
         "dt": 0.003125,
-        "mtstep": 640,
+        "mtstep": 1,
 	"itinfo": 10,
         "tstat": 10.0,
 	"read": false
@@ -32,10 +32,11 @@
     "multiphase": {
     	"solve": true,
 	"test": "VorBoC",
-	"splitting": "component-wise",
+	"splitting": "direction-wise",
 	"rho1" : 1000.0,
 	"rho2" : 1.0,
-	"gmol1" : 0.000001,
-	"gmol2" : 0.000001
+	"gmol1" : 0.0001,
+	"gmol2" : 0.0001,
+	"gravity": [0.0, 0.0, 0.0]
     }   
 }

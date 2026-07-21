@@ -339,31 +339,65 @@
 
         ! Input variables
         REAL(realk) :: m1, m2, m3, c1, c2, c3
-        REAL(realk) :: alphaLoc
+        REAL(realk) :: alphaStd
 
         ! 1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
         ! To enhance performance consider inlining
         CALL get_order(m1, m2, m3, c1, c2, c3, normx, normy, normz, ddx, ddy, ddz)
 
         ! 2. If necessary, transform alpha regarding to its negative normal vector components
-        alphaLoc = alpha
+        alphaStd = alpha
         IF ( normx < 0.0_realk ) THEN
-            alphaLoc = alphaLoc - ddx*normx
+            alphaStd = alphaStd - ddx*normx
         ENDIF
 
         IF ( normy < 0.0_realk ) THEN
-            alphaLoc = alphaLoc - ddy*normy
+            alphaStd = alphaStd - ddy*normy
         ENDIF
 
         IF ( normz < 0.0_realk ) THEN
-            alphaLoc = alphaLoc - ddz*normz
+            alphaStd = alphaStd - ddz*normz
         ENDIF
 
         ! 3. If necessary, transform alpha to its conjugate alphaMax - alpha
         ! 4. Solve the standart case for vol
-        CALL comp_frac_std(m1, m2, m3, c1, c2, c3, alphaLoc, cellProportion, tol)
+        CALL comp_frac_std(m1, m2, m3, c1, c2, c3, alphaStd, cellProportion, tol)
 
     END SUBROUTINE comp_frac
+
+    !================================================================
+
+    ! SUBROUTINE comp_isec()
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !   
+    ! !----------------------------------------------------------------
+
+    !     ! Subroutine arguments
+
+
+    !     ! Local variables
+
+
+    !     IF ( .NOT. MIN(normz) <= tol ) THEN
+    !         return
+    !     ENDIF
+
+    !     CALL get_order(m1, m2, m3, c1, c2, c3, normx, normy, normz, ddx, ddy, ddz)
+
+    !     IF ( normx < 0.0_realk ) THEN
+    !         alpha = alpha - ddx*normx
+    !     ENDIF
+
+    !     IF ( normy < 0.0_realk ) THEN
+    !         alpha = alpha - ddy*normy
+    !     ENDIF
+
+    !     IF ( normz < 0.0_realk ) THEN
+    !         alpha = alpha - ddz*normz
+    !     ENDIF
+
+    ! END SUBROUTINE comp_isec
 
     !================================================================
 

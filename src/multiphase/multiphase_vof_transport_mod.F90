@@ -359,7 +359,7 @@ CONTAINS
         CALL get_field(rddx_f, "RDDX"); CALL get_field(rddy_f, "RDDY"); CALL get_field(rddz_f, "RDDZ")
 
         CALL get_field(normx_f, "NORMX"); CALL get_field(normy_f, "NORMY"); CALL get_field(normz_f, "NORMZ")
-         CALL get_field(alpha_f, "ALPHA")
+        CALL get_field(alpha_f, "ALPHA")
 
         DO i = 1, nmygrids
             igrid = mygrids(i)
@@ -391,17 +391,13 @@ CONTAINS
             vffPrev = vff
 
             CALL adve_operator(kk, jj, ii, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, dt, itstep, tol, &
-                normx, normy, normz, alpha, uo, vo, wo)
+                normx, normy, normz, alpha)
 
             CALL diff_operator(kk, jj, ii, u, v, w, vffPrev, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, tol, uo, vo, wo)
 
             CALL pres_operator(kk, jj, ii, vff, p, rdx, rdy, rdz, igrid, uo, vo, wo)
 
             CALL exte_operator(kk, jj, ii, vff, dx, dy, dz, ddx, ddy, ddz, uo, vo, wo)
-
-            ! u = u + uo * dt
-            ! v = v + vo * dt
-            ! w = w + wo * dt
 
         END DO
 
@@ -413,7 +409,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE adve_operator(kk, jj, ii, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, dt, itstep, tol, &
-        normx, normy, normz, alpha, uo, vo, wo)
+        normx, normy, normz, alpha)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -421,14 +417,13 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol, dt
         INTEGER(intk), INTENT(in) :: itstep
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii), alpha(kk, jj, ii)
-        REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: q, advSeq(3), l, splitDir
@@ -439,10 +434,15 @@ CONTAINS
         REAL(realk) :: vffFlux(kk, jj, ii), complVffFlux(kk, jj, ii), mom(kk, jj, ii), cWY(kk, jj, ii), cWYStag(kk, jj, ii)
         REAL(realk) :: advr(kk, jj, ii)
         REAL(realk) :: adve(kk, jj, ii)
-        REAL(realk) :: vel(kk, jj, ii), velo(kk, jj, ii, 3)
+        REAL(realk) :: vel(kk, jj, ii), velo(kk, jj, ii)
         REAL(realk) :: mom4D(kk, jj, ii, 3), vffStag4D(kk, jj, ii, 3), cWYStag4D(kk, jj, ii, 3)
-        
+        REAL(realk) :: uPrev(kk, jj, ii), vPrev(kk, jj, ii), wPrev(kk, jj, ii)
+
         IF ( splitting_multiphase == "component-wise" ) THEN
+
+            uPrev = u
+            vPrev = v
+            wPrev = w
 
             CALL def_advection_sequence(itstep, advSeq)
             CALL iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isIface, isIfaceVic)
@@ -467,12 +467,9 @@ CONTAINS
                 END DO
 
                 CALL comp_velocity_change(kk, jj, ii, q, u, v, w, vffStag, mom, dt, velo)
+                CALL update_velocity(kk, jj, ii, q, u, v, w, velo, dt)
 
             END DO
-
-            uo = velo(:,:,:,1)
-            vo = velo(:,:,:,2)
-            wo = velo(:,:,:,3)
 
             CALL comp_cWY(kk, jj, ii, vff, cWY)
 
@@ -481,8 +478,8 @@ CONTAINS
                 l = advSeq(splitDir)
 
                 CALL iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isIface, isIfaceVic)
-                CALL comp_flux_cent(kk, jj, ii, l, vff, isIface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                CALL get_condit_velocity(kk, jj, ii, l, u, v, w, vel)
+                CALL comp_flux_cent(kk, jj, ii, l, vff, isIface, uPrev, vPrev, wPrev, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                CALL get_condit_velocity(kk, jj, ii, l, uPrev, vPrev, wPrev, vel)
                 CALL adv_vof(kk, jj, ii, l, vffFlux, cWY, vel, dx, dy, dz, ddx, ddy, ddz, dt, tol, vff)
                 CALL clip_vff(kk, jj, ii, tol, vff)
                 CALL app_bcon()
@@ -490,6 +487,10 @@ CONTAINS
             END DO
 
         ELSE IF ( splitting_multiphase == "direction-wise" ) THEN
+
+            uPrev = u
+            vPrev = v
+            wPrev = w
 
             CALL def_advection_sequence(itstep, advSeq)
             CALL iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isIface, isIfaceVic)
@@ -526,16 +527,16 @@ CONTAINS
                     CALL adv_mom(kk, jj, ii, q, l, u, v, w, advr, adve, vffStag, vffFlux, complVffFlux, cWYStag, dx, dy, dz, ddx, ddy, ddz, dt, mom)
                     CALL adv_vof(kk, jj, ii, l, vffFlux, cWYStag, advr, dx, dy, dz, ddx, ddy, ddz, dt, tol, vffStag)
                     CALL comp_velocity_change(kk, jj, ii, q, u, v, w, vffStag, mom, dt, velo)
+                    CALL update_velocity(kk, jj, ii, q, u, v, w, velo, dt)
+
+                    mom4D(:,:,:,q) = mom
+                    vffStag4D(:,:,:,q) = vffStag
 
                 END DO
 
-                uo = velo(:,:,:,1)
-                vo = velo(:,:,:,2)
-                wo = velo(:,:,:,3)
-
                 CALL iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isIface, isIfaceVic)
-                CALL comp_flux_cent(kk, jj, ii, l, vff, isIface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-                CALL get_condit_velocity(kk, jj, ii, l, u, v, w, vel)
+                CALL comp_flux_cent(kk, jj, ii, l, vff, isIface, uPrev, vPrev, wPrev, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+                CALL get_condit_velocity(kk, jj, ii, l, uPrev, vPrev, wPrev, vel)
                 CALL adv_vof(kk, jj, ii, l, vffFlux, cWY, vel, dx, dy, dz, ddx, ddy, ddz, dt, tol, vff)
                 CALL clip_vff(kk, jj, ii, tol, vff)
                 CALL app_bcon()
@@ -881,7 +882,7 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: q
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii), vff(kk, jj, ii), mom(kk, jj, ii)
         REAL(realk), INTENT(in) :: dt
-        REAL(realk), INTENT(out) :: velo(kk,jj,ii,q)
+        REAL(realk), INTENT(out) :: velo(kk,jj,ii)
 
         ! Local variables
         INTEGER(intk) :: i, j, k
@@ -895,13 +896,40 @@ CONTAINS
             DO j = 3, jj-2
                 DO k = 3, kk-2
                     IF ( vff(k,j,i) >= 0.0_realk .AND. vff(k,j,i) <= 1.0_realk ) THEN
-                        velo(k,j,i,q) = ( mom(k,j,i) / dStag(k,j,i) - vel(k,j,i) ) / dt
+                        velo(k,j,i) = ( mom(k,j,i) / dStag(k,j,i) - vel(k,j,i) ) / dt
                     END IF
                 END DO
             END DO
         END DO
 
     END SUBROUTINE comp_velocity_change
+
+    !================================================================
+
+    SUBROUTINE update_velocity(kk, jj, ii, q, u, v, w, velo, dt)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii, q
+        REAL(realk), INTENT(inout) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: velo(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dt
+
+        ! Local variables
+        ! None
+
+        IF (q == 1) THEN
+            u = u + velo * dt
+        ELSEIF (q == 2) THEN
+            v = v + velo * dt
+        ELSEIF (q == 3) THEN
+            w = w + velo * dt
+        ENDIF
+
+    END SUBROUTINE
 
     !================================================================
 

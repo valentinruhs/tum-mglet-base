@@ -217,10 +217,10 @@ CONTAINS
                     randt = [0.7019, 0.5916, 0.6264, 0.9859, 0.4035, 0.1262, 0.3234, 0.1483, 0.8225, 0.4155]
                     maxTrans = 0.15_realk
                     theta = randt(r) * 2.0_realk * pi
-                    centx = 0.5_realk !+ randx(r) * maxTrans
-                    centy = 0.5_realk !+ randy(r) * maxTrans
+                    centx = 0.5_realk + randx(r) * maxTrans
+                    centy = 0.5_realk + randy(r) * maxTrans
                     a = 0.3464_realk ; b = 0.1414_realk ; e = SQRT(a**2.0_realk - b**2.0_realk)
-                    iSub = 256 ; jSub = 256 ; kSub = 1
+                    iSub = 1024 ; jSub = 1024 ; kSub = 1
                     ! Outer loop over cells
                     DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
                         inside = 0.0_realk
@@ -371,8 +371,8 @@ CONTAINS
                 ! 6 random directions (see fac). In steps 1201-1400
                 ! the sphere is translated back to [0.5, 0.5].
                 IF ( itstep <= 1200 ) THEN 
-                    u = cos(fac(floor((itstep-1)/200.0_realk) + 1)*2.0_realk*pi) * magnitude
-                    v = sin(fac(floor((itstep-1)/200.0_realk) + 1)*2.0_realk*pi) * magnitude
+                    u = COS(fac(floor((itstep-1)/200.0_realk) + 1)*2.0_realk*pi) * magnitude
+                    v = SIN(fac(floor((itstep-1)/200.0_realk) + 1)*2.0_realk*pi) * magnitude
                 ELSE IF ( itstep <= 1400 ) THEN
                     u =   0.008793826_realk
                     v = - 0.008883616_realk
@@ -386,9 +386,9 @@ CONTAINS
                 DO i = 1, ii
                     DO j = 1, jj
                         DO k = 1, kk
-                            psi(k,j,i) = - 1/pi * cos(pi * itstep * dt / 2.0_realk) * &
-                                sin(pi*(- 2.0_realk * ddx(1) + i * ddx(1)))**2.0_realk * &
-                                sin(pi*(- 2.0_realk * ddy(1) + j * ddy(1)))**2.0_realk
+                            psi(k,j,i) = 1/pi * COS(pi * itstep * dt / 2.0_realk) * &
+                                SIN(pi*(- 1.5_realk * ddx(1) + (i-1) * ddx(1)))**2.0_realk * &
+                                SIN(pi*(- 1.5_realk * ddy(1) + (j-1) * ddy(1)))**2.0_realk
                         END DO
                     END DO 
                 END DO
@@ -400,7 +400,7 @@ CONTAINS
                             w(k,j,i) = 0.0_realk
                         END DO
                     END DO
-                END DO   
+                END DO
             ELSE IF ( test_multiphase == 'CylAdF' .OR. test_multiphase == 'CylAdC' ) THEN
                 IF ( itstep == 1 ) THEN
                     DO i = 1, ii
@@ -549,5 +549,70 @@ CONTAINS
         ENDDO
 
     END SUBROUTINE validate_velocity
+
+    !================================================================
+
+    ! SUBROUTINE validate_ellipse()
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !   
+    ! !----------------------------------------------------------------
+
+    !     ! Subroutine arguments
+    !     TYPE(field_t), INTENT(in) :: vff_f
+
+    !     ! Local variables
+    !     INTEGER(intk) :: l
+    !     REAL(realk) :: centx, centy, x, y, a, b, e, maxTrans, theta, dlinSpac
+    !     REAL(realk) :: randx(10), randy(10), randt(10)
+    !     REAL(realk) :: linSpac(100000), ellx(100000), elly(100000)
+
+    !     randx = [0.2047, 0.8682, 0.8612, 0.9178,  -0.42, 0.7934, 0.9832, 0.0922, -0.348, 0.2323]
+    !     randy = [0.4138, 0.7814, 0.3582, -0.841, 0.9691, 0.8432, 0.2889, -0.527, 0.2153, -0.781]
+    !     randt = [0.7019, 0.5916, 0.6264, 0.9859, 0.4035, 0.1262, 0.3234, 0.1483, 0.8225, 0.4155]
+    !     maxTrans = 0.15_realk
+    !     theta = randt(r) * 2.0_realk * pi
+    !     centx = 0.5_realk + randx(r) * maxTrans
+    !     centy = 0.5_realk + randy(r) * maxTrans
+    !     a = 0.3464_realk ; b = 0.1414_realk ; e = SQRT(a**2.0_realk - b**2.0_realk)
+    !     dlinSpac = 2.0_realk * pi / SIZE(linSpac)
+
+    !     DO l = 1, 100000
+    !         linSpac(l) = l * dlinSpac
+    !     ENDDO
+
+    !     ellx = centx + a * COS(linSpac) * COS(theta) - b * SIN(linSpac) * SIN(theta)
+    !     elly = centy + a * COS(linSpac) * SIN(theta) + b * SIN(linSpac) * COS(theta)
+
+    !     CALL get_field(normx_f, "NORMX")
+    !     CALL get_field(normy_f, "NORMY")
+    !     CALL get_field(normz_f, "NORMZ")
+    !     CALL get_field(alpha_f, "ALPHA")
+
+    !     DO n = 1, nmygrids
+    !         igrid = mygrids(n)
+
+    !         CALL get_mgdims(kk, jj, ii, igrid)
+
+    !         CALL normx_f%get_ptr(normx, igrid)
+    !         CALL normy_f%get_ptr(normy, igrid)
+    !         CALL normz_f%get_ptr(normz, igrid)
+    !         CALL alpha_f%get_ptr(alpha, igrid)
+
+    !         DO i = 3, ii-2
+    !             DO j = 3, jj-2
+    !                 DO k = 3, kk-2
+    !                     IF ( normx(k,j,i) >= 1.0E-12_realk .OR. &
+    !                          normy(k,j,i) >= 1.0E-12_realk .OR. &
+    !                          normz(k,j,i) >= 1.0E-12_realk ) THEN
+
+    !                     ENDIF
+    !                 ENDDO
+    !             ENDDO
+    !         ENDDO
+
+    !     ENDDO
+
+    ! END SUBROUTINE validate_ellipse
 
 END MODULE multiphase_io_mod
