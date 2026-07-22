@@ -161,7 +161,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_flux_stag(kk, jj, ii, q, l, vff, isIface, u, v, w, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complementvffFlux)
+    SUBROUTINE comp_flux_stag(kk, jj, ii, l, vff, isIface, advr, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complementvffFlux)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the volume fraction fluxes depending on the current
@@ -171,11 +171,10 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: q, l
+        INTEGER(intk), INTENT(in) :: kk, jj, ii, l
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
-        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: advr(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
         REAL(realk), INTENT(in) :: dt
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
@@ -187,12 +186,11 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kl, jl, il
-        REAL(realk) :: advr(kk, jj, ii), ds, dds, norms
+        REAL(realk) :: ds, dds, norms
         REAL(realk) :: dimX, dimY, dimZ
         REAL(realk) :: flux, fluxedProp, fluxWidth, fluxAlpha, complementFlux
 
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
-        CALL comp_advr_linear_interpolation(kk, jj, ii, l, u, v, w, advr)
 
         DO i = 2, ii-2
             DO j = 2, jj-2
@@ -206,7 +204,7 @@ CONTAINS
 
                             ! Compute face fluxwidth and proper alpha
                             fluxWidth = abs( advr(k,j,i) ) * dt
-                            fluxAlpha = alpha(k+kl,j+jl,i+il) - norms * ( dds / 2.0_realk - fluxWidth )
+                            fluxAlpha = alpha(k+kl,j+jl,i+il) - norms * ( dds / 2.0_realk - SIGN(1.0_realk,advr(k,j,i)) * fluxWidth )
 
                             ! Compute dimensions of fluxed cuboid
                             dimX = il * fluxWidth + jl * ddy(j+1) + kl * ddz(k+1)
@@ -348,6 +346,9 @@ CONTAINS
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
         REAL(realk), PARAMETER :: tol = 1.0E-12_realk
 
+        CALL check_continuity(tol, itstep)
+        CALL check_solenoidality(tol, itstep)
+
         uo_f = 0.0_realk
         vo_f = 0.0_realk
         wo_f = 0.0_realk
@@ -390,7 +391,7 @@ CONTAINS
             IF ( .NOT. ALLOCATED(vffPrev) ) ALLOCATE(vffPrev(kk, jj, ii))
             vffPrev = vff
 
-            CALL adve_operator(kk, jj, ii, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, dt, itstep, tol, &
+            CALL adve_operator(kk, jj, ii, u, v, w, vff, d, dx, dy, dz, ddx, ddy, ddz, dt, itstep, tol, &
                 normx, normy, normz, alpha)
 
             CALL diff_operator(kk, jj, ii, u, v, w, vffPrev, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, tol, uo, vo, wo)
@@ -401,14 +402,11 @@ CONTAINS
 
         END DO
 
-        CALL check_continuity(tol)
-        CALL check_solenoidality(tol)
-
     END SUBROUTINE multiphase_solve
 
     !================================================================
 
-    SUBROUTINE adve_operator(kk, jj, ii, u, v, w, vff, dx, dy, dz, ddx, ddy, ddz, dt, itstep, tol, &
+    SUBROUTINE adve_operator(kk, jj, ii, u, v, w, vff, d, dx, dy, dz, ddx, ddy, ddz, dt, itstep, tol, &
         normx, normy, normz, alpha)
     !----------------------------------------------------------------
     !   What it does:
@@ -418,7 +416,7 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(inout) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-        REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: vff(kk, jj, ii), d(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: tol, dt
@@ -460,7 +458,7 @@ CONTAINS
 
                     CALL comp_advr_linear_interpolation(kk, jj, ii, l, u, v, w, advr)
                     CALL comp_adve_quick(kk, jj, ii, q, l, u, v, w, advr, vffStag, tol, adve)
-                    CALL comp_flux_stag(kk, jj, ii, q, l, vff, isIface, u, v, w, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
+                    CALL comp_flux_stag(kk, jj, ii, l, vff, isIface, advr, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
                     CALL adv_mom(kk, jj, ii, q, l, u, v, w, advr, adve, vffStag, vffFlux, complVffFlux, cWYStag, dx, dy, dz, ddx, ddy, ddz, dt, mom)
                     CALL adv_vof(kk, jj, ii, l, vffFlux, cWYStag, advr, dx, dy, dz, ddx, ddy, ddz, dt, tol, vffStag)
 
@@ -483,6 +481,7 @@ CONTAINS
                 CALL adv_vof(kk, jj, ii, l, vffFlux, cWY, vel, dx, dy, dz, ddx, ddy, ddz, dt, tol, vff)
                 CALL clip_vff(kk, jj, ii, tol, vff)
                 CALL app_bcon()
+                CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, 'ARI', d)
 
             END DO
 
@@ -514,16 +513,17 @@ CONTAINS
 
                 l = advSeq(splitDir)
 
+                CALL comp_advr_linear_interpolation(kk, jj, ii, l, u, v, w, advr)
+
                 DO q = 1, 3
 
                     vffStag = vffStag4D(:,:,:,q)
                     mom = mom4D(:,:,:,q)
                     cWYStag = cWYStag4D(:,:,:,q)
 
-                    CALL comp_advr_linear_interpolation(kk, jj, ii, l, u, v, w, advr)
                     CALL comp_adve_quick(kk, jj, ii, q, l, u, v, w, advr, vffStag, tol, adve)
                     ! CALL comp_adve_eno(kk, jj, ii, q, l, u, v, w, advr, dx, dy, dz, ddx, ddy, ddz, tol, adve)
-                    CALL comp_flux_stag(kk, jj, ii, q, l, vff, isIface, u, v, w, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
+                    CALL comp_flux_stag(kk, jj, ii, l, vff, isIface, advr, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
                     CALL adv_mom(kk, jj, ii, q, l, u, v, w, advr, adve, vffStag, vffFlux, complVffFlux, cWYStag, dx, dy, dz, ddx, ddy, ddz, dt, mom)
                     CALL adv_vof(kk, jj, ii, l, vffFlux, cWYStag, advr, dx, dy, dz, ddx, ddy, ddz, dt, tol, vffStag)
                     CALL comp_velocity_change(kk, jj, ii, q, u, v, w, vffStag, mom, dt, velo)
@@ -540,6 +540,7 @@ CONTAINS
                 CALL adv_vof(kk, jj, ii, l, vffFlux, cWY, vel, dx, dy, dz, ddx, ddy, ddz, dt, tol, vff)
                 CALL clip_vff(kk, jj, ii, tol, vff)
                 CALL app_bcon()
+                CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, 'ARI', d)
 
             END DO
 
@@ -647,7 +648,7 @@ CONTAINS
                     tauzzb = gt(k-1,j,i,3) * 2.0_realk * (w(k,j,i) - w(k-1,j,i)) * rddz(k)
 
                     ! Change due to diffusion
-                    wo(k,j,i) = wo(k,j,i) + 2.0_realk/( d(k,j,i) + d(k,j,i+1) ) * &
+                    wo(k,j,i) = wo(k,j,i) + 2.0_realk/( d(k,j,i) + d(k+1,j,i) ) * &
                         ( ( tauzxe - tauzxw ) * rddx(i) + &
                           ( tauzyn - tauzys ) * rddy(j) + &
                           ( tauzzt - tauzzb ) * rdz(k) )
@@ -804,7 +805,6 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: i, j, k
         INTEGER(intk) :: il, jl, kl
-        INTEGER(intk) :: iq, jq, kq
         REAL(realk) :: dsx(ii), dsy(jj), dsz(kk)
         REAL(realk) :: vel(kk,jj,ii)
         REAL(realk) :: dStag(kk, jj, ii)
@@ -812,8 +812,7 @@ CONTAINS
         REAL(realk) :: div, com
 
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
-        CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
-        CALL get_spatial_extents(kk, jj, ii, l, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
+        CALL get_spatial_extents(kk, jj, ii, q, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
         CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
 
         CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, 'ARI', dStag)
@@ -829,7 +828,7 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    div = ( advr(k,j,i) - advr(k-kl,j-jl,i-il) ) / ( iq * dsx(i) + jq * dsy(j) + kq * dsz(k) )
+                    div = ( advr(k,j,i) - advr(k-kl,j-jl,i-il) ) / ( il * dsx(i) + jl * dsy(j) + kl * dsz(k) )
                     com = ( rho1 * cWY(k,j,i) + rho2 * (1.0_realk - cWY(k,j,i)) ) * div
                     mom(k,j,i) = mom(k,j,i) - dt * ( momFlux(k,j,i) - momFlux(k-kl,j-jl,i-il) ) + dt * vel(k,j,i) * com
                 END DO
@@ -1012,7 +1011,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE check_solenoidality(tol)
+    SUBROUTINE check_solenoidality(tol, itstep)
     !----------------------------------------------------------------
     !   What it does:
     !   Checks, if the field is solenoidal. Only used during coding.
@@ -1021,6 +1020,7 @@ CONTAINS
 
         ! Subroutine arguments
         REAL(realk) :: tol
+        INTEGER(intk) :: itstep
 
         ! Local variables
         TYPE(field_t), POINTER :: u_f, v_f, w_f
@@ -1029,9 +1029,6 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:)
         INTEGER(intk) :: kk, jj, ii, k, j, i, n, igrid
         REAL(realk), ALLOCATABLE :: div(:,:,:)
-        REAL(realk) :: uChar, lChar, L1tol, L2tol, Linftol, L1Norm, L2Norm, LinfNorm
-
-        return
 
         CALL get_field(u_f, "U")
         CALL get_field(v_f, "V")
@@ -1053,6 +1050,7 @@ CONTAINS
             CALL ddz_f%get_ptr(ddz, igrid)
 
             IF ( .NOT. ALLOCATED(div) ) ALLOCATE(div(kk,jj,ii))
+            div = 0.0_realk
 
             DO i = 3, ii-2
                 DO j = 3, jj-2
@@ -1064,24 +1062,9 @@ CONTAINS
                 END DO
             END DO
 
-            uChar = MAX(MAXVAL(ABS(u(3:kk-2,3:jj-2,3:ii-2))), &
-                        MAXVAL(ABS(v(3:kk-2,3:jj-2,3:ii-2))), &
-                        MAXVAL(ABS(w(3:kk-2,3:jj-2,3:ii-2))))
-            lChar = MAX(MAXVAL(ABS(ddx(3:ii-2))), &
-                        MAXVAL(ABS(ddy(3:jj-2))), &
-                        MAXVAL(ABS(ddz(3:kk-2))))
-
-            L1tol = tol * uChar / lChar
-            L2tol = tol * uChar / lChar * ( SIZE(div(3:kk-2,3:jj-2,3:ii-2)) )**(1.0_realk/2.0_realk)
-            Linftol = tol * uChar / lChar * SIZE(div(3:kk-2,3:jj-2,3:ii-2))
-            
-            L1Norm = SUM( ABS(div(3:kk-2,3:jj-2,3:ii-2)) )
-            L2Norm = ( SUM( div(3:kk-2,3:jj-2,3:ii-2)**2.0_realk ) )**(1.0_realk/2.0_realk)
-            LinfNorm = MAXVAL( ABS(div(3:kk-2,3:jj-2,3:ii-2)) )
-
-            IF ( L1Norm > L1tol .OR. L2Norm > L2tol .OR. LinfNorm > Linftol ) THEN
-                WRITE(*,*) "Velocity not solenoidal: L1 =", L1Norm, " L2 =", L2Norm, " Linf =", LinfNorm
-            END IF
+            IF ( SUM(ABS(div)) >= tol ) THEN
+                WRITE(*,*) "Solenoidality violated at itstep ", itstep, ": L1-Norm Error = ", SUM(ABS(div))
+            ENDIF
 
         ENDDO
 
@@ -1089,7 +1072,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE check_continuity(tol)
+    SUBROUTINE check_continuity(tol, itstep)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -1097,6 +1080,7 @@ CONTAINS
 
         ! Subroutine arguments
         REAL(realk) :: tol
+        INTEGER(intk) :: itstep
 
         ! Local variables
         TYPE(field_t), POINTER :: vff_f
@@ -1134,7 +1118,7 @@ CONTAINS
         ENDDO
 
         IF ( ABS(apprVol - volFl1) >= tol ) THEN
-            WRITE(*,*) "Continuity equation is violated: volumeError = ", ABS(apprVol - volFl1)
+            WRITE(*,*) "Conti. equ. violated at itstep ", itstep, ": vol. err. [%] = ", ABS(apprVol - volFl1) / apprVol * 100.0_realk
         ENDIF
 
     END SUBROUTINE check_continuity

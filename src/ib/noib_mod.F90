@@ -2,6 +2,7 @@ MODULE noib_mod
     USE core_mod
     USE ibmodel_mod, ONLY: ibmodel_t
     USE noib_restrict_mod, ONLY: noib_restrict_t
+    USE multiphasecore_mod, ONLY: solve_multiphase
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -80,27 +81,34 @@ CONTAINS
         ! none...
 
         ! Local variables
+        TYPE(field_t), POINTER :: d_f
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kk, jj, ii
         INTEGER(intk) :: igr, igrid
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
-        REAL(realk), POINTER, CONTIGUOUS :: ae(:),  aw(:),  an(:), as(:), &
-            at(:), ab(:)
+        REAL(realk), POINTER, CONTIGUOUS :: ae(:,:,:), aw(:,:,:), &
+                                            an(:,:,:), as(:,:,:), &
+                                            at(:,:,:), ab(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ap(:, :, :)
         REAL(realk), POINTER, CONTIGUOUS :: bp(:, :, :)
+        REAL(realk), POINTER, CONTIGUOUS :: d(:, :, :)
 
         ! 1-D fields used in the pressure solver
-        CALL set_field("GSAW", ndim=1, get_len=get_ii)
-        CALL set_field("GSAE", ndim=1, get_len=get_ii)
-        CALL set_field("GSAS", ndim=1, get_len=get_jj)
-        CALL set_field("GSAN", ndim=1, get_len=get_jj)
-        CALL set_field("GSAB", ndim=1, get_len=get_kk)
-        CALL set_field("GSAT", ndim=1, get_len=get_kk)
+        CALL set_field("GSAW", ndim=3)
+        CALL set_field("GSAE", ndim=3)
+        CALL set_field("GSAS", ndim=3)
+        CALL set_field("GSAN", ndim=3)
+        CALL set_field("GSAB", ndim=3)
+        CALL set_field("GSAT", ndim=3)
 
         ! 3-D fields in the pressure solver
         CALL set_field("GSAP")
+
+        IF ( solve_multiphase ) THEN
+            CALL get_field(d_f, "D")
+        ENDIF
 
         DO igr = 1, nmygrids
             igrid = mygrids(igr)
@@ -121,18 +129,34 @@ CONTAINS
 
             CALL get_fieldptr(ap, "GSAP", igrid)
 
-            DO i = 3, ii-2
-                ae(i) = 2.0/((dx(i-1)+dx(i))*dx(i))
-                aw(i) = 2.0/((dx(i-1)+dx(i))*dx(i-1))
-            END DO
-            DO j = 3, jj-2
-                an(j) = 2.0/((dy(j-1)+dy(j))*dy(j))
-                as(j) = 2.0/((dy(j-1)+dy(j))*dy(j-1))
-            END DO
-            DO k = 3, kk-2
-                at(k) = 2.0/((dz(k-1)+dz(k))*dz(k))
-                ab(k) = 2.0/((dz(k-1)+dz(k))*dz(k-1))
-            END DO
+            IF ( solve_multiphase ) THEN
+                CALL d_f%get_ptr(d, igrid)
+                DO i = 3, ii-2
+                    DO j = 3, jj-2
+                        DO k = 3, kk-2
+                            ae(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i)*2.0_realk/(1.0_realk/d(k,j,i+1)+1.0_realk/d(k,j,i)))
+                            aw(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i-1)*2.0_realk/(1.0_realk/d(k,j,i)+1.0_realk/d(k,j,i-1)))
+                            an(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j)*2.0_realk/(1.0_realk/d(k,j+1,i)+1.0_realk/d(k,j,i)))
+                            as(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j-1)*2.0_realk/(1.0_realk/d(k,j,i)+1.0_realk/d(k,j-1,i)))
+                            at(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k)*2.0_realk/(1.0_realk/d(k+1,j,i)+1.0_realk/d(k,j,i)))
+                            ab(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k-1)*2.0_realk/(1.0_realk/d(k,j,i)+1.0_realk/d(k-1,j,i)))
+                        ENDDO
+                    ENDDO
+                ENDDO
+            ELSE
+                DO i = 3, ii-2
+                    DO j = 3, jj-2
+                        DO k = 3, kk-2
+                            ae(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i))
+                            aw(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i-1))
+                            an(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j))
+                            as(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j-1))
+                            at(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k))
+                            ab(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k-1))
+                        ENDDO
+                    ENDDO
+                ENDDO
+            ENDIF
 
             DO i = 3, ii-2
                 DO j = 3, jj-2
@@ -148,12 +172,12 @@ CONTAINS
                 DO j = 3, jj-2
                     DO k = 3, kk-2
                         ap(k, j, i) = ap(k, j, i) &
-                            + aw(i)*(1.0-bp(k, j, i-1)*bp(k, j, i)) &
-                            + ae(i)*(1.0-bp(k, j, i)*bp(k, j, i+1)) &
-                            + as(j)*(1.0-bp(k, j-1, i)*bp(k, j, i)) &
-                            + an(j)*(1.0-bp(k, j, i)*bp(k, j+1, i)) &
-                            + ab(k)*(1.0-bp(k-1, j, i)*bp(k, j, i)) &
-                            + at(k)*(1.0-bp(k, j, i)*bp(k+1, j, i))
+                            + aw(k,j,i)*(1.0-bp(k, j, i-1)*bp(k, j, i)) &
+                            + ae(k,j,i)*(1.0-bp(k, j, i)*bp(k, j, i+1)) &
+                            + as(k,j,i)*(1.0-bp(k, j-1, i)*bp(k, j, i)) &
+                            + an(k,j,i)*(1.0-bp(k, j, i)*bp(k, j+1, i)) &
+                            + ab(k,j,i)*(1.0-bp(k-1, j, i)*bp(k, j, i)) &
+                            + at(k,j,i)*(1.0-bp(k, j, i)*bp(k+1, j, i))
                     END DO
                 END DO
             END DO
@@ -165,10 +189,10 @@ CONTAINS
                 DO j = 3, jj-2
                     DO k = 3, kk-2
                         ap(k, j, 3) = ap(k, j, 3) &
-                            + aw(3)*(bp(k, j, 2)*bp(k, j, 3))
+                            + aw(k,j,3)*(bp(k, j, 2)*bp(k, j, 3))
                     END DO
                 END  DO
-                aw(3) = 0.0
+                aw(k,j,3) = 0.0
             END IF
 
             ! Back/East
@@ -176,10 +200,10 @@ CONTAINS
                 DO j = 3, jj-2
                     DO k = 3, kk-2
                         ap(k, j, ii-2) = ap(k, j, ii-2) &
-                            + ae(ii-2)*(bp(k, j, ii-2)*bp(k, j, ii-1))
+                            + ae(k,j,ii-2)*(bp(k, j, ii-2)*bp(k, j, ii-1))
                     END DO
                 END  DO
-                ae(ii-2) = 0.0
+                ae(k,j,ii-2) = 0.0
             END IF
 
             ! Right/South
@@ -187,10 +211,10 @@ CONTAINS
                 DO i = 3, ii-2
                     DO k = 3, kk-2
                         ap(k, 3, i) = ap(k, 3, i) &
-                            + as(3)*(bp(k, 2, i)*bp(k, 3, i))
+                            + as(k,3,i)*(bp(k, 2, i)*bp(k, 3, i))
                     END DO
                 END  DO
-                as(3) = 0.0
+                as(k,3,i) = 0.0
             END IF
 
             ! Left/North
@@ -198,10 +222,10 @@ CONTAINS
                 DO i = 3, ii-2
                     DO k = 3, kk-2
                         ap(k, jj-2, i) = ap(k, jj-2, i) &
-                            + an(jj-2)*(bp(k, jj-2, i)*bp(k, jj-1, i))
+                            + an(k,jj-2,i)*(bp(k, jj-2, i)*bp(k, jj-1, i))
                     END DO
                 END  DO
-                an(jj-2) = 0.0
+                an(k,jj-2,i) = 0.0
             END IF
 
             ! Bottom
@@ -209,10 +233,10 @@ CONTAINS
                 DO i = 3, ii-2
                     DO j = 3, jj-2
                         ap(3, j, i) = ap(3, j, i) &
-                            + ab(3)*(bp(2, j, i)*bp(3, j, i))
+                            + ab(3,j,i)*(bp(2, j, i)*bp(3, j, i))
                     END DO
                 END  DO
-                ab(3) = 0.0
+                ab(3,j,i) = 0.0
             END IF
 
             ! Top
@@ -220,10 +244,10 @@ CONTAINS
                 DO i = 3, ii-2
                     DO j = 3, jj-2
                         ap(kk-2, j, i) = ap(kk-2, j, i) &
-                            + at(kk-2)*(bp(kk-2, j, i)*bp(kk-1, j, i))
+                            + at(kk-2,j,i)*(bp(kk-2, j, i)*bp(kk-1, j, i))
                     END DO
                 END  DO
-                at(kk-2) = 0.0
+                at(kk-2,j,i) = 0.0
             END IF
         END DO
     END SUBROUTINE giteig

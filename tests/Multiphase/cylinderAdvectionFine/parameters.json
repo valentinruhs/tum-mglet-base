@@ -19,10 +19,11 @@
         "rho": 1.0,
         "uinf": [0.0, 0.0, 0.0],
         "pressuresolver": {
-            "type": "sip",
+            "type": "sor",
+	    "omega": 1.1,
             "epcorr": 0.00002,
-            "nouter": 9,
-            "ninner": 5
+            "nouter": 90,
+            "ninner": 50
         },
         "lesmodel": {
             "model": "none"
