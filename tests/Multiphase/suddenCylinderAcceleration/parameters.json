@@ -20,9 +20,10 @@
         "uinf": [0.0, 0.0, 0.0],
         "pressuresolver": {
             "type": "sip",
-            "epcorr": 0.00002,
-            "nouter": 9,
-            "ninner": 5
+            "epcorr": 0.00000000002,
+            "nouter": 90,
+            "ninner": 50,
+	    "loglevel": 3
         },
         "lesmodel": {
             "model": "none"
@@ -32,7 +33,6 @@
     "multiphase": {
     	"solve": true,
 	"test": "SCylAc",
-	"splitting" : "direction-wise",
 	"permutation" : 3,
 	"rho1" : 1000.0,
 	"rho2" : 1.0,

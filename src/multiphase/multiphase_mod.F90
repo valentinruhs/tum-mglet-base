@@ -91,14 +91,12 @@ CONTAINS
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kk, jj, ii
         INTEGER(intk) :: igr, igrid
-        INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ae(:,:,:), aw(:,:,:), &
                                             an(:,:,:), as(:,:,:), &
                                             at(:,:,:), ab(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ap(:, :, :)
-        REAL(realk), POINTER, CONTIGUOUS :: bp(:, :, :)
         REAL(realk), POINTER, CONTIGUOUS :: vff(:, :, :)
         REAL(realk), ALLOCATABLE :: rhoe(:, :, :), rhon(:, :, :), rhot(:, :, :)
 
@@ -112,7 +110,6 @@ CONTAINS
             CALL get_fieldptr(dx, "DX", igrid)
             CALL get_fieldptr(dy, "DY", igrid)
             CALL get_fieldptr(dz, "DZ", igrid)
-            CALL get_fieldptr(bp, "BP", igrid)
 
             CALL get_fieldptr(aw, "GSAW", igrid)
             CALL get_fieldptr(ae, "GSAE", igrid)
@@ -147,104 +144,12 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        ap(k, j, i) = -2.0/(dx(i-1)*dx(i)) &
-                            -2.0/(dy(j-1)*dy(j)) &
-                            -2.0/(dz(k-1)*dz(k))
-                    END DO
-                END DO
-            END DO
-
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        ap(k, j, i) = ap(k, j, i) &
-                            + aw(k,j,i)*(1.0-bp(k, j, i-1)*bp(k, j, i)) &
-                            + ae(k,j,i)*(1.0-bp(k, j, i)*bp(k, j, i+1)) &
-                            + as(k,j,i)*(1.0-bp(k, j-1, i)*bp(k, j, i)) &
-                            + an(k,j,i)*(1.0-bp(k, j, i)*bp(k, j+1, i)) &
-                            + ab(k,j,i)*(1.0-bp(k-1, j, i)*bp(k, j, i)) &
-                            + at(k,j,i)*(1.0-bp(k, j, i)*bp(k+1, j, i))
-                    END DO
-                END DO
-            END DO
-
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
                         ap(k, j, i) = -( ae(k,j,i) + aw(k,j,i) + an(k,j,i) &
                                        + as(k,j,i) + at(k,j,i) + ab(k,j,i) )
                     END DO
                 END DO
             END DO
-
-            CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
-
-            ! Front/West
-            IF (nfro == 2 .OR. nfro == 5 .OR. nfro == 6 .OR. nfro == 19) THEN
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        ap(k, j, 3) = ap(k, j, 3) &
-                            + aw(k,j,3)*(bp(k, j, 2)*bp(k, j, 3))
-                    END DO
-                END  DO
-                aw(k,j,3) = 0.0
-            END IF
-
-            ! Back/East
-            IF (nbac == 2 .OR. nbac == 5 .OR. nbac == 6) THEN
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        ap(k, j, ii-2) = ap(k, j, ii-2) &
-                            + ae(k,j,ii-2)*(bp(k, j, ii-2)*bp(k, j, ii-1))
-                    END DO
-                END  DO
-                ae(k,j,ii-2) = 0.0
-            END IF
-
-            ! Right/South
-            IF (nrgt == 2 .OR. nrgt == 5 .OR. nrgt == 6 .OR. nrgt == 19) THEN
-                DO i = 3, ii-2
-                    DO k = 3, kk-2
-                        ap(k, 3, i) = ap(k, 3, i) &
-                            + as(k,3,i)*(bp(k, 2, i)*bp(k, 3, i))
-                    END DO
-                END  DO
-                as(k,3,i) = 0.0
-            END IF
-
-            ! Left/North
-            IF (nlft == 2 .OR. nlft == 5 .OR. nlft == 6) THEN
-                DO i = 3, ii-2
-                    DO k = 3, kk-2
-                        ap(k, jj-2, i) = ap(k, jj-2, i) &
-                            + an(k,jj-2,i)*(bp(k, jj-2, i)*bp(k, jj-1, i))
-                    END DO
-                END  DO
-                an(k,jj-2,i) = 0.0
-            END IF
-
-            ! Bottom
-            IF (nbot == 2 .OR. nbot == 5 .OR. nbot == 6 .OR. nbot == 19) THEN
-                DO i = 3, ii-2
-                    DO j = 3, jj-2
-                        ap(3, j, i) = ap(3, j, i) &
-                            + ab(3,j,i)*(bp(2, j, i)*bp(3, j, i))
-                    END DO
-                END  DO
-                ab(3,j,i) = 0.0
-            END IF
-
-            ! Top
-            IF (ntop == 2 .OR. ntop == 5 .OR. ntop == 6) THEN
-                DO i = 3, ii-2
-                    DO j = 3, jj-2
-                        ap(kk-2, j, i) = ap(kk-2, j, i) &
-                            + at(kk-2,j,i)*(bp(kk-2, j, i)*bp(kk-1, j, i))
-                    END DO
-                END  DO
-                at(kk-2,j,i) = 0.0
-            END IF
-        END DO
+        ENDDO
 
     END SUBROUTINE comp_matrix_coeff_multiphase
 

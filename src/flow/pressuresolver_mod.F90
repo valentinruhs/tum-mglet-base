@@ -1510,6 +1510,7 @@ CONTAINS
         CALL comp_property_face_value(kk, jj, ii, vff, rho1, rho2, 'ARI', rhoe, rhon, rhot)
 
         rfak = 1.0_realk/fak
+
         IF (PRESENT(bp)) THEN
             DO i = 2, ii-1
                 DO j = 2, jj-1
@@ -1567,7 +1568,7 @@ CONTAINS
             END DO
 
             DO i = 3, ii-2
-                DO j = 2, jj - 2
+                DO j = 2, jj-2
                     DO k = 3, kk-2
                         v(k, j, i) = v(k, j, i) &
                             + (dp(k, j, i) - dp(k, j+1, i))*rdy(j)*rfak * 1.0_realk / rhon(k,j,i)

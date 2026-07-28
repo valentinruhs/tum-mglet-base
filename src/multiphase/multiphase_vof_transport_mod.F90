@@ -565,8 +565,6 @@ CONTAINS
         CALL update_velocity(kk, jj, ii, 2, u, v, w, velo4D(:,:,:,2), dt)
         CALL update_velocity(kk, jj, ii, 3, u, v, w, velo4D(:,:,:,3), dt)
 
-        WRITE(*,*) MAXVAL(ABS(velo4D))
-
     END SUBROUTINE adve_operator
 
     !================================================================
