@@ -392,6 +392,8 @@
         REAL(realk) :: alphaMi, vffMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi, ddsMi, halfFractionMi
         REAL(realk) :: alphaPl, vffPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl, ddsPl, halfFractionPl
 
+        vffStag = 0.0_realk
+
         CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
 
         DO i = 2, ii-1

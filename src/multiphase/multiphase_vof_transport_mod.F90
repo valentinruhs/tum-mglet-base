@@ -109,9 +109,9 @@ CONTAINS
                             fluxAlpha = alpha(k,j,i) - norms * ( dds - fluxWidth )
 
                             ! Compute dimensions of fluxed cuboid
-                            dimx = il * fluxWidth + jl * ddy(j) + kl * ddz(k)
-                            dimy = il * ddx(i) + jl * fluxWidth + kl * ddz(k)
-                            dimz = il * ddx(i) + jl * ddy(j) + kl * fluxWidth
+                            dimx = il*fluxWidth + (1-il)*ddx(i)
+                            dimy = jl*fluxWidth + (1-jl)*ddy(j)
+                            dimz = kl*fluxWidth + (1-kl)*ddz(k)
 
                             ! Compute vff in fluxed cuboid
                             CALL comp_frac(fluxedProp, fluxAlpha, vff(k,j,i), dimx, dimy, dimz, normx(k,j,i), normy(k,j,i), normz(k,j,i), tol)
@@ -133,9 +133,9 @@ CONTAINS
                             fluxAlpha = alpha(k+kl,j+jl,i+il)
 
                             ! Compute dimensions of fluxed cuboid
-                            dimx = il * fluxWidth + jl * ddy(j+1) + kl * ddz(k+1)
-                            dimy = il * ddx(i+1) + jl * fluxWidth + kl * ddz(k+1)
-                            dimz = il * ddx(i+1) + jl * ddy(j+1) + kl * fluxWidth
+                            dimx = il*fluxWidth + (1-il)*ddx(i+1)
+                            dimy = jl*fluxWidth + (1-jl)*ddy(j+1)
+                            dimz = kl*fluxWidth + (1-kl)*ddz(k+1)
 
                             ! Compute vff in fluxed cuboid
                             CALL comp_frac(fluxedProp, fluxAlpha, vff(k+kl,j+jl,i+il), dimx, dimy, dimz, normx(k+kl,j+jl,i+il), normy(k+kl,j+jl,i+il), normz(k+kl,j+jl,i+il), tol)
@@ -502,16 +502,13 @@ CONTAINS
         REAL(realk) :: vffFlux(kk, jj, ii), complVffFlux(kk, jj, ii), mom(kk, jj, ii), cWY(kk, jj, ii), cWYStag(kk, jj, ii)
         REAL(realk) :: advr(kk, jj, ii)
         REAL(realk) :: adve(kk, jj, ii)
-        REAL(realk) :: vel(kk, jj, ii), velo(kk, jj, ii)
-        REAL(realk) :: mom4D(kk, jj, ii, 3), vffStag4D(kk, jj, ii, 3), cWYStag4D(kk, jj, ii, 3)
-        REAL(realk) :: uPrev(kk, jj, ii), vPrev(kk, jj, ii), wPrev(kk, jj, ii)
-
-        uPrev = u
-        vPrev = v
-        wPrev = w
+        REAL(realk) :: vel(kk, jj, ii)
+        REAL(realk) :: mom4D(kk, jj, ii, 3), vffStag4D(kk, jj, ii, 3), cWYStag4D(kk, jj, ii, 3), velo4D(kk, jj, ii, 3)
 
         CALL def_advection_sequence(itstep, advSeq)
         CALL iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isIface, isIfaceVic)
+
+        velo4D = 0.0_realk
 
         DO q = 1, 3
 
@@ -544,23 +541,31 @@ CONTAINS
                 CALL comp_flux_stag(kk, jj, ii, q, l, vff, isIface, advr, alpha, dt, normx, normy, normz, dx, dy, dz, ddx, ddy, ddz, tol, vffFlux, complVffFlux)
                 CALL adv_mom(kk, jj, ii, q, l, u, v, w, advr, adve, vffStag, vffFlux, complVffFlux, cWYStag, dx, dy, dz, ddx, ddy, ddz, dt, mom)
                 CALL adv_vof(kk, jj, ii, q, l, vffFlux, cWYStag, advr, dx, dy, dz, ddx, ddy, ddz, dt, tol, vffStag)
-                CALL comp_velocity_change(kk, jj, ii, q, u, v, w, vffStag, mom, dt, velo)
-                CALL update_velocity(kk, jj, ii, q, u, v, w, velo, dt)
 
                 mom4D(:,:,:,q) = mom
                 vffStag4D(:,:,:,q) = vffStag
 
             END DO
 
-            CALL iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isIface, isIfaceVic)
-            CALL comp_flux_cent(kk, jj, ii, l, vff, isIface, uPrev, vPrev, wPrev, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
-            CALL get_condit_velocity(kk, jj, ii, l, uPrev, vPrev, wPrev, vel)
+            CALL comp_flux_cent(kk, jj, ii, l, vff, isIface, u, v, w, alpha, dt, normx, normy, normz, ddx, ddy, ddz, tol, vffFlux)
+            CALL get_condit_velocity(kk, jj, ii, l, u, v, w, vel)
             CALL adv_vof(kk, jj, ii, 0_intk, l, vffFlux, cWY, vel, dx, dy, dz, ddx, ddy, ddz, dt, tol, vff)
             CALL clip_vff(kk, jj, ii, tol, vff)
             CALL app_bcon()
             CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, 'ARI', d)
+            CALL iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isIface, isIfaceVic)
 
         END DO
+
+        CALL comp_velocity_change(kk, jj, ii, 1, u, v, w, vffStag4D(:,:,:,1), mom4D(:,:,:,1), dt, velo4D(:,:,:,1))
+        CALL comp_velocity_change(kk, jj, ii, 2, u, v, w, vffStag4D(:,:,:,2), mom4D(:,:,:,2), dt, velo4D(:,:,:,2))
+        CALL comp_velocity_change(kk, jj, ii, 3, u, v, w, vffStag4D(:,:,:,3), mom4D(:,:,:,3), dt, velo4D(:,:,:,3))
+
+        CALL update_velocity(kk, jj, ii, 1, u, v, w, velo4D(:,:,:,1), dt)
+        CALL update_velocity(kk, jj, ii, 2, u, v, w, velo4D(:,:,:,2), dt)
+        CALL update_velocity(kk, jj, ii, 3, u, v, w, velo4D(:,:,:,3), dt)
+
+        WRITE(*,*) MAXVAL(ABS(velo4D))
 
     END SUBROUTINE adve_operator
 
@@ -875,9 +880,9 @@ CONTAINS
 
         CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
 
-        DO i = 1, ii
-            DO j = 1, jj
-                DO k = 1, kk
+        DO i = 2, ii-1
+            DO j = 2, jj-1
+                DO k = 2, kk-1
                     mom(k,j,i) = vel(k,j,i) * dStag(k,j,i)
                 END DO
             END DO
@@ -1080,7 +1085,7 @@ CONTAINS
             END DO
 
             IF ( SUM(ABS(div)) >= tol ) THEN
-                WRITE(*,*) "Solenoidality violated at itstep ", itstep, ": L1-Norm Error = ", SUM(ABS(div))
+                WRITE(*,*) "Solenoidality violated at itstep ", itstep, ": Max-Norm = ", MAXVAL(ABS(div))
             ENDIF
 
         ENDDO

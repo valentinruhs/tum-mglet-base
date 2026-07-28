@@ -94,7 +94,7 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = 4.0_realk / 3.0_realk * pi * rad**3.0_realk
-                apprVol = apprVol + SUM(vff) * ( dx(1) * dy(1) * dz(1) )
+                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
                 CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             CASE ( 'SphTrC' ) ! Sphere Translation Coarse
@@ -118,7 +118,7 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = 4.0_realk / 3.0_realk * pi * rad**3.0_realk
-                apprVol = apprVol + SUM(vff) * ( dx(1) * dy(1) * dz(1) )
+                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
                 CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             CASE ( 'VorBoF' ) ! Vortex-in-a-Box Fine
@@ -140,7 +140,7 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = pi * rad**2.0_realk * ( maxz - minz )
-                apprVol = apprVol + SUM(vff) * ( dx(1) * dy(1) * dz(1) )
+                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
                 CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             CASE ( 'VorBoC' ) ! Vortex-in-a-Box Coarse
@@ -162,7 +162,7 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = pi * rad**2.0_realk * ( maxz - minz )
-                apprVol = apprVol + SUM(vff) * ( dx(1) * dy(1) * dz(1) )
+                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
                 CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             CASE ( 'CylAdF' ) ! Cylinder Advection Fine
@@ -184,7 +184,7 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = pi * rad**2.0_realk * ( maxy - miny )
-                apprVol = apprVol + SUM(vff) * ( dx(1) * dy(1) * dz(1) )
+                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
                 CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             CASE ( 'CylAdC' ) ! Cylinder Advection Coarse
@@ -206,7 +206,7 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = pi * rad**2.0_realk * ( maxz - minz )
-                apprVol = apprVol + SUM(vff) * ( dx(1) * dy(1) * dz(1) )
+                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
                 CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             CASE ( 'SCylAc' ) ! Sudden Cylinder Accerleration
@@ -228,7 +228,7 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = pi * rad**2.0_realk * ( maxz - minz )
-                apprVol = apprVol + SUM(vff) * ( dx(1) * dy(1) * dz(1) )
+                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
                 CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             CASE ( 'PlicEl' ) ! PLIC Ellipse
@@ -279,7 +279,7 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = 0.5_realk * 1.0_realk * ( maxz - minz )
-                apprVol = apprVol + SUM(vff) * ( dx(1) * dy(1) * dz(1) )
+                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
                 CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             END SELECT
@@ -431,7 +431,7 @@ CONTAINS
                     w = 0.0_realk
                 END IF
             ELSE IF ( test_multiphase == 'SCylAc' ) THEN
-                halo = 1
+                halo = 3
                 IF ( itstep == 1 ) THEN
                     DO i = 3, ii-2
                         DO j = 3, jj-2
@@ -440,8 +440,8 @@ CONTAINS
                                      vff(k,j,i+halo) > 0.0_realk .OR. vff(k,j,i-halo) > 0.0_realk .OR. &
                                      vff(k,j+halo,i) > 0.0_realk .OR. vff(k,j-halo,i) > 0.0_realk .OR. &
                                      vff(k+halo,j,i) > 0.0_realk .OR. vff(k-halo,j,i) > 0.0_realk ) THEN
-                                    u(k,j,i) = 0.002_realk
-                                    v(k,j,i) = 0.002_realk
+                                    u(k,j,i) = 0.016_realk
+                                    v(k,j,i) = 0.016_realk
                                     w(k,j,i) = 0.0_realk
                                 ENDIF
                             ENDDO
