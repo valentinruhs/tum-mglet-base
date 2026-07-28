@@ -18,19 +18,19 @@ MODULE multiphase_mod
     USE multiphasecore_mod, ONLY: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase
     USE multiphase_vof_transport_mod, ONLY: init_multiphase_vof_transport, finish_multiphase_vof_transport
     USE multiphase_plic_mod, ONLY: init_multiphase_plic, finish_multiphase_plic
-    USE multiphase_material_mod, ONLY: init_multiphase_material, finish_multiphase_material
+    USE multiphase_material_mod, ONLY: init_multiphase_material, finish_multiphase_material, comp_property_face_value
     USE multiphase_io_mod, ONLY: init_multiphase_io, finish_multiphase_io
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
     USE multiphase_utils_mod, ONLY: init_multiphase_utils, finish_multiphase_utils
     USE precision_mod, ONLY: intk, realk
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_mgbasb
-    USE fields_mod, ONLY: get_field
+    USE fields_mod, ONLY: get_field, set_field, get_fieldptr
     USE field_mod, ONLY: field_t
     
     IMPLICIT NONE(type, external)
     PRIVATE
 
-    PUBLIC :: init_multiphase, finish_multiphase
+    PUBLIC :: init_multiphase, finish_multiphase, comp_matrix_coeff_multiphase, comp_factor_coeff_multiphase
 
 CONTAINS
 
@@ -74,5 +74,293 @@ CONTAINS
         CALL finish_multiphasecore()
 
     END SUBROUTINE finish_multiphase
+
+    !================================================================
+
+    SUBROUTINE comp_matrix_coeff_multiphase()
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        ! None
+
+        ! Local variables
+        TYPE(field_t), POINTER :: vff_f
+        INTEGER(intk) :: k, j, i
+        INTEGER(intk) :: kk, jj, ii
+        INTEGER(intk) :: igr, igrid
+        INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
+
+        REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: ae(:,:,:), aw(:,:,:), &
+                                            an(:,:,:), as(:,:,:), &
+                                            at(:,:,:), ab(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ap(:, :, :)
+        REAL(realk), POINTER, CONTIGUOUS :: bp(:, :, :)
+        REAL(realk), POINTER, CONTIGUOUS :: vff(:, :, :)
+        REAL(realk), ALLOCATABLE :: rhoe(:, :, :), rhon(:, :, :), rhot(:, :, :)
+
+        CALL get_field(vff_f, "VFF")
+
+        DO igr = 1, nmygrids
+            igrid = mygrids(igr)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL get_fieldptr(dx, "DX", igrid)
+            CALL get_fieldptr(dy, "DY", igrid)
+            CALL get_fieldptr(dz, "DZ", igrid)
+            CALL get_fieldptr(bp, "BP", igrid)
+
+            CALL get_fieldptr(aw, "GSAW", igrid)
+            CALL get_fieldptr(ae, "GSAE", igrid)
+            CALL get_fieldptr(as, "GSAS", igrid)
+            CALL get_fieldptr(an, "GSAN", igrid)
+            CALL get_fieldptr(ab, "GSAB", igrid)
+            CALL get_fieldptr(at, "GSAT", igrid)
+
+            CALL get_fieldptr(ap, "GSAP", igrid)
+
+            CALL vff_f%get_ptr(vff, igrid)
+
+            IF ( .NOT. ALLOCATED(rhoe)) ALLOCATE(rhoe(kk, jj, ii))
+            IF ( .NOT. ALLOCATED(rhon)) ALLOCATE(rhon(kk, jj, ii))
+            IF ( .NOT. ALLOCATED(rhot)) ALLOCATE(rhot(kk, jj, ii))
+
+            CALL comp_property_face_value(kk, jj, ii, vff, rho1, rho2, 'ARI', rhoe, rhon, rhot)
+
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        ae(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i)*rhoe(k,j,i))
+                        aw(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i-1)*rhoe(k,j,i-1))
+                        an(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j)*rhon(k,j,i))
+                        as(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j-1)*rhon(k,j-1,i))
+                        at(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k)*rhot(k,j,i))
+                        ab(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k-1)*rhot(k-1,j,i))
+                    ENDDO
+                ENDDO
+            ENDDO
+
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        ap(k, j, i) = -2.0/(dx(i-1)*dx(i)) &
+                            -2.0/(dy(j-1)*dy(j)) &
+                            -2.0/(dz(k-1)*dz(k))
+                    END DO
+                END DO
+            END DO
+
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        ap(k, j, i) = ap(k, j, i) &
+                            + aw(k,j,i)*(1.0-bp(k, j, i-1)*bp(k, j, i)) &
+                            + ae(k,j,i)*(1.0-bp(k, j, i)*bp(k, j, i+1)) &
+                            + as(k,j,i)*(1.0-bp(k, j-1, i)*bp(k, j, i)) &
+                            + an(k,j,i)*(1.0-bp(k, j, i)*bp(k, j+1, i)) &
+                            + ab(k,j,i)*(1.0-bp(k-1, j, i)*bp(k, j, i)) &
+                            + at(k,j,i)*(1.0-bp(k, j, i)*bp(k+1, j, i))
+                    END DO
+                END DO
+            END DO
+
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        ap(k, j, i) = -( ae(k,j,i) + aw(k,j,i) + an(k,j,i) &
+                                       + as(k,j,i) + at(k,j,i) + ab(k,j,i) )
+                    END DO
+                END DO
+            END DO
+
+            CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
+
+            ! Front/West
+            IF (nfro == 2 .OR. nfro == 5 .OR. nfro == 6 .OR. nfro == 19) THEN
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        ap(k, j, 3) = ap(k, j, 3) &
+                            + aw(k,j,3)*(bp(k, j, 2)*bp(k, j, 3))
+                    END DO
+                END  DO
+                aw(k,j,3) = 0.0
+            END IF
+
+            ! Back/East
+            IF (nbac == 2 .OR. nbac == 5 .OR. nbac == 6) THEN
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        ap(k, j, ii-2) = ap(k, j, ii-2) &
+                            + ae(k,j,ii-2)*(bp(k, j, ii-2)*bp(k, j, ii-1))
+                    END DO
+                END  DO
+                ae(k,j,ii-2) = 0.0
+            END IF
+
+            ! Right/South
+            IF (nrgt == 2 .OR. nrgt == 5 .OR. nrgt == 6 .OR. nrgt == 19) THEN
+                DO i = 3, ii-2
+                    DO k = 3, kk-2
+                        ap(k, 3, i) = ap(k, 3, i) &
+                            + as(k,3,i)*(bp(k, 2, i)*bp(k, 3, i))
+                    END DO
+                END  DO
+                as(k,3,i) = 0.0
+            END IF
+
+            ! Left/North
+            IF (nlft == 2 .OR. nlft == 5 .OR. nlft == 6) THEN
+                DO i = 3, ii-2
+                    DO k = 3, kk-2
+                        ap(k, jj-2, i) = ap(k, jj-2, i) &
+                            + an(k,jj-2,i)*(bp(k, jj-2, i)*bp(k, jj-1, i))
+                    END DO
+                END  DO
+                an(k,jj-2,i) = 0.0
+            END IF
+
+            ! Bottom
+            IF (nbot == 2 .OR. nbot == 5 .OR. nbot == 6 .OR. nbot == 19) THEN
+                DO i = 3, ii-2
+                    DO j = 3, jj-2
+                        ap(3, j, i) = ap(3, j, i) &
+                            + ab(3,j,i)*(bp(2, j, i)*bp(3, j, i))
+                    END DO
+                END  DO
+                ab(3,j,i) = 0.0
+            END IF
+
+            ! Top
+            IF (ntop == 2 .OR. ntop == 5 .OR. ntop == 6) THEN
+                DO i = 3, ii-2
+                    DO j = 3, jj-2
+                        ap(kk-2, j, i) = ap(kk-2, j, i) &
+                            + at(kk-2,j,i)*(bp(kk-2, j, i)*bp(kk-1, j, i))
+                    END DO
+                END  DO
+                at(kk-2,j,i) = 0.0
+            END IF
+        END DO
+
+    END SUBROUTINE comp_matrix_coeff_multiphase
+
+    !================================================================
+
+    SUBROUTINE comp_factor_coeff_multiphase()
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        ! None
+
+        ! Local variables
+        INTEGER(intk) :: igr, igrid
+        INTEGER(intk) :: k, j, i
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk), PARAMETER :: alfa = 0.92
+        REAL(realk) :: p1, p2, p3
+        REAL(realk), POINTER, CONTIGUOUS :: bp(:, :, :)
+        REAL(realk), POINTER, CONTIGUOUS :: lb(:, :, :), lw(:, :, :), &
+            ls(:, :, :), ue(:, :, :), un(:, :, :), ut(:, :, :), lpr(:, :, :)
+        REAL(realk), POINTER, CONTIGUOUS :: ae(:,:,:), aw(:,:,:), &
+                                            an(:,:,:), as(:,:,:), &
+                                            at(:,:,:), ab(:,:,:), ap(:, :, :)
+
+        DO igr = 1, nmygrids
+            igrid = mygrids(igr)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL get_fieldptr(lw, "SIPLW", igrid)
+            CALL get_fieldptr(ls, "SIPLS", igrid)
+            CALL get_fieldptr(lb, "SIPLB", igrid)
+            CALL get_fieldptr(ue, "SIPUE", igrid)
+            CALL get_fieldptr(un, "SIPUN", igrid)
+            CALL get_fieldptr(ut, "SIPUT", igrid)
+            CALL get_fieldptr(lpr, "SIPLPR", igrid)
+
+            CALL get_fieldptr(aw, "GSAW", igrid)
+            CALL get_fieldptr(ae, "GSAE", igrid)
+            CALL get_fieldptr(as, "GSAS", igrid)
+            CALL get_fieldptr(an, "GSAN", igrid)
+            CALL get_fieldptr(ab, "GSAB", igrid)
+            CALL get_fieldptr(at, "GSAT", igrid)
+
+            CALL get_fieldptr(ap, "GSAP", igrid)
+
+            CALL get_fieldptr(bp, "BP", igrid)
+
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        lw(k, j, i) = aw(k,j,i)*bu(k, j, i-1) &
+                            /(1.0 + alfa*(un(k, j, i-1) + ut(k, j, i-1)))
+
+                        ls(k, j, i) = as(k,j,i)*bv(k, j-1, i) &
+                            /(1.0 + alfa*(ue(k, j-1, i) + ut(k, j-1, i)))
+
+                        lb(k, j, i) = ab(k,j,i)*bw(k-1, j, i) &
+                            /(1.0 + alfa*(un(k-1, j, i) + ue(k-1, j, i)))
+
+                        p1 = alfa*(lb(k, j, i)*ue(k-1, j, i) &
+                            + ls(k, j, i)*ue(k, j-1, i))
+                        p2 = alfa*(lb(k, j, i)*un(k-1, j, i) &
+                            + lw(k, j, i)*un(k, j, i-1))
+                        p3 = alfa*(lw(k, j, i)*ut(k, j, i-1) &
+                            + ls(k, j, i)*ut(k, j-1, i))
+
+                        lpr(k, j, i) = 1.0/(ap(k, j, i) + p1 + p2 + p3 &
+                            - lb(k, j, i)*ut(k-1, j, i) &
+                            - lw(k, j, i)*ue(k, j, i-1) &
+                            - ls(k, j, i)*un(k, j-1, i) &
+                            + 1.0e-20)
+
+                        ue(k, j, i) = (ae(k,j,i)*bu(k, j, i) - p1)*lpr(k, j, i)
+                        un(k, j, i) = (an(k,j,i)*bv(k, j, i) - p2)*lpr(k, j, i)
+                        ut(k, j, i) = (at(k,j,i)*bw(k, j, i) - p3)*lpr(k, j, i)
+                    END DO
+                END DO
+            END DO
+
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        lw(k, j, i) = lw(k, j, i)*lpr(k, j, i)
+                    END DO
+                    DO k = 3, kk-2
+                        ls(k, j, i) = ls(k, j, i)*lpr(k, j, i)
+                    END DO
+                    DO k = 3, kk-2
+                        lb(k, j, i) = lb(k, j, i)*lpr(k, j, i)
+                    END DO
+                END DO
+            END DO
+        END DO
+
+    CONTAINS
+        ! These routines are not protected against out-of-bounds and not valid
+        ! for the edges ii, jj, kk - but in the scope above that is OK
+        PURE REAL(realk) FUNCTION bu(k, j, i)
+            INTEGER(intk), INTENT(in) :: k, j, i
+            bu = bp(k, j, i)*bp(k, j, i+1)
+        END FUNCTION bu
+
+        PURE REAL(realk) FUNCTION bv(k, j, i)
+            INTEGER(intk), INTENT(in) :: k, j, i
+            bv = bp(k, j, i)*bp(k, j+1, i)
+        END FUNCTION bv
+
+        PURE REAL(realk) FUNCTION bw(k, j, i)
+            INTEGER(intk), INTENT(in) :: k, j, i
+            bw = bp(k, j, i)*bp(k+1, j, i)
+        END FUNCTION bw
+
+    END SUBROUTINE comp_factor_coeff_multiphase
 
 END MODULE multiphase_mod

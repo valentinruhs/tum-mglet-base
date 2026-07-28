@@ -22,8 +22,8 @@
             "type": "sor",
 	    "omega": 1.1,
             "epcorr": 0.00002,
-            "nouter": 90,
-            "ninner": 50
+            "nouter": 9,
+            "ninner": 5
         },
         "lesmodel": {
             "model": "none"

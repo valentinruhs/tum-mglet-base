@@ -209,6 +209,28 @@ CONTAINS
                 apprVol = apprVol + SUM(vff) * ( dx(1) * dy(1) * dz(1) )
                 CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
+            CASE ( 'SCylAc' ) ! Sudden Cylinder Accerleration
+                !----------------------------------------------------
+                centx = 0.2_realk ; centy = 0.2_realk ; centz = 0.0_realk ; rad = 0.1_realk
+                iSub = 1024 ; jSub = 1024 ; kSub = 1
+                ! Outer loop over cells
+                DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
+                    inside = 0.0_realk
+                    ! Inner loop over (.)Sub for refinement
+                    DO di = 0, iSub-1 ; DO dj = 0, jSub-1
+                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
+                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
+                        IF ( (x - centx)**2.0_realk + &
+                             (y - centy)**2.0_realk <= rad**2.0_realk ) THEN
+                            inside = inside + 1.0_realk
+                        ENDIF
+                    ENDDO ; ENDDO
+                    vff(k,j,i) = inside / (iSub * jSub * kSub)
+                ENDDO ; ENDDO ; ENDDO
+                trueVol = pi * rad**2.0_realk * ( maxz - minz )
+                apprVol = apprVol + SUM(vff) * ( dx(1) * dy(1) * dz(1) )
+                CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
+                !----------------------------------------------------
             CASE ( 'PlicEl' ) ! PLIC Ellipse
                 !----------------------------------------------------
                 DO r = 1, 1
@@ -329,12 +351,13 @@ CONTAINS
         ! Local variables
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
         REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: u, v, w, vff
-        INTEGER(intk) :: n, igrid!, i, j, k
+        INTEGER(intk) :: n, igrid
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         INTEGER(intk) :: kk, jj, ii, k, j, i
         REAL(realk) :: magnitude, fac(6)
         REAL(realk), ALLOCATABLE :: psi(:,:,:)
+        INTEGER(intk) :: halo
 
         CALL get_field(dx_f, "DX")
         CALL get_field(dy_f, "DY")
@@ -403,17 +426,27 @@ CONTAINS
                 END DO
             ELSE IF ( test_multiphase == 'CylAdF' .OR. test_multiphase == 'CylAdC' ) THEN
                 IF ( itstep == 1 ) THEN
-                    DO i = 1, ii
-                        DO j = 1, jj
-                            DO k = 1, kk
-                                IF ( vff(k,j,i) > 0.0_realk ) THEN
-                                    u(k,j,i) = 0.016_realk
-                                    v(k,j,i) = 0.016_realk
+                    u = 0.016_realk
+                    v = 0.016_realk
+                    w = 0.0_realk
+                END IF
+            ELSE IF ( test_multiphase == 'SCylAc' ) THEN
+                halo = 1
+                IF ( itstep == 1 ) THEN
+                    DO i = 3, ii-2
+                        DO j = 3, jj-2
+                            DO k = 3, kk-2
+                                IF ( vff(k,j,i) > 0.0_realk .OR. &
+                                     vff(k,j,i+halo) > 0.0_realk .OR. vff(k,j,i-halo) > 0.0_realk .OR. &
+                                     vff(k,j+halo,i) > 0.0_realk .OR. vff(k,j-halo,i) > 0.0_realk .OR. &
+                                     vff(k+halo,j,i) > 0.0_realk .OR. vff(k-halo,j,i) > 0.0_realk ) THEN
+                                    u(k,j,i) = 0.002_realk
+                                    v(k,j,i) = 0.002_realk
                                     w(k,j,i) = 0.0_realk
-                                END IF
-                            END DO
-                        END DO
-                    END DO  
+                                ENDIF
+                            ENDDO
+                        ENDDO
+                    ENDDO
                 END IF
             ELSE IF ( test_multiphase == 'StFstP' ) THEN
                 IF ( itstep == 1 ) THEN

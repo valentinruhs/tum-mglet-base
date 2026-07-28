@@ -79,7 +79,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE get_spatial_extents(kk, jj, ii, lOrq, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
+    SUBROUTINE get_spatial_extents(kk, jj, ii, q, l, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
     !----------------------------------------------------------------
     !   What it does:
     !   Depending on the direction (l) of component (q) the 
@@ -89,7 +89,7 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii, lOrq
+        INTEGER(intk), INTENT(in) :: kk, jj, ii, q, l
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(out) :: dsx(ii), dsy(jj), dsz(kk)
@@ -99,15 +99,17 @@ CONTAINS
 
         dsx = ddx ; dsy = ddy ; dsz = ddz
 
-        IF ( lOrq == 1 ) THEN
-            dsx = dx
-        ELSE IF ( lOrq == 2 ) THEN
-            dsy = dy
-        ELSE IF ( lOrq == 3 ) THEN
-            dsz = dz
-        ELSE
-            CALL errr(__FILE__, __LINE__)
-        END IF
+        IF ( q == l ) THEN
+            IF ( l == 1 ) THEN
+                dsx = dx
+            ELSEIF ( l == 2 ) THEN
+                dsy = dy
+            ELSEIF ( l == 3 ) THEN
+                dsz = dz
+            ELSE
+                CALL errr(__FILE__, __LINE__)
+            ENDIF
+        ENDIF
 
     END SUBROUTINE get_spatial_extents
 

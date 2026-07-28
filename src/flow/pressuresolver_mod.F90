@@ -5,7 +5,9 @@ MODULE pressuresolver_mod
     USE ib_mod
     USE itinfo_mod, ONLY: itinfo_sample
     USE plog_mod
-    USE multiphasecore_mod, ONLY: solve_multiphase
+    USE multiphasecore_mod, ONLY: solve_multiphase, rho1, rho2
+    USE multiphase_mod, ONLY: comp_matrix_coeff_multiphase, comp_factor_coeff_multiphase
+    USE multiphase_material_mod, ONLY: comp_property_face_value
 
     IMPLICIT NONE (type, external)
     PRIVATE
@@ -328,12 +330,15 @@ CONTAINS
         CALL hilf%init_buffers()
 
         IF ( solve_multiphase ) THEN
-            ! div(1/rho grad(p)) = prefak div(u) is the underlying equation
+            ! div(1/rho * grad(p)) = prefak * div(u) is the underlying equation
             prefak = 1.0_realk/dt
+            CALL comp_matrix_coeff_multiphase()
+            CALL comp_factor_coeff_multiphase()
         ELSE
             ! laplace(dp) = prefak * div(u) is the underlying equation
             prefak = rho/dt
         ENDIF
+
         CALL ib%divcal(rhs, u, v, w, prefak)
 
         DO ilevel = maxlevel, minlevel, -1
@@ -421,7 +426,7 @@ CONTAINS
             IF (ipcount >= nouter_min) THEN
                 CALL MPI_Allreduce(maxrhs, maxrhsall, 1, mglet_mpi_real, &
                     MPI_MAX, MPI_COMM_WORLD)
-                write(*,*) maxrhsall
+                ! write(*,*) maxrhsall
                 IF (maxrhsall/prefak < epcorr) THEN
                     EXIT outer
                 END IF
@@ -1452,6 +1457,7 @@ CONTAINS
         TYPE(field_t), POINTER :: rdx_f
         TYPE(field_t), POINTER :: rdy_f
         TYPE(field_t), POINTER :: rdz_f
+        TYPE(field_t), POINTER :: vff_f
 
         REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:), bp(:, :, :)
 
@@ -1460,6 +1466,7 @@ CONTAINS
         CALL get_field(rdx_f, "RDX")
         CALL get_field(rdy_f, "RDY")
         CALL get_field(rdz_f, "RDZ")
+        CALL get_field(vff_f, "VFF")
 
         DO i = 1, nmygrids
             igrid = mygrids(i)
@@ -1474,12 +1481,12 @@ CONTAINS
             END IF
 
             CALL mgpcorr_grid(kk, jj, ii, u%arr(ip3), v%arr(ip3), w%arr(ip3), &
-                p%arr(ip3), dp%arr(ip3), rdx, rdy, rdz, fak, bp)
+                p%arr(ip3), dp%arr(ip3), vff_f%arr(ip3), rdx, rdy, rdz, fak, bp)
         END DO
     END SUBROUTINE mgpcorr
 
 
-    SUBROUTINE mgpcorr_grid(kk, jj, ii, u, v, w, p, dp, rdx, rdy, rdz, &
+    SUBROUTINE mgpcorr_grid(kk, jj, ii, u, v, w, p, dp, vff, rdx, rdy, rdz, &
             fak, bp)
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
@@ -1488,6 +1495,7 @@ CONTAINS
         REAL(realk), INTENT(inout) :: w(kk, jj, ii)
         REAL(realk), INTENT(inout) :: p(kk, jj, ii)
         REAL(realk), INTENT(in) :: dp(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: rdx(ii)
         REAL(realk), INTENT(in) :: rdy(jj)
         REAL(realk), INTENT(in) :: rdz(kk)
@@ -1495,8 +1503,11 @@ CONTAINS
         REAL(realk), INTENT(in), OPTIONAL :: bp(kk, jj, ii)
 
         ! Local variables
+        REAL(realk) :: rhoe(kk, jj, ii), rhon(kk, jj, ii), rhot(kk, jj, ii)
         INTEGER(intk) :: k, j, i
         REAL(realk) :: rfak
+
+        CALL comp_property_face_value(kk, jj, ii, vff, rho1, rho2, 'ARI', rhoe, rhon, rhot)
 
         rfak = 1.0_realk/fak
         IF (PRESENT(bp)) THEN
@@ -1550,7 +1561,7 @@ CONTAINS
                 DO j = 3, jj-2
                     DO k = 3, kk-2
                         u(k, j, i) = u(k, j, i) &
-                            + (dp(k, j, i) - dp(k, j, i+1))*rdx(i)*rfak
+                            + (dp(k, j, i) - dp(k, j, i+1))*rdx(i)*rfak * 1.0_realk / rhoe(k,j,i)
                     END DO
                 END DO
             END DO
@@ -1559,7 +1570,7 @@ CONTAINS
                 DO j = 2, jj - 2
                     DO k = 3, kk-2
                         v(k, j, i) = v(k, j, i) &
-                            + (dp(k, j, i) - dp(k, j+1, i))*rdy(j)*rfak
+                            + (dp(k, j, i) - dp(k, j+1, i))*rdy(j)*rfak * 1.0_realk / rhon(k,j,i)
                     END DO
                 END DO
             END DO
@@ -1568,7 +1579,7 @@ CONTAINS
                 DO j = 3, jj-2
                     DO k = 2, kk-2
                         w(k, j, i) = w(k, j, i) &
-                            + (dp(k, j, i) - dp(k+1, j, i))*rdz(k)*rfak
+                            + (dp(k, j, i) - dp(k+1, j, i))*rdz(k)*rfak * 1.0_realk / rhot(k,j,i)
                     END DO
                 END DO
             END DO

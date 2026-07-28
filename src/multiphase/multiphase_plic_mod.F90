@@ -367,40 +367,6 @@
 
     !================================================================
 
-    ! SUBROUTINE comp_isec()
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !   
-    ! !----------------------------------------------------------------
-
-    !     ! Subroutine arguments
-
-
-    !     ! Local variables
-
-
-    !     IF ( .NOT. MIN(normz) <= tol ) THEN
-    !         return
-    !     ENDIF
-
-    !     CALL get_order(m1, m2, m3, c1, c2, c3, normx, normy, normz, ddx, ddy, ddz)
-
-    !     IF ( normx < 0.0_realk ) THEN
-    !         alpha = alpha - ddx*normx
-    !     ENDIF
-
-    !     IF ( normy < 0.0_realk ) THEN
-    !         alpha = alpha - ddy*normy
-    !     ENDIF
-
-    !     IF ( normz < 0.0_realk ) THEN
-    !         alpha = alpha - ddz*normz
-    !     ENDIF
-
-    ! END SUBROUTINE comp_isec
-
-    !================================================================
-
     SUBROUTINE comp_stag_frac(kk, jj, ii, q, vff, alpha, isIface, ddx, ddy ,ddz, normx, normy, normz, tol, vffStag)
     !----------------------------------------------------------------
     !   What it does:

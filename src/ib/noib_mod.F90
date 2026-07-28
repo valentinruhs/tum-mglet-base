@@ -2,7 +2,6 @@ MODULE noib_mod
     USE core_mod
     USE ibmodel_mod, ONLY: ibmodel_t
     USE noib_restrict_mod, ONLY: noib_restrict_t
-    USE multiphasecore_mod, ONLY: solve_multiphase
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -81,7 +80,6 @@ CONTAINS
         ! none...
 
         ! Local variables
-        TYPE(field_t), POINTER :: d_f
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kk, jj, ii
         INTEGER(intk) :: igr, igrid
@@ -93,9 +91,8 @@ CONTAINS
                                             at(:,:,:), ab(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ap(:, :, :)
         REAL(realk), POINTER, CONTIGUOUS :: bp(:, :, :)
-        REAL(realk), POINTER, CONTIGUOUS :: d(:, :, :)
 
-        ! 1-D fields used in the pressure solver
+        ! 3-D fields used in the pressure solver, 3-D due to multi-phase flow
         CALL set_field("GSAW", ndim=3)
         CALL set_field("GSAE", ndim=3)
         CALL set_field("GSAS", ndim=3)
@@ -105,10 +102,6 @@ CONTAINS
 
         ! 3-D fields in the pressure solver
         CALL set_field("GSAP")
-
-        IF ( solve_multiphase ) THEN
-            CALL get_field(d_f, "D")
-        ENDIF
 
         DO igr = 1, nmygrids
             igrid = mygrids(igr)
@@ -129,34 +122,18 @@ CONTAINS
 
             CALL get_fieldptr(ap, "GSAP", igrid)
 
-            IF ( solve_multiphase ) THEN
-                CALL d_f%get_ptr(d, igrid)
-                DO i = 3, ii-2
-                    DO j = 3, jj-2
-                        DO k = 3, kk-2
-                            ae(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i)*2.0_realk/(1.0_realk/d(k,j,i+1)+1.0_realk/d(k,j,i)))
-                            aw(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i-1)*2.0_realk/(1.0_realk/d(k,j,i)+1.0_realk/d(k,j,i-1)))
-                            an(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j)*2.0_realk/(1.0_realk/d(k,j+1,i)+1.0_realk/d(k,j,i)))
-                            as(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j-1)*2.0_realk/(1.0_realk/d(k,j,i)+1.0_realk/d(k,j-1,i)))
-                            at(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k)*2.0_realk/(1.0_realk/d(k+1,j,i)+1.0_realk/d(k,j,i)))
-                            ab(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k-1)*2.0_realk/(1.0_realk/d(k,j,i)+1.0_realk/d(k-1,j,i)))
-                        ENDDO
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        ae(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i))
+                        aw(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i-1))
+                        an(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j))
+                        as(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j-1))
+                        at(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k))
+                        ab(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k-1))
                     ENDDO
                 ENDDO
-            ELSE
-                DO i = 3, ii-2
-                    DO j = 3, jj-2
-                        DO k = 3, kk-2
-                            ae(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i))
-                            aw(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i-1))
-                            an(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j))
-                            as(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j-1))
-                            at(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k))
-                            ab(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k-1))
-                        ENDDO
-                    ENDDO
-                ENDDO
-            ENDIF
+            ENDDO
 
             DO i = 3, ii-2
                 DO j = 3, jj-2

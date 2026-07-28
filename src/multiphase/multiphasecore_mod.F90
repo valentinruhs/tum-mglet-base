@@ -30,7 +30,6 @@ MODULE multiphasecore_mod
     ! Control parameters
     LOGICAL, PROTECTED :: has_multiphase, solve_multiphase
     CHARACTER(len=6), PROTECTED :: test_multiphase
-    CHARACTER(len=14), PROTECTED :: splitting_multiphase
     INTEGER(intk), PROTECTED :: permutation_multiphase
 
     ! Physical parameters
@@ -38,7 +37,7 @@ MODULE multiphasecore_mod
     REAL(realk), PROTECTED :: gmol1, gmol2
     REAL(realk), PROTECTED :: grav(3)
 
-    PUBLIC :: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase, test_multiphase, splitting_multiphase, permutation_multiphase, rho1, rho2, gmol1, gmol2, grav
+    PUBLIC :: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase, test_multiphase, permutation_multiphase, rho1, rho2, gmol1, gmol2, grav
 
 CONTAINS
 
@@ -75,7 +74,6 @@ CONTAINS
         ! Read steering input
         CALL multiphaseconf%get_value("/solve", solve_multiphase, .TRUE.)
         CALL multiphaseconf%get_value("/test", test_multiphase, "none")
-        CALL multiphaseconf%get_value("/splitting", splitting_multiphase, "direction-wise")
         CALL multiphaseconf%get_value("/permutation", permutation_multiphase, 3_intk)
 
         ! Read densities

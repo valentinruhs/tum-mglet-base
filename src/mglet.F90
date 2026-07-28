@@ -5,6 +5,7 @@ PROGRAM main
         finish_plugins
     USE flow_mod, ONLY: init_flow, finish_flow
     USE multiphase_mod, ONLY: init_multiphase, finish_multiphase
+    USE multiphasecore_mod, ONLY: init_multiphasecore, finish_multiphasecore
     USE ib_mod, ONLY: init_ib, finish_ib, ib
     USE timeloop_mod, ONLY: init_timeloop, finish_timeloop, timeloop
     USE scalar_mod, ONLY: init_scalar, finish_scalar
@@ -21,6 +22,7 @@ PROGRAM main
     CALL ib%blockbp(exit_now)
 
     IF (.NOT. exit_now) THEN
+        CALL init_multiphase()
         CALL ib%read_stencils()
         CALL ib%giteig()
 
@@ -34,7 +36,6 @@ PROGRAM main
         ! Initialize builtin physical models
         CALL init_flow()
         CALL init_scalar()
-        CALL init_multiphase()
 
         ! This initialize the time loop. Reads the RUNINFO table in case of
         ! DCONT.
