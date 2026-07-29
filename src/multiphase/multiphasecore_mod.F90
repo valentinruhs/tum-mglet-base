@@ -53,7 +53,7 @@ CONTAINS
         INTEGER(intk), PARAMETER :: unitsnorm(7) = [0, 0, 0, 0, 0, 0, 0]
         INTEGER(intk), PARAMETER :: unitsalpha(7) = [0, 1, 0, 0, 0, 0, 0]
         CHARACTER(len=*), PARAMETER :: descriptiond = "Density"
-        CHARACTER(len=*), PARAMETER :: descriptionvff = "Volume fraction field"
+        CHARACTER(len=*), PARAMETER :: descriptionvff = "Volume Fraction Field"
         CHARACTER(len=*), PARAMETER :: descriptionnorm = "Norm"
         CHARACTER(len=*), PARAMETER :: descriptionalpha = "Alpha"
 

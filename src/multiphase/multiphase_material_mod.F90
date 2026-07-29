@@ -52,7 +52,7 @@ CONTAINS
             CALL d_f%get_ptr(d, igrid)
             CALL vff_f%get_ptr(vff, igrid)
 
-            CALL comp_material_property_field(kk, jj, ii, vff, rho1, rho2, 'ARI', d)
+            CALL comp_material_property_field(kk, jj, ii, vff, d, rho1, rho2, 'ARI')
         END DO
 
     END SUBROUTINE init_multiphase_material
@@ -72,7 +72,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_material_property_field(kk, jj, ii, vff, propertyFluid1, propertyFluid2, average, propertyField)
+    SUBROUTINE comp_material_property_field(kk, jj, ii, vff, propertyField, propertyFluid1, propertyFluid2, average)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine computes the weighted material property for
@@ -82,9 +82,9 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(out) :: propertyField(kk, jj, ii)
         REAL(realk), INTENT(in) :: propertyFluid1, propertyFluid2
         CHARACTER(len=3), INTENT(in) :: average
-        REAL(realk), INTENT(inout) :: propertyField(kk, jj, ii)
 
         ! Local variables
         ! None
@@ -118,7 +118,7 @@ CONTAINS
         REAL(realk) :: propertyField(kk, jj, ii)
         INTEGER(intk) :: k, j, i
 
-        CALL comp_material_property_field(kk, jj, ii, vff, propertyFluid1, propertyFluid2, 'ARI', propertyField)
+        CALL comp_material_property_field(kk, jj, ii, vff, propertyField, propertyFluid1, propertyFluid2, 'ARI')
 
         IF ( average == 'ARI' ) THEN
             DO i = 2, ii-2

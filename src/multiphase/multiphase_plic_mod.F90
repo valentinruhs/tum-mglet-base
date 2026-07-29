@@ -201,7 +201,7 @@
 
     !================================================================
 
-    SUBROUTINE iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, tol, normx, normy, normz, alpha, isIface, isIfaceVic)
+    SUBROUTINE iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, normx, normy, normz, alpha, isIface, isIfaceVic, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine is just a wrapper for the subroutines, which
@@ -212,11 +212,10 @@
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(in) :: tol
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
-        LOGICAL, INTENT(out) :: isIface(kk, jj, ii)
-        LOGICAL, INTENT(out), OPTIONAL :: isIfaceVic(kk, jj, ii)
+        LOGICAL, INTENT(out) :: isIface(kk, jj, ii), isIfaceVic(kk, jj, ii)
+        REAL(realk), INTENT(in) :: tol
 
         ! Local variables
         ! None
@@ -224,10 +223,7 @@
         CALL track_iface(isIface, kk, jj, ii, vff, tol)
         CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
         CALL comp_alph(alpha, kk, jj, ii, vff, isIface, ddx, ddy, ddz, normx, normy, normz, tol)
-
-        IF ( PRESENT(isIfaceVic) ) THEN
-            CALL track_iface_vic(isIfaceVic, kk, jj, ii, isIface)
-        ENDIF
+        CALL track_iface_vic(isIfaceVic, kk, jj, ii, isIface)
 
     END SUBROUTINE iface_reconstruction
 
@@ -367,7 +363,7 @@
 
     !================================================================
 
-    SUBROUTINE comp_stag_frac(kk, jj, ii, q, vff, alpha, isIface, ddx, ddy ,ddz, normx, normy, normz, tol, vffStag)
+    SUBROUTINE comp_stag_frac(kk, jj, ii, q, vff, vffStag, ddx, ddy, ddz, normx, normy, normz, alpha, isIface, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   Compute the volume fraction field for the staggered cells
@@ -378,12 +374,12 @@
     ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii, q
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
+        REAL(realk), INTENT(out) :: vffStag(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
+        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
         REAL(realk), INTENT(in) :: tol
-        REAL(realk), INTENT(out) :: vffStag(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -396,9 +392,9 @@
 
         CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
 
-        DO i = 2, ii-1
-            DO j = 2, jj-1
-                DO k = 2, kk-1
+        DO i = 2, ii-2
+            DO j = 2, jj-2
+                DO k = 2, kk-2
                     alphaOffset = ( iq * normx(k,j,i) * ddx(i) + jq * normy(k,j,i) * ddy(j) + kq * normz(k,j,i) * ddz(k) ) / 2.0_realk
 
                     alphaMi = alpha(k,j,i) - alphaOffset
