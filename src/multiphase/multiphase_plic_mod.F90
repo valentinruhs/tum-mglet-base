@@ -88,7 +88,7 @@
     SUBROUTINE track_iface_vic(isIfaceVic, kk, jj, ii, isIface)
     !----------------------------------------------------------------
     !   What it does:
-    !   Creates the isIfaceVic logical array, which stores TRUE
+    !   Creates the isIfaceVic array, which stores TRUE
     !   when a cell is considered "near" an interface cell. Since
     !   indices with (.)-2 and (.)+2 are used in the momentum
     !   advection a 5x5x5 volume is considered to be "near" to an 
@@ -201,7 +201,7 @@
 
     !================================================================
 
-    SUBROUTINE iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, normx, normy, normz, alpha, isIface, isIfaceVic, tol)
+    SUBROUTINE iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, normx, normy, normz, alpha, tol)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine is just a wrapper for the subroutines, which
@@ -214,16 +214,14 @@
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
-        LOGICAL, INTENT(out) :: isIface(kk, jj, ii), isIfaceVic(kk, jj, ii)
         REAL(realk), INTENT(in) :: tol
 
         ! Local variables
-        ! None
+        LOGICAL :: isIface(kk, jj, ii)
 
         CALL track_iface(isIface, kk, jj, ii, vff, tol)
         CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
         CALL comp_alph(alpha, kk, jj, ii, vff, isIface, ddx, ddy, ddz, normx, normy, normz, tol)
-        CALL track_iface_vic(isIfaceVic, kk, jj, ii, isIface)
 
     END SUBROUTINE iface_reconstruction
 
@@ -248,7 +246,7 @@
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        LOGICAL, INTENT(out) :: isIface(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: tol

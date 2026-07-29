@@ -149,6 +149,11 @@ CONTAINS
                     END DO
                 END DO
             END DO
+
+            IF ( ALLOCATED(rhot)) DEALLOCATE(rhot)
+            IF ( ALLOCATED(rhon)) DEALLOCATE(rhon)
+            IF ( ALLOCATED(rhoe)) DEALLOCATE(rhoe)
+            
         ENDDO
 
     END SUBROUTINE comp_matrix_coeff_multiphase
