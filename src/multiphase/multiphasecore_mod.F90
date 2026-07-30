@@ -31,13 +31,16 @@ MODULE multiphasecore_mod
     LOGICAL, PROTECTED :: has_multiphase, solve_multiphase
     CHARACTER(len=6), PROTECTED :: test_multiphase
     INTEGER(intk), PROTECTED :: permutation_multiphase
+    REAL(realk), PROTECTED :: tol
 
     ! Physical parameters
     REAL(realk), PROTECTED :: rho1, rho2
     REAL(realk), PROTECTED :: gmol1, gmol2
     REAL(realk), PROTECTED :: grav(3)
 
-    PUBLIC :: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase, test_multiphase, permutation_multiphase, rho1, rho2, gmol1, gmol2, grav
+    PUBLIC :: init_multiphasecore, finish_multiphasecore, &
+        has_multiphase, solve_multiphase, test_multiphase, &
+        permutation_multiphase, tol, rho1, rho2, gmol1, gmol2, grav
 
 CONTAINS
 
@@ -75,6 +78,7 @@ CONTAINS
         CALL multiphaseconf%get_value("/solve", solve_multiphase, .TRUE.)
         CALL multiphaseconf%get_value("/test", test_multiphase, "none")
         CALL multiphaseconf%get_value("/permutation", permutation_multiphase, 3_intk)
+        CALL multiphaseconf%get_value("/tolerance", tol, 1.0E-12_realk)
 
         ! Read densities
         CALL multiphaseconf%get_value("/rho1", rho1, 1.0_realk)

@@ -13,13 +13,25 @@
 
 MODULE multiphase_utils_mod
 
-    USE precision_mod, ONLY: intk, realk
-    USE err_mod, ONLY: errr
-    
-    IMPLICIT NONE
-    PRIVATE 
+    USE MPI_f08
+    USE grids_mod, ONLY: nmygrids, mygrids
+    USE field_mod, ONLY: field_t
+    USE fields_mod, ONLY: get_field
+    USE grids_mod, ONLY: get_mgdims
+    USE comms_mod, ONLY: myid
+    USE precision_mod, ONLY: intk, realk, mglet_mpi_real
+    USE multiphasecore_mod, ONLY: tol
+    USE multiphase_io_mod, ONLY: initVol, initErr, trueVol
 
-    PUBLIC :: init_multiphase_utils, finish_multiphase_utils, get_spatial_indices, get_spatial_extents, get_condit_velocity
+    IMPLICIT NONE
+    PRIVATE
+
+    REAL(realk), PROTECTED :: currErr = 0.0_realk
+    REAL(realk), PROTECTED :: relaErr = 0.0_realk
+
+    PUBLIC :: init_multiphase_utils, finish_multiphase_utils, &
+        get_spatial_indices, get_spatial_extents, get_condit_velocity, clip_vff, &
+        check_continuity, check_solenoidality
 
 CONTAINS
 
@@ -71,8 +83,6 @@ CONTAINS
             jo = 1_intk
         ELSE IF ( lOrq == 3 ) THEN
             ko = 1_intk
-        ELSE
-            CALL errr(__FILE__, __LINE__)
         END IF
 
     END SUBROUTINE get_spatial_indices
@@ -106,8 +116,6 @@ CONTAINS
                 dsy = dy
             ELSEIF ( l == 3 ) THEN
                 dsz = dz
-            ELSE
-                CALL errr(__FILE__, __LINE__)
             ENDIF
         ENDIF
 
@@ -138,10 +146,194 @@ CONTAINS
             vel = v
         ELSE IF ( lOrq == 3 ) THEN
             vel = w
-        ELSE
-            CALL errr(__FILE__, __LINE__)
-        END IF
+        ENDIF
 
     END SUBROUTINE get_condit_velocity
+
+    !================================================================
+
+    SUBROUTINE clip_vff(kk, jj, ii, vff, ddx, ddy, ddz, volClippedCum)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Clips the volume fraction field to its boundaries [0, 1].
+    !    
+    !   Source:
+    !   T. Arrufat et al., “A mass-momentum consistent, 
+    !   Volume-of-Fluid method for incompressible flow on staggered 
+    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
+    !   doi: 10.1016/j.compfluid.2020.104785.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in), OPTIONAL :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(inout), OPTIONAL :: volClippedCum
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: volBeforClip, volAfterClip, vol
+
+        volBeforClip = 0.0_realk
+        volAfterClip = 0.0_realk
+
+        IF ( PRESENT(volClippedCum) ) THEN
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        vol = ddx(i) * ddy(j) * ddz(k)
+                        volBeforClip = volBeforClip + vff(k,j,i) * vol
+                    ENDDO
+                ENDDO
+            ENDDO
+        ENDIF
+
+        DO i = 1, ii
+            DO j = 1, jj
+                DO k = 1, kk
+                    IF ( vff(k,j,i) <= tol ) THEN
+                        vff(k,j,i) = 0.0_realk
+                    ELSE IF ( vff(k,j,i) >= ( 1.0_realk - tol ) ) THEN
+                        vff(k,j,i) = 1.0_realk
+                    ENDIF
+                ENDDO 
+            ENDDO
+        ENDDO
+
+        IF ( PRESENT(volClippedCum) ) THEN
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        vol = ddx(i) * ddy(j) * ddz(k)
+                        volAfterClip = volAfterClip + vff(k,j,i) * vol
+                    ENDDO
+                ENDDO
+            ENDDO
+            volClippedCum = volClippedCum + ( volAfterClip - volBeforClip )
+        ENDIF
+
+    END SUBROUTINE clip_vff
+
+    !================================================================
+
+    SUBROUTINE check_solenoidality(itstep, dt)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk) :: itstep
+        REAL(realk) :: dt
+
+        ! Local variables
+        TYPE(field_t), POINTER :: u_f, v_f, w_f
+        TYPE(field_t), POINTER :: ddx_f, ddy_f, ddz_f
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:)
+        INTEGER(intk) :: kk, jj, ii, k, j, i, n, igrid
+        REAL(realk) :: div, divMax, divMaxGlob
+
+        div = 0.0_realk
+        divMax = 0.0_realk
+        divMaxGlob = 0.0_realk
+
+        CALL get_field(u_f, "U")
+        CALL get_field(v_f, "V")
+        CALL get_field(w_f, "W")
+        CALL get_field(ddx_f, "DDX")
+        CALL get_field(ddy_f, "DDY")
+        CALL get_field(ddz_f, "DDZ")
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL u_f%get_ptr(u, igrid)
+            CALL v_f%get_ptr(v, igrid)
+            CALL w_f%get_ptr(w, igrid)
+            CALL ddx_f%get_ptr(ddx, igrid)
+            CALL ddy_f%get_ptr(ddy, igrid)
+            CALL ddz_f%get_ptr(ddz, igrid)
+
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        div = ( u(k,j,i) - u(k,j,i-1) ) / ddx(i) + &
+                              ( v(k,j,i) - v(k,j-1,i) ) / ddy(j) + &
+                              ( w(k,j,i) - w(k-1,j,i) ) / ddz(k)
+                        IF ( ABS(div) > divMax ) THEN
+                            divMax = ABS(div)
+                        ENDIF
+                    ENDDO
+                ENDDO
+            ENDDO
+        ENDDO
+
+        CALL MPI_Allreduce(divMax, divMaxGlob, 1, mglet_mpi_real, MPI_MAX, MPI_COMM_WORLD)
+
+        IF ( divMaxGlob * dt >= tol ) THEN
+            IF ( myid == 0 ) THEN
+                WRITE(*,'(A,ES14.6,A,ES14.6)') "Solenoidality violated! max|div| = ", divMaxGlob, &
+                    "  max|div|*dt = ", divMaxGlob*dt
+            ENDIF
+        ENDIF
+
+    END SUBROUTINE check_solenoidality
+
+    !================================================================
+
+    SUBROUTINE check_continuity(itstep)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk) :: itstep
+
+        ! Local variables
+        TYPE(field_t), POINTER :: vff_f
+        TYPE(field_t), POINTER :: ddx_f, ddy_f, ddz_f
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: vff(:,:,:)
+        INTEGER(intk) :: kk, jj, ii, k, j, i, n, igrid
+        REAL(realk) :: currVol
+
+        currVol = 0.0_realk
+
+        CALL get_field(vff_f, "VFF")
+        CALL get_field(ddx_f, "DDX")
+        CALL get_field(ddy_f, "DDY")
+        CALL get_field(ddz_f, "DDZ")
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL vff_f%get_ptr(vff, igrid)
+            CALL ddx_f%get_ptr(ddx, igrid)
+            CALL ddy_f%get_ptr(ddy, igrid)
+            CALL ddz_f%get_ptr(ddz, igrid)
+
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        currVol = currVol + vff(k,j,i) * ddx(i) * ddy(j) * ddz(k)
+                    ENDDO
+                ENDDO
+            ENDDO
+        ENDDO
+
+        CALL MPI_Allreduce(MPI_IN_PLACE, currVol, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
+
+        currErr = trueVol - currVol
+        relaErr = ( currVol - initVol ) / initVol
+
+        IF ( myid == 0 .AND. ABS(relaErr) >= tol ) THEN
+            WRITE(*,'(A,ES14.6)') "Continuity violated! Relative volume error of ", relaErr
+        ENDIF
+
+    END SUBROUTINE check_continuity
 
 END MODULE multiphase_utils_mod

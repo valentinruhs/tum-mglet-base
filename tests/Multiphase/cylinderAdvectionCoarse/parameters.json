@@ -1,8 +1,8 @@
 {
     "time": {
         "dt": 0.1,
-        "mtstep": 300,
-	"itinfo": 1,
+        "mtstep": 625,
+	"itinfo": 10,
         "tstat": 10.0,
 	"read": false
     },
@@ -20,9 +20,9 @@
         "uinf": [0.0, 0.0, 0.0],
         "pressuresolver": {
             "type": "sip",
-            "epcorr": 0.00002,
+            "epcorr": 0.0000000001,
             "nouter": 9,
-            "ninner": 5
+            "ninner": 50
         },
         "lesmodel": {
             "model": "none"
@@ -33,6 +33,7 @@
     	"solve": true,
 	"test": "CylAdC",
 	"permutation" : 3,
+	"tolerance": 0.000000000001,
 	"rho1" : 1000.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.0001,

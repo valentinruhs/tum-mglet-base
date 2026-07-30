@@ -12,27 +12,30 @@
 
 MODULE multiphase_io_mod
 
-    USE precision_mod, ONLY: intk
+    USE MPI_f08
+    USE precision_mod, ONLY: intk, mglet_mpi_real
     USE field_mod, ONLY: field_t
     USE grids_mod, ONLY: nmygrids, mygrids
     USE field_mod, ONLY: field_t
     USE grids_mod, ONLY: get_mgdims, get_mgbasb, get_bbox
+    USE comms_mod, ONLY: myid
     USE precision_mod, ONLY: intk, realk
     USE fields_mod, ONLY: get_field
     USE multiphasecore_mod, ONLY: test_multiphase
     USE connect2_mod, ONLY: connect
     USE grids_mod, ONLY: minlevel, maxlevel
-    USE flowcore_mod, ONLY: uinf
+    ! USE flowcore_mod, ONLY: uinf
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
 
     IMPLICIT NONE
     PRIVATE 
 
-    REAL(realk), PARAMETER :: pi = 4.0_realk * atan(1.0_realk)
-    REAL(realk), PROTECTED :: initErr
-    REAL(realk), PROTECTED :: apprVol
+    REAL(realk), PARAMETER :: pi = 4.0_realk * ATAN(1.0_realk)
+    REAL(realk), PROTECTED :: trueVol = 0.0_realk
+    REAL(realk), PROTECTED :: initErr = 0.0_realk
+    REAL(realk), PROTECTED :: initVol = 0.0_realk
 
-    PUBLIC :: init_multiphase_io, finish_multiphase_io, update_velocity, apprVol, validate_velocity
+    PUBLIC :: init_multiphase_io, finish_multiphase_io, update_velocity, trueVol, initErr, initVol, validate_velocity
 
 CONTAINS
 
@@ -54,11 +57,14 @@ CONTAINS
         REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
         REAL(realk) :: centx, centy, centz, rad, x, y, z, inside, a, b, e, maxTrans, theta
         REAL(realk) :: randx(10), randy(10), randt(10)
-        REAL(realk) :: trueVol
+        REAL(realk) :: vol
 
         CALL get_field(vff_f, "VFF")
         CALL get_field(dx_f, "DX"); CALL get_field(dy_f, "DY"); CALL get_field(dz_f, "DZ")
         CALL get_field(ddx_f, "DDX"); CALL get_field(ddy_f, "DDY"); CALL get_field(ddz_f, "DDZ")
+
+        WRITE(*,'(A,I0,A)') "Initializing volume fraction field in ", nmygrids, " grids ..."
+        WRITE(*,*) ""
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -69,8 +75,6 @@ CONTAINS
             CALL vff_f%get_ptr(vff, igrid)
             CALL dx_f%get_ptr(dx, igrid); CALL dy_f%get_ptr(dy, igrid); CALL dz_f%get_ptr(dz, igrid)
             CALL ddx_f%get_ptr(ddx, igrid); CALL ddy_f%get_ptr(ddy, igrid); CALL ddz_f%get_ptr(ddz, igrid)
-
-            WRITE(*,'(A19,1X,I12)')   "INITIALIZE GRID    " , igrid
 
             SELECT CASE( test_multiphase )
             CASE ( 'SphTrF' ) ! Sphere Translation Fine
@@ -94,8 +98,6 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = 4.0_realk / 3.0_realk * pi * rad**3.0_realk
-                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
-                CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             CASE ( 'SphTrC' ) ! Sphere Translation Coarse
                 !----------------------------------------------------
@@ -118,8 +120,6 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = 4.0_realk / 3.0_realk * pi * rad**3.0_realk
-                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
-                CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             CASE ( 'VorBoF' ) ! Vortex-in-a-Box Fine
                 !----------------------------------------------------
@@ -140,8 +140,6 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = pi * rad**2.0_realk * ( maxz - minz )
-                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
-                CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             CASE ( 'VorBoC' ) ! Vortex-in-a-Box Coarse
                 !----------------------------------------------------
@@ -162,8 +160,6 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = pi * rad**2.0_realk * ( maxz - minz )
-                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
-                CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             CASE ( 'CylAdF' ) ! Cylinder Advection Fine
                 !----------------------------------------------------
@@ -184,8 +180,6 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = pi * rad**2.0_realk * ( maxy - miny )
-                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
-                CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             CASE ( 'CylAdC' ) ! Cylinder Advection Coarse
                 !----------------------------------------------------
@@ -206,8 +200,6 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = pi * rad**2.0_realk * ( maxz - minz )
-                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
-                CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             CASE ( 'SCylAc' ) ! Sudden Cylinder Accerleration
                 !----------------------------------------------------
@@ -228,8 +220,6 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = pi * rad**2.0_realk * ( maxz - minz )
-                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
-                CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             CASE ( 'PlicEl' ) ! PLIC Ellipse
                 !----------------------------------------------------
@@ -258,9 +248,6 @@ CONTAINS
                         vff(k,j,i) = inside / (iSub * jSub * kSub)
                     ENDDO ; ENDDO ; ENDDO
                     trueVol = pi * a * b * ( maxz - minz )
-                    apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
-                    WRITE(*,*) r
-                    CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 ENDDO
                 !----------------------------------------------------
                 CASE ( 'StFstP' ) ! Stokes First Problem
@@ -271,7 +258,7 @@ CONTAINS
                     inside = 0.0_realk
                     ! Inner loop over (.)Sub for refinement
                     DO dj = 0, jSub-1
-                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
+                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1)
                         IF ( y <= 0.5_realk ) THEN
                             inside = inside + 1.0_realk
                         ENDIF
@@ -279,11 +266,27 @@ CONTAINS
                     vff(k,j,i) = inside / (iSub * jSub * kSub)
                 ENDDO ; ENDDO ; ENDDO
                 trueVol = 0.5_realk * 1.0_realk * ( maxz - minz )
-                apprVol = apprVol + SUM(vff(3:kk-2,3:jj-2,3:ii-2)) * ( dx(1) * dy(1) * dz(1) )
-                CALL print_statistics(iSub, jSub, kSub, trueVol, apprVol)
                 !----------------------------------------------------
             END SELECT
+
+            DO k = 3, kk-2
+                DO j = 3, jj-2
+                    DO i = 3, ii-2
+                        vol = ddx(i) * ddy(j) * ddz(k)
+                        initVol = initVol + vff(k,j,i) * vol
+                    ENDDO
+                ENDDO
+            ENDDO
         ENDDO
+
+        CALL MPI_Allreduce(MPI_IN_PLACE, initVol, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
+
+        initErr = trueVol - initVol
+
+        IF ( myid == 0 ) THEN
+            WRITE(*,'(A,ES14.6)') "Initial volume error is ", initErr, " (trueVol - initVol)"
+            WRITE(*,*) ""
+        ENDIF
 
         DO ilevel = minlevel, maxlevel
             CALL connect(ilevel, layers=2, s1=vff_f, corners=.TRUE.)
@@ -303,34 +306,6 @@ CONTAINS
 
         continue
     END SUBROUTINE finish_multiphase_io
-
-    !================================================================
-
-    SUBROUTINE print_statistics(iSub, jSub, kSub, trueVol, apprVol)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: iSub, jSub, kSub
-        REAL(realk), INTENT(in) :: trueVol, apprVol
-
-        ! Local variables
-        ! None
-        
-        initErr = ABS( trueVol - apprVol )
-
-        WRITE(*,'(A32)')          "----------------------------------"
-        WRITE(*,'(A19,1X,I12)')   "iSub:              " , iSub
-        WRITE(*,'(A19,1X,I12)')   "jSub:              " , jSub
-        WRITE(*,'(A19,1X,I12)')   "kSub:              " , kSub
-        WRITE(*,'(A10,1X,E21.15)') "trueVol:  " , trueVol
-        WRITE(*,'(A10,1X,E21.15)') "apprVol:  " , apprVol
-        WRITE(*,'(A10,1X,E21.15)') "initErr:  " , initErr
-        WRITE(*,'(A23)') ""
-
-    END SUBROUTINE print_statistics
 
     !================================================================
 
@@ -548,7 +523,7 @@ CONTAINS
                 DO i = 3, ii-2
                     DO j = 3, jj-2
                         DO k = 3, kk-2
-                            trueVel(k,j,i) = uinf(1) - uinf(1) * ERF(( ABS(ddy(1)) / 2 + (j-3) * ABS(ddy(1)) )/( SQRT(4.0_realk * gmol1 / rho1 * itstep * dt) ))
+                            trueVel(k,j,i) = 0.0 !uinf(1) - uinf(1) * ERF(( ABS(ddy(1)) / 2 + (j-3) * ABS(ddy(1)) )/( SQRT(4.0_realk * gmol1 / rho1 * itstep * dt) ))
                             yHat = ( ABS(ddy(1)) / 2 + (j-3) * ABS(ddy(1)) ) / h
                             tHat = itstep * dt * ( ( gmol1 / rho1 ) / h**2.0_realk )
 
@@ -573,7 +548,7 @@ CONTAINS
                 ENDDO
                 DO j = 3, jj-2
                     ! WRITE(*,*) "ERROR at j = ", j, ": ", ABS(u(7,j,7) - trueVel(7,j,7))
-                    WRITE(*,*) u(7,j,7) / uinf(1), trueVel(7,j,7) / uinf(1), trueVel1(7,j,7), trueVel2(7,j,7)
+                    ! WRITE(*,*) u(7,j,7) / uinf(1), trueVel(7,j,7) / uinf(1), trueVel1(7,j,7), trueVel2(7,j,7)
                 ENDDO
             ELSE 
                 return

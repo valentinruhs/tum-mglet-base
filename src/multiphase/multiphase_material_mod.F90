@@ -20,7 +20,8 @@ MODULE multiphase_material_mod
     USE fields_mod, ONLY: get_field
     USE grids_mod, ONLY: get_mgdims, get_mgbasb
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
-    USE err_mod, ONLY: errr
+    USE err_mod, ONLY: err_abort
+    USE multiphase_utils_mod, ONLY: clip_vff
 
     IMPLICIT NONE
     PRIVATE
@@ -52,7 +53,7 @@ CONTAINS
             CALL d_f%get_ptr(d, igrid)
             CALL vff_f%get_ptr(vff, igrid)
 
-            CALL comp_material_property_field(kk, jj, ii, vff, d, rho1, rho2, 'ARI')
+            CALL comp_material_property_field(kk, jj, ii, vff, d, rho1, rho2)
         END DO
 
     END SUBROUTINE init_multiphase_material
@@ -72,7 +73,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_material_property_field(kk, jj, ii, vff, propertyField, propertyFluid1, propertyFluid2, average)
+    SUBROUTINE comp_material_property_field(kk, jj, ii, vff, propFld, prop1, prop2)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine computes the weighted material property for
@@ -82,26 +83,33 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(out) :: propertyField(kk, jj, ii)
-        REAL(realk), INTENT(in) :: propertyFluid1, propertyFluid2
-        CHARACTER(len=3), INTENT(in) :: average
+        REAL(realk), INTENT(out) :: propFld(kk, jj, ii)
+        REAL(realk), INTENT(in) :: prop1, prop2
 
         ! Local variables
-        ! None
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: vffClip(kk, jj, ii)
 
-        IF ( average == 'ARI' ) THEN
-            propertyField = vff * ( propertyFluid1 - propertyFluid2 ) + propertyFluid2
-        ELSEIF ( average == 'HAR' ) THEN
-            propertyField = 1.0_realk / ( vff * ( 1.0_realk / propertyFluid1 - 1.0_realk / propertyFluid2 ) + 1.0_realk / propertyFluid2 )
-        ELSE 
-            CALL errr(__FILE__, __LINE__)
-        ENDIF
+        vffClip = vff
+        CALL clip_vff(kk, jj, ii, vffClip)
+
+        propFld = vffClip * ( prop1 - prop2 ) + prop2
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    IF ( propFld(k,j,i) > MAX(prop1, prop2) .OR. propFld(k,j,i) < MIN(prop1, prop2) ) THEN
+                        CALL err_abort(155, "material property out of bounds!", __FILE__, __LINE__)
+                    ENDIF
+                ENDDO
+            ENDDO
+        ENDDO
 
     END SUBROUTINE comp_material_property_field
 
     !================================================================
 
-    SUBROUTINE comp_property_face_value(kk, jj, ii, vff, propertyFluid1, propertyFluid2, average, pe, pn, pt)
+    SUBROUTINE comp_property_face_value(kk, jj, ii, vff, prop1, prop2, average, pe, pn, pt)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -110,23 +118,23 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(in) :: propertyFluid1, propertyFluid2
+        REAL(realk), INTENT(in) :: prop1, prop2
         CHARACTER(len=3), INTENT(in) :: average
         REAL(realk), INTENT(out) :: pe(kk, jj, ii), pn(kk, jj, ii), pt(kk, jj, ii)
 
         ! Local variables
-        REAL(realk) :: propertyField(kk, jj, ii)
+        REAL(realk) :: propFld(kk, jj, ii)
         INTEGER(intk) :: k, j, i
 
-        CALL comp_material_property_field(kk, jj, ii, vff, propertyField, propertyFluid1, propertyFluid2, 'ARI')
+        CALL comp_material_property_field(kk, jj, ii, vff, propFld, prop1, prop2)
 
         IF ( average == 'ARI' ) THEN
             DO i = 2, ii-2
                 DO j = 2, jj-2
                     DO k = 2, kk-2
-                        pe(k,j,i) = ( propertyField(k,j,i) + propertyField(k,j,i+1) ) / 2.0_realk
-                        pn(k,j,i) = ( propertyField(k,j,i) + propertyField(k,j+1,i) ) / 2.0_realk
-                        pt(k,j,i) = ( propertyField(k,j,i) + propertyField(k+1,j,i) ) / 2.0_realk
+                        pe(k,j,i) = ( propFld(k,j,i) + propFld(k,j,i+1) ) / 2.0_realk
+                        pn(k,j,i) = ( propFld(k,j,i) + propFld(k,j+1,i) ) / 2.0_realk
+                        pt(k,j,i) = ( propFld(k,j,i) + propFld(k+1,j,i) ) / 2.0_realk
                     ENDDO
                 ENDDO
             ENDDO
@@ -134,14 +142,12 @@ CONTAINS
             DO i = 2, ii-2
                 DO j = 2, jj-2
                     DO k = 2, kk-2
-                        pe(k,j,i) = 2.0_realk / ( 1.0_realk / propertyField(k,j,i) + 1.0_realk / propertyField(k,j,i+1) )
-                        pn(k,j,i) = 2.0_realk / ( 1.0_realk / propertyField(k,j,i) + 1.0_realk / propertyField(k,j+1,i) )
-                        pt(k,j,i) = 2.0_realk / ( 1.0_realk / propertyField(k,j,i) + 1.0_realk / propertyField(k+1,j,i) )
+                        pe(k,j,i) = 2.0_realk / ( 1.0_realk / propFld(k,j,i) + 1.0_realk / propFld(k,j,i+1) )
+                        pn(k,j,i) = 2.0_realk / ( 1.0_realk / propFld(k,j,i) + 1.0_realk / propFld(k,j+1,i) )
+                        pt(k,j,i) = 2.0_realk / ( 1.0_realk / propFld(k,j,i) + 1.0_realk / propFld(k+1,j,i) )
                     ENDDO
                 ENDDO
             ENDDO
-        ELSE 
-            CALL errr(__FILE__, __LINE__)
         ENDIF
 
     ENDSUBROUTINE comp_property_face_value

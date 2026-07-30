@@ -1,8 +1,8 @@
 {
     "time": {
-        "dt": 0.1,
-        "mtstep": 100,
-	"itinfo": 1,
+        "dt": 0.01,
+        "mtstep": 3,
+	"itinfo": 100,
         "tstat": 10.0,
 	"read": false
     },
@@ -20,9 +20,9 @@
         "uinf": [0.0, 0.0, 0.0],
         "pressuresolver": {
             "type": "sip",
-            "epcorr": 0.00000000002,
+            "epcorr": 0.000000000001,
             "nouter": 90,
-            "ninner": 50,
+            "ninner": 100,
 	    "loglevel": 3
         },
         "lesmodel": {
@@ -34,6 +34,7 @@
     	"solve": true,
 	"test": "SCylAc",
 	"permutation" : 3,
+	"tolerance": 0.00000000000001,
 	"rho1" : 1000.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.0001,

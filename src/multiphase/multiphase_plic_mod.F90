@@ -15,8 +15,8 @@
     MODULE multiphase_plic_mod
 
     USE precision_mod, ONLY: intk, realk
-    USE err_mod, ONLY: errr
     USE multiphase_utils_mod, ONLY: get_spatial_indices
+    USE multiphasecore_mod, ONLY: tol
         
     IMPLICIT NONE
     PRIVATE 
@@ -52,7 +52,7 @@
 
     !================================================================
 
-    SUBROUTINE track_iface(isIface, kk, jj, ii, vff, tol)
+    SUBROUTINE track_iface(isIface, kk, jj, ii, vff)
     !----------------------------------------------------------------
     !   What it does:
     !   Identifies which of the cells in the domain contains a volume
@@ -65,7 +65,6 @@
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         LOGICAL, INTENT(out) :: isIface(kk, jj, ii)
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(in) :: tol
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -122,7 +121,7 @@
 
     !================================================================
 
-    SUBROUTINE comp_norm_vec(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
+    SUBROUTINE comp_norm_vec(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the normal vector components normx, normy and normz
@@ -143,7 +142,6 @@
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(in) :: tol
 
         ! Local variables
         INTEGER(intk) :: k, j, i, d1, d2
@@ -201,7 +199,7 @@
 
     !================================================================
 
-    SUBROUTINE iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, normx, normy, normz, alpha, tol)
+    SUBROUTINE iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, normx, normy, normz, alpha)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine is just a wrapper for the subroutines, which
@@ -214,20 +212,19 @@
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
-        REAL(realk), INTENT(in) :: tol
 
         ! Local variables
         LOGICAL :: isIface(kk, jj, ii)
 
-        CALL track_iface(isIface, kk, jj, ii, vff, tol)
-        CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz, tol)
-        CALL comp_alph(alpha, kk, jj, ii, vff, isIface, ddx, ddy, ddz, normx, normy, normz, tol)
+        CALL track_iface(isIface, kk, jj, ii, vff)
+        CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz)
+        CALL comp_alph(alpha, kk, jj, ii, vff, isIface, ddx, ddy, ddz, normx, normy, normz)
 
     END SUBROUTINE iface_reconstruction
 
     !================================================================
 
-    SUBROUTINE comp_alph(alpha, kk, jj, ii, vff, isIface, ddx, ddy, ddz, normx, normy, normz, tol)
+    SUBROUTINE comp_alph(alpha, kk, jj, ii, vff, isIface, ddx, ddy, ddz, normx, normy, normz)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine calculates the alpha value for PLIC. The 
@@ -249,7 +246,6 @@
         LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
-        REAL(realk), INTENT(in) :: tol
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -278,7 +274,7 @@
                     !         Journal of Computational Physics, Bd. 164, Nr. 1, S. 228–237, Okt. 2000, doi: 10.1006/jcph.2000.6567.
                     ! To enhance performance consider inlining
                     CALL comp_alph_std(m1, m2, m3, c1, c2, c3, alpha(k,j,i), &
-                        alphaMax(k,j,i), vff(k,j,i), ddx(i), ddy(j), ddz(k), tol)
+                        alphaMax(k,j,i), vff(k,j,i), ddx(i), ddy(j), ddz(k))
 
                     ! 4. If necessary, transform alpha back to volume bounds [0,1] * dV
                     ! If the volume fraction function has a value above 0.5 the "inverse problem" is solved. Therefore, the result is no longer 
@@ -310,7 +306,7 @@
 
     !================================================================
 
-    SUBROUTINE comp_frac(cellProportion, alpha, vff, ddx, ddy, ddz, normx, normy, normz, tol)
+    SUBROUTINE comp_frac(cellProportion, alpha, vff, ddx, ddy, ddz, normx, normy, normz)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine calculates the value of the volume fraction 
@@ -329,7 +325,6 @@
         REAL(realk), INTENT(in) :: vff
         REAL(realk), INTENT(in) :: ddx, ddy, ddz
         REAL(realk), INTENT(in) :: normx, normy, normz
-        REAL(realk), INTENT(in) :: tol
 
         ! Input variables
         REAL(realk) :: m1, m2, m3, c1, c2, c3
@@ -355,13 +350,13 @@
 
         ! 3. If necessary, transform alpha to its conjugate alphaMax - alpha
         ! 4. Solve the standart case for vol
-        CALL comp_frac_std(m1, m2, m3, c1, c2, c3, alphaStd, cellProportion, tol)
+        CALL comp_frac_std(m1, m2, m3, c1, c2, c3, alphaStd, cellProportion)
 
     END SUBROUTINE comp_frac
 
     !================================================================
 
-    SUBROUTINE comp_stag_frac(kk, jj, ii, q, vff, vffStag, ddx, ddy, ddz, normx, normy, normz, alpha, isIface, tol)
+    SUBROUTINE comp_stag_frac(kk, jj, ii, q, vff, vffStag, ddx, ddy, ddz, normx, normy, normz, alpha, isIface)
     !----------------------------------------------------------------
     !   What it does:
     !   Compute the volume fraction field for the staggered cells
@@ -377,7 +372,6 @@
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
         LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
-        REAL(realk), INTENT(in) :: tol
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -416,14 +410,14 @@
                     ddsPl = iq * ddxPl + jq * ddyPl + kq * ddzPl
 
                     IF ( isIface(k,j,i) .AND. isIface(k+kq,j+jq,i+iq) ) THEN
-                        CALL comp_frac(halfFractionMi, alphaMi, vffMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi, tol)
-                        CALL comp_frac(halfFractionPl, alphaPl, vffPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl, tol)
+                        CALL comp_frac(halfFractionMi, alphaMi, vffMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
+                        CALL comp_frac(halfFractionPl, alphaPl, vffPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
                         vffStag(k,j,i) = ( halfFractionMi * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE IF ( isIface(k,j,i) .AND. .NOT. isIface(k+kq,j+jq,i+iq) ) THEN
-                        CALL comp_frac(halfFractionMi, alphaMi, vffMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi, tol)
+                        CALL comp_frac(halfFractionMi, alphaMi, vffMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
                         vffStag(k,j,i) = ( halfFractionMi * ddsMi + vff(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE IF ( .NOT. isIface(k,j,i) .AND. isIface(k+kq,j+jq,i+iq) ) THEN
-                        CALL comp_frac(halfFractionPl, alphaPl, vffPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl, tol)
+                        CALL comp_frac(halfFractionPl, alphaPl, vffPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
                         vffStag(k,j,i) = ( vff(k,j,i) * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE
                         vffStag(k,j,i) = ( vff(k,j,i) * ddsMi + vff(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
@@ -514,7 +508,7 @@
 
     !================================================================
 
-    SUBROUTINE comp_alph_std(m1, m2, m3, c1, c2, c3, alphaStd, alphaMax, vff, ddx, ddy, ddz, tol)
+    SUBROUTINE comp_alph_std(m1, m2, m3, c1, c2, c3, alphaStd, alphaMax, vff, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
     !   This is a pure subroutine to enhance the performance by 
@@ -538,7 +532,6 @@
         REAL(realk), INTENT(out) :: alphaStd, alphaMax
         REAL(realk), INTENT(in) :: vff
         REAL(realk), INTENT(in) :: ddx, ddy, ddz
-        REAL(realk), INTENT(in) :: tol
         
         ! Local variables
         REAL(realk) :: mc1, mc2, mc3
@@ -631,7 +624,7 @@
 
     !================================================================
 
-    PURE SUBROUTINE comp_frac_std(m1, m2, m3, c1, c2, c3, alphaLoc, cellProportion, tol)
+    PURE SUBROUTINE comp_frac_std(m1, m2, m3, c1, c2, c3, alphaLoc, cellProportion)
     !----------------------------------------------------------------
     !   What it does:
     !   This is a pure subroutine to enhance the performance by 
@@ -654,8 +647,7 @@
         REAL(realk), INTENT(in) :: m1, m2, m3, c1, c2, c3
         REAL(realk), INTENT(in) :: alphaLoc
         REAL(realk), INTENT(out) :: cellProportion
-        REAL(realk), INTENT(in) :: tol
-        
+
         ! Local variables
         REAL(realk) :: mc1, mc2, mc3
         REAL(realk) :: vol
