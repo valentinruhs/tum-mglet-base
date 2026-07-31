@@ -1,7 +1,7 @@
 {
     "time": {
         "dt": 0.01,
-        "mtstep": 3,
+        "mtstep": 3000,
 	"itinfo": 100,
         "tstat": 10.0,
 	"read": false
@@ -35,6 +35,9 @@
 	"test": "SCylAc",
 	"permutation" : 3,
 	"tolerance": 0.00000000000001,
+	"checkContinuity": false,
+	"checkSolenoidality": false,
+	"checkBalance": false,
 	"rho1" : 1000.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.0001,

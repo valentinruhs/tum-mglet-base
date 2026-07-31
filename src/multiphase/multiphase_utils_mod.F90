@@ -31,7 +31,7 @@ MODULE multiphase_utils_mod
 
     PUBLIC :: init_multiphase_utils, finish_multiphase_utils, &
         get_spatial_indices, get_spatial_extents, get_condit_velocity, clip_vff, &
-        check_continuity, check_solenoidality
+        check_continuity, check_solenoidality, comp_vol_phase1, sanity_check
 
 CONTAINS
 
@@ -152,7 +152,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE clip_vff(kk, jj, ii, vff, ddx, ddy, ddz, volClippedCum)
+    SUBROUTINE clip_vff(kk, jj, ii, vff, ddx, ddy, ddz, volClipPhase1)
     !----------------------------------------------------------------
     !   What it does:
     !   Clips the volume fraction field to its boundaries [0, 1].
@@ -168,7 +168,7 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in), OPTIONAL :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(inout), OPTIONAL :: volClippedCum
+        REAL(realk), INTENT(inout), OPTIONAL :: volClipPhase1
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -177,7 +177,7 @@ CONTAINS
         volBeforClip = 0.0_realk
         volAfterClip = 0.0_realk
 
-        IF ( PRESENT(volClippedCum) ) THEN
+        IF ( PRESENT(volClipPhase1) ) THEN
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3, kk-2
@@ -200,7 +200,7 @@ CONTAINS
             ENDDO
         ENDDO
 
-        IF ( PRESENT(volClippedCum) ) THEN
+        IF ( PRESENT(volClipPhase1) ) THEN
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3, kk-2
@@ -209,7 +209,7 @@ CONTAINS
                     ENDDO
                 ENDDO
             ENDDO
-            volClippedCum = volClippedCum + ( volAfterClip - volBeforClip )
+            volClipPhase1 = volClipPhase1 + ( volAfterClip - volBeforClip )
         ENDIF
 
     END SUBROUTINE clip_vff
@@ -223,8 +223,8 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk) :: itstep
-        REAL(realk) :: dt
+        INTEGER(intk), INTENT(in) :: itstep
+        REAL(realk), INTENT(in) :: dt
 
         ! Local variables
         TYPE(field_t), POINTER :: u_f, v_f, w_f
@@ -290,7 +290,7 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk) :: itstep
+        INTEGER(intk), INTENT(in) :: itstep
 
         ! Local variables
         TYPE(field_t), POINTER :: vff_f
@@ -335,5 +335,60 @@ CONTAINS
         ENDIF
 
     END SUBROUTINE check_continuity
+
+    !================================================================
+
+    SUBROUTINE comp_vol_phase1(kk, jj, ii, vff, ddx, ddy, ddz, volPhase1)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(inout) :: volPhase1
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    volPhase1 = volPhase1 + vff(k,j,i) * ddx(i) * ddy(j) * ddz(k)
+                ENDDO
+            ENDDO
+        ENDDO
+
+    END SUBROUTINE comp_vol_phase1
+
+    !================================================================
+
+    SUBROUTINE sanity_check(volPhase1r, volPhase1r1, volFluxPhase1, volCompPhase1, volClipPhase1)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        REAL(realk), INTENT(in) :: volPhase1r, volPhase1r1
+        REAL(realk), INTENT(in) :: volFluxPhase1, volCompPhase1, volClipPhase1
+
+        ! Local variables
+        REAL(realk) :: volResi
+
+        volResi = ( volPhase1r1 - volPhase1r ) - ( volFluxPhase1 + volCompPhase1 + volClipPhase1 )
+
+        IF ( myid == 0 ) THEN
+            WRITE(*,'(A,5(A,ES14.6))') "VOF budget: ", &
+            "  dV/V = ", ( volPhase1r1 - volPhase1r ) / volPhase1r, &
+            "  flux/V = ", volFluxPhase1 / volPhase1r, &
+            "  comp/V = ", volCompPhase1 / volPhase1r, &
+            "  clip/V = ", volClipPhase1 / volPhase1r, &
+            "  resi/V = ", volResi / volPhase1r
+        ENDIF
+
+    END SUBROUTINE sanity_check
 
 END MODULE multiphase_utils_mod

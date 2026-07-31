@@ -12,7 +12,8 @@
 
 MODULE multiphase_vof_transport_mod
 
-    USE precision_mod, ONLY: intk, realk
+    USE MPI_f08
+    USE precision_mod, ONLY: intk, realk, mglet_mpi_real
     USE grids_mod, ONLY: nmygrids, mygrids
     USE field_mod, ONLY: field_t
     USE fields_mod, ONLY: get_field
@@ -20,19 +21,17 @@ MODULE multiphase_vof_transport_mod
     USE pointers_mod, ONLY: get_ip3
     USE err_mod, ONLY: errr
     USE multiphase_plic_mod, ONLY: comp_frac, iface_reconstruction, comp_stag_frac, track_iface, track_iface_vic
-    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, permutation_multiphase, tol
+    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, permutation_multiphase, tol, checkContinuity, checkSolenoidality, checkBalance
     USE multiphase_material_mod, ONLY: comp_material_property_field, comp_property_face_value
     USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
     USE parent_mod, ONLY: parent
     USE grids_mod, ONLY: minlevel, maxlevel
     USE err_mod, ONLY: errr, err_abort
-    USE multiphase_utils_mod, ONLY: get_spatial_indices, get_spatial_extents, get_condit_velocity, clip_vff, check_continuity, check_solenoidality
+    USE multiphase_utils_mod, ONLY: get_spatial_indices, get_spatial_extents, get_condit_velocity, clip_vff, check_continuity, check_solenoidality, comp_vol_phase1, sanity_check
 
     IMPLICIT NONE
     PRIVATE
-
-    REAL(realk) :: volClippedCum, volFluxCum, volCompCum, volFld1n, volFld1n1
 
     PUBLIC :: init_multiphase_vof_transport, finish_multiphase_vof_transport, multiphase_solve
 
@@ -412,8 +411,8 @@ CONTAINS
         INTEGER(intk) :: i, igrid
         INTEGER(intk) :: kk, jj, ii
 
-        CALL check_continuity(itstep)
-        CALL check_solenoidality(itstep, dt)
+        IF ( checkContinuity ) CALL check_continuity(itstep)
+        IF ( checkSolenoidality ) CALL check_solenoidality(itstep, dt)
 
         uo_f = 0.0_realk
         vo_f = 0.0_realk
@@ -544,10 +543,13 @@ CONTAINS
         REAL(realk), ALLOCATABLE :: dStag(:,:,:), advr(:,:,:), adve(:,:,:)
         REAL(realk), ALLOCATABLE :: vffFlux1Stag(:,:,:), vffFlux2Stag(:,:,:), vel(:,:,:), vffFlux1(:,:,:)
         LOGICAL, ALLOCATABLE :: isIface(:,:,:)
-        INTEGER(intk) :: k, j, i
+        REAL(realk) :: volPhase1r, volPhase1r1, volFluxPhase1, volCompPhase1, volClipPhase1
 
-        volFld1n = 0.0_realk
-        volFld1n1 = 0.0_realk
+        volPhase1r = 0.0_realk
+        volPhase1r1 = 0.0_realk
+        volFluxPhase1 = 0.0_realk
+        volCompPhase1 = 0.0_realk
+        volClipPhase1 = 0.0_realk
 
         ! Get missing truly time-persistant fields
         CALL get_field(dx_f, "DX")
@@ -594,17 +596,15 @@ CONTAINS
             CALL normz_f%get_ptr(normz, igrid)
             CALL alpha_f%get_ptr(alpha, igrid)
 
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        volFld1n = volFld1n + vff(k,j,i) * ddx(i) * ddy(j) * ddz(k)
-                    ENDDO
-                ENDDO
-            ENDDO
-
+            ! Interface reconstruction and Weymouth-Yue-Coefficient on all grids
             CALL iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, normx, normy, normz, alpha)
             CALL comp_cWy(kk, jj, ii, vff, cWy%arr(ip3))
+
+            ! Compute Volume of Phase 1 at rk-step r
+            CALL comp_vol_phase1(kk, jj, ii, vff, ddx, ddy, ddz, volPhase1r)
         ENDDO
+
+        CALL MPI_Allreduce(MPI_IN_PLACE, volPhase1r, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -697,7 +697,7 @@ CONTAINS
 
                 CALL get_condit_velocity(kk, jj, ii, l, u, v, w, vel)
                 CALL comp_flux_cent(kk, jj, ii, l, vff, vel, vffFlux1, ddx, ddy, ddz, normx, normy, normz, alpha, isIface, dt)
-                CALL adv_vof(kk, jj, ii, 0, l, vff, cWy%arr(ip3), vel, vffFlux1, dx, dy, dz, ddx, ddy, ddz, dt, volFluxCum, volCompCum)
+                CALL adv_vof(kk, jj, ii, 0, l, vff, cWy%arr(ip3), vel, vffFlux1, dx, dy, dz, ddx, ddy, ddz, dt, volFluxPhase1, volCompPhase1)
 
                 ! Deallocate sweep-temporary fields
                 IF ( ALLOCATED(vffFlux1) ) DEALLOCATE(vffFlux1)
@@ -731,10 +731,13 @@ CONTAINS
                 CALL normz_f%get_ptr(normz, igrid)
                 CALL alpha_f%get_ptr(alpha, igrid)
 
+                ! Interface reconstruction
                 CALL iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, normx, normy, normz, alpha)
             ENDDO
-
         END DO
+
+        CALL MPI_Allreduce(MPI_IN_PLACE, volFluxPhase1, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
+        CALL MPI_Allreduce(MPI_IN_PLACE, volCompPhase1, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -746,17 +749,17 @@ CONTAINS
             CALL ddy_f%get_ptr(ddy, igrid)
             CALL ddz_f%get_ptr(ddz, igrid)
 
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        volFld1n1 = volFld1n1 + vff(k,j,i) * ddx(i) * ddy(j) * ddz(k)
-                    ENDDO
-                ENDDO
-            ENDDO
+            ! Clip vff at rk-step r+1
+            CALL clip_vff(kk, jj, ii, vff, ddx, ddy, ddz, volClipPhase1)
 
-            CALL clip_vff(kk, jj, ii, vff, ddx, ddy, ddz, volClippedCum)
-            ! WRITE(*,*) volFluxCum, volCompCum, volClippedCum , volFld1n1 - volFld1n - ( volFluxCum + volCompCum + volClippedCum )
+            ! Compute Volume of Phase 1 at rk-step r+1
+            CALL comp_vol_phase1(kk, jj, ii, vff, ddx, ddy, ddz, volPhase1r1)
         ENDDO
+
+        CALL MPI_Allreduce(MPI_IN_PLACE, volClipPhase1, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
+        CALL MPI_Allreduce(MPI_IN_PLACE, volPhase1r1, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
+
+        IF ( checkBalance ) CALL sanity_check(volPhase1r, volPhase1r1, volFluxPhase1, volCompPhase1, volClipPhase1)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -985,7 +988,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE adv_vof(kk, jj, ii, q, l, vff, cWy, vel, vffFlux1, dx, dy, dz, ddx, ddy, ddz, dt, volFluxCum, volCompCum)
+    SUBROUTINE adv_vof(kk, jj, ii, q, l, vff, cWy, vel, vffFlux1, dx, dy, dz, ddx, ddy, ddz, dt, volFluxPhase1, volCompPhase1)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -999,7 +1002,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dt
-        REAL(realk), INTENT(out), OPTIONAL :: volFluxCum, volCompCum
+        REAL(realk), INTENT(inout), OPTIONAL :: volFluxPhase1, volCompPhase1
 
         ! Local variables
         INTEGER(intk) :: i, j, k
@@ -1014,12 +1017,12 @@ CONTAINS
             DO j = 3, jj-2
                 DO k = 3, kk-2
                     dsCV = il * dsx(i) + jl * dsy(j) + kl * dsz(k)
-                    dV   = ddx(i)*ddy(j)*ddz(k)
                     div(k,j,i) = ( vel(k,j,i) - vel(k-kl,j-jl,i-il) ) / dsCV
 
-                    IF ( PRESENT(volFluxCum) .AND. PRESENT(volCompCum) ) THEN
-                        volFluxCum = volFluxCum - dt/dsCV * ( vffFlux1(k,j,i) - vffFlux1(k-kl,j-jl,i-il) ) * dV
-                        volCompCum = volCompCum + dt * cWy(k,j,i) * div(k,j,i) * dV
+                    IF ( PRESENT(volFluxPhase1) .AND. PRESENT(volCompPhase1) ) THEN
+                        dV   = ddx(i)*ddy(j)*ddz(k)
+                        volFluxPhase1 = volFluxPhase1 - dt/dsCV * ( vffFlux1(k,j,i) - vffFlux1(k-kl,j-jl,i-il) ) * dV
+                        volCompPhase1 = volCompPhase1 + dt * cWy(k,j,i) * div(k,j,i) * dV
                     ENDIF
 
                     vff(k,j,i) = vff(k,j,i) - dt/dsCV * ( vffFlux1(k,j,i) - vffFlux1(k-kl,j-jl,i-il) ) + dt * cWy(k,j,i) * div(k,j,i)
