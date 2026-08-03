@@ -35,7 +35,7 @@ CONTAINS
         LOGICAL :: lastrk
         INTEGER(intk) :: ilevel
         REAL(realk) :: frhs, fu, dtrk, dtrki, timerk
-        TYPE(field_t), POINTER :: u, v, w, ut, vt, wt, pwu, pwv, pww, p, g, d, vff
+        TYPE(field_t), POINTER :: u, v, w, ut, vt, wt, pwu, pwv, pww, p, g, vff
         TYPE(field_t), POINTER :: du, dv, dw
         TYPE(field_t) :: uo, vo, wo
 
@@ -48,7 +48,6 @@ CONTAINS
         CALL get_field(w, "W")
         CALL get_field(p, "P")
         CALL get_field(g, "G")
-        CALL get_field(d, "D")
         CALL get_field(vff, "VFF")
 
         ! In all implemented RK schemes FRHS is 0.0 for IRK 1, this means
@@ -101,7 +100,7 @@ CONTAINS
                 CALL update_velocity(u, v, w, vff, itstep, dt)
             END IF
 
-            CALL multiphase_solve(u, v, w, vff, p, g, d, dt*dtrki, itstep, uo, vo, wo)
+            CALL multiphase_solve(u, v, w, vff, p, dt*dtrki, itstep, uo, vo, wo)
             ! CALL validate_velocity(u, v, w, itstep, dt)
 
             CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)

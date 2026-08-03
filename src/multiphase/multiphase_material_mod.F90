@@ -26,7 +26,9 @@ MODULE multiphase_material_mod
     IMPLICIT NONE
     PRIVATE
 
-    PUBLIC :: init_multiphase_material, finish_multiphase_material, comp_material_property_field, comp_property_face_value
+    PUBLIC :: init_multiphase_material, finish_multiphase_material, &
+        comp_material_property_field, comp_property_face_value_cent, &
+        comp_property_face_value_stag
 
 CONTAINS
 
@@ -36,26 +38,9 @@ CONTAINS
         ! None
 
         ! Local variables
-        TYPE(field_t), POINTER :: d_f
-        TYPE(field_t), POINTER :: vff_f
-        INTEGER(intk) :: kk, jj, ii
-        INTEGER(intk) :: i, igrid
-        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: d, vff
+        ! None
 
-        CALL get_field(d_f, "D")
-        CALL get_field(vff_f, "VFF")
-
-        DO i = 1, nmygrids
-            igrid = mygrids(i)
-
-            CALL get_mgdims(kk, jj, ii, igrid)
-
-            CALL d_f%get_ptr(d, igrid)
-            CALL vff_f%get_ptr(vff, igrid)
-
-            CALL comp_material_property_field(kk, jj, ii, vff, d, rho1, rho2)
-        END DO
-
+        continue
     END SUBROUTINE init_multiphase_material
 
     !================================================================
@@ -109,7 +94,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_property_face_value(kk, jj, ii, vff, prop1, prop2, average, pe, pn, pt)
+    SUBROUTINE comp_property_face_value_cent(kk, jj, ii, vff, prop1, prop2, average, pe, pn, pt)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -150,6 +135,54 @@ CONTAINS
             ENDDO
         ENDIF
 
-    ENDSUBROUTINE comp_property_face_value
+    ENDSUBROUTINE comp_property_face_value_cent
+
+    !================================================================
+
+    SUBROUTINE comp_property_face_value_stag(kk, jj, ii, vff, prop1, prop2, pxy, pxz, pyz)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Compute the "matrix" of a property on the staggered cells
+    !   faces. Each cell has 6 faces, hence there are 18 values to 
+    !   compute. Since (k,j,i)+ = (k+kq,j+jq,i+iq)- this reduces to
+    !   9 values. 
+    !
+    !   Of these 9, 6 are the same:
+    !   xStagN = yStagE, xStagW = yStagS,
+    !   xStagT = zStagE, xStagW = zStagB,
+    !   yStagT = zStagN, yStagS = zStagB.
+    !
+    !   Additionally, the diagonal values are trivial, since they
+    !   are centered on the pressure grid.
+    !
+    !   -> 3 different values to compute!
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: prop1, prop2
+        REAL(realk), INTENT(out) :: pxy(kk, jj, ii), pxz(kk, jj, ii), pyz(kk, jj, ii)
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: phi
+
+        DO i = 2, ii-2
+            DO j = 2, jj-2
+                DO k = 2, kk-2
+                    phi = MIN(MAX(0.5_realk*(vff(k,j,i) + vff(k,j,i+1) + vff(k,j+1,i) + vff(k,j+1,i+1)) - 0.5_realk, 0.0_realk), 1.0_realk)
+                    pxy(k,j,i) = 1.0_realk / ( phi/prop1 + (1.0_realk - phi)/prop2 )
+
+                    phi = MIN(MAX(0.5_realk*(vff(k,j,i) + vff(k,j,i+1) + vff(k+1,j,i) + vff(k+1,j,i+1)) - 0.5_realk, 0.0_realk), 1.0_realk)
+                    pxz(k,j,i) = 1.0_realk / ( phi/prop1 + (1.0_realk - phi)/prop2 )
+
+                    phi = MIN(MAX(0.5_realk*(vff(k,j,i) + vff(k,j+1,i) + vff(k+1,j,i) + vff(k+1,j+1,i)) - 0.5_realk, 0.0_realk), 1.0_realk)
+                    pyz(k,j,i) = 1.0_realk / ( phi/prop1 + (1.0_realk - phi)/prop2 )
+                ENDDO
+            ENDDO
+        ENDDO
+
+    ENDSUBROUTINE comp_property_face_value_stag
 
 END MODULE multiphase_material_mod

@@ -22,7 +22,7 @@ MODULE multiphase_vof_transport_mod
     USE err_mod, ONLY: errr
     USE multiphase_plic_mod, ONLY: comp_frac, iface_reconstruction, comp_stag_frac, track_iface, track_iface_vic
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, permutation_multiphase, tol, checkContinuity, checkSolenoidality, checkBalance
-    USE multiphase_material_mod, ONLY: comp_material_property_field, comp_property_face_value
+    USE multiphase_material_mod, ONLY: comp_material_property_field, comp_property_face_value_cent, comp_property_face_value_stag
     USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
     USE parent_mod, ONLY: parent
@@ -379,7 +379,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE multiphase_solve(u_f, v_f, w_f, vff_f, p_f, g_f, d_f, dt, itstep, uo_f, vo_f, wo_f)
+    SUBROUTINE multiphase_solve(u_f, v_f, w_f, vff_f, p_f, dt, itstep, uo_f, vo_f, wo_f)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -391,8 +391,6 @@ CONTAINS
         TYPE(field_t), INTENT(inout) :: w_f
         TYPE(field_t), INTENT(inout) :: vff_f
         TYPE(field_t), INTENT(in) :: p_f
-        TYPE(field_t), INTENT(in) :: g_f
-        TYPE(field_t), INTENT(in) :: d_f
         REAL(realk), INTENT(in) :: dt
         INTEGER(intk), INTENT(in) :: itstep
         TYPE(field_t), INTENT(inout) :: uo_f, vo_f, wo_f
@@ -404,9 +402,11 @@ CONTAINS
 
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
         TYPE(field_t), POINTER :: rdx_f, rdy_f, rdz_f, rddx_f, rddy_f, rddz_f
+        TYPE(field_t), POINTER :: up_f, vp_f, wp_f, vffp_f
 
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:), ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:), rddx(:), rddy(:), rddz(:)
+        REAL(realk), POINTER, CONTIGUOUS, DIMENSION(:, :, :) :: up, vp, wp, vffp
 
         INTEGER(intk) :: i, igrid
         INTEGER(intk) :: kk, jj, ii
@@ -424,6 +424,15 @@ CONTAINS
         CALL get_field(rdx_f, "RDX"); CALL get_field(rdy_f, "RDY"); CALL get_field(rdz_f, "RDZ")
         CALL get_field(rddx_f, "RDDX"); CALL get_field(rddy_f, "RDDY"); CALL get_field(rddz_f, "RDDZ")
 
+        CALL get_field(up_f, "UP"); CALL get_field(vp_f, "VP"); CALL get_field(wp_f, "WP")
+        CALL get_field(vffp_f, "VFFP")
+
+        up_f%arr = u_f%arr
+        vp_f%arr = v_f%arr
+        wp_f%arr = w_f%arr
+        vffp_f%arr = vff_f%arr
+
+        CALL adve_operator(u_f, v_f, w_f, vff_f, dt, itstep)
 
         DO i = 1, nmygrids
             igrid = mygrids(i)
@@ -433,34 +442,15 @@ CONTAINS
             CALL v_f%get_ptr(v, igrid)
             CALL w_f%get_ptr(w, igrid)
             CALL vff_f%get_ptr(vff, igrid)
-            CALL uo_f%get_ptr(uo, igrid)
-            CALL vo_f%get_ptr(vo, igrid)
-            CALL wo_f%get_ptr(wo, igrid)
-
-            CALL ddx_f%get_ptr(ddx, igrid)
-            CALL ddy_f%get_ptr(ddy, igrid)
-            CALL ddz_f%get_ptr(ddz, igrid)
-            CALL rdx_f%get_ptr(rdx, igrid)
-            CALL rdy_f%get_ptr(rdy, igrid)
-            CALL rdz_f%get_ptr(rdz, igrid)
-            CALL rddx_f%get_ptr(rddx, igrid)
-            CALL rddy_f%get_ptr(rddy, igrid)
-            CALL rddz_f%get_ptr(rddz, igrid)
-
-            CALL diff_operator(kk, jj, ii, u, v, w, vff, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
-        ENDDO
-
-        CALL adve_operator(u_f, v_f, w_f, vff_f, dt, itstep)
-
-        DO i = 1, nmygrids
-            igrid = mygrids(i)
-            CALL get_mgdims(kk, jj, ii, igrid)
-
-            CALL vff_f%get_ptr(vff, igrid)
             CALL p_f%get_ptr(p, igrid)
             CALL uo_f%get_ptr(uo, igrid)
             CALL vo_f%get_ptr(vo, igrid)
             CALL wo_f%get_ptr(wo, igrid)
+
+            CALL up_f%get_ptr(up, igrid)
+            CALL vp_f%get_ptr(vp, igrid)
+            CALL wp_f%get_ptr(wp, igrid)
+            CALL vffp_f%get_ptr(vffp, igrid)
 
             CALL dx_f%get_ptr(dx, igrid)
             CALL dy_f%get_ptr(dy, igrid)
@@ -475,6 +465,7 @@ CONTAINS
             CALL rddy_f%get_ptr(rddy, igrid)
             CALL rddz_f%get_ptr(rddz, igrid)
 
+            CALL diff_operator(kk, jj, ii, up, vp, wp, vffp, vff, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
             CALL pres_operator(kk, jj, ii, vff, p, rdx, rdy, rdz, igrid, uo, vo, wo)
             CALL exte_operator(kk, jj, ii, vff, dx, dy, dz, ddx, ddy, ddz, uo, vo, wo)
         END DO
@@ -791,7 +782,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE diff_operator(kk, jj, ii, u, v, w, vff, ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
+    SUBROUTINE diff_operator(kk, jj, ii, u, v, w, vffp, vff, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -799,54 +790,40 @@ CONTAINS
     
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii), vff(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vffp(kk, jj, ii), vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
         REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
         REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
 
         ! Local variables
-        INTEGER(intk) :: k, j, i, q
+        INTEGER(intk) :: k, j, i
         REAL(realk) :: d(kk, jj, ii), g(kk, jj, ii)
-        REAL(realk) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii), alpha(kk, jj, ii)
-        LOGICAL :: isIface(kk, jj, ii)
-        REAL(realk) :: vffStag(kk, jj, ii)
-        REAL(realk) :: ge(kk, jj, ii, 3), gn(kk, jj, ii, 3), gt(kk, jj, ii, 3)
+        REAL(realk) :: gxy(kk, jj, ii), gxz(kk, jj, ii), gyz(kk, jj, ii)
         REAL(realk) :: tauxxe, tauxxw, tauxyn, tauxys, tauxzt, tauxzb
         REAL(realk) :: tauyxe, tauyxw, tauyyn, tauyys, tauyzt, tauyzb
         REAL(realk) :: tauzxe, tauzxw, tauzyn, tauzys, tauzzt, tauzzb
 
+        CALL comp_material_property_field(kk, jj, ii, vffp, g, gmol1, gmol2)
+        CALL comp_property_face_value_stag(kk, jj, ii, vffp, gmol1, gmol2, gxy, gxz, gyz)
         CALL comp_material_property_field(kk, jj, ii, vff, d, rho1, rho2)
-        CALL comp_material_property_field(kk, jj, ii, vff, g, gmol1, gmol2)
-        CALL iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, normx, normy, normz, alpha)
-        CALL track_iface(isIface, kk, jj, ii, vff)
-
-        DO q = 1, 3
-
-            CALL comp_stag_frac(kk, jj, ii, q, vff, vffStag, ddx, ddy, ddz, normx, normy, normz, alpha, isIface)
-            CALL comp_mean_harm(kk, jj, ii, q, vffStag, g, ge(:,:,:,q), gn(:,:,:,q), gt(:,:,:,q))
-            ! CALL comp_mean_arit(kk, jj, ii, q, vffStag, g, ge, gn, gt)
-
-        ENDDO
 
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    ! Normal stresses
-                    tauxxe = ge(k,j,i,1) * 2.0_realk * (u(k,j,i+1) - u(k,j,i)) * rddx(i+1)
-                    tauxxw = ge(k,j,i-1,1) * 2.0_realk * (u(k,j,i) - u(k,j,i-1)) * rddx(i)
-
-                    ! Shear stresses
-                    tauxyn = gn(k,j,i,1) * ( (u(k,j+1,i) - u(k,j,i)) * rdy(j)   + (v(k,j,i+1) - v(k,j,i))     * rdx(i) )
-                    tauxys = gn(k,j-1,i,1) * ( (u(k,j,i) - u(k,j-1,i)) * rdy(j-1) + (v(k,j-1,i+1) - v(k,j-1,i)) * rdx(i) )
-                    tauxzt = gt(k,j,i,1) * ( (u(k+1,j,i) - u(k,j,i)) * rdz(k)   + (w(k,j,i+1) - w(k,j,i))     * rdx(i) )
-                    tauxzb = gt(k-1,j,i,1) * ( (u(k,j,i) - u(k-1,j,i)) * rdz(k-1) + (w(k-1,j,i+1) - w(k-1,j,i)) * rdx(i) )
+                    ! Stresses
+                    tauxxe = g(k,j,i) * 2.0_realk * (u(k,j,i+1) - u(k,j,i))*rddx(i+1)
+                    tauxxw = g(k,j,i-1) * 2.0_realk * (u(k,j,i) - u(k,j,i-1))*rddx(i)
+                    tauxyn = gxy(k,j,i) * ((u(k,j+1,i) - u(k,j,i))*rdy(j) + (v(k,j,i+1) - v(k,j,i))*rdx(i))
+                    tauxys = gxy(k,j-1,i) * ((u(k,j,i) - u(k,j-1,i))*rdy(j-1) + (v(k,j-1,i+1) - v(k,j-1,i))*rdx(i))
+                    tauxzt = gxz(k,j,i) * ((u(k+1,j,i) - u(k,j,i))*rdz(k) + (w(k,j,i+1) - w(k,j,i))*rdx(i))
+                    tauxzb = gxz(k-1,j,i) * ((u(k,j,i) - u(k-1,j,i))*rdz(k-1) + (w(k-1,j,i+1) - w(k-1,j,i))*rdx(i))
 
                     ! Change due to diffusion
-                    uo(k,j,i) = uo(k,j,i) + 2.0_realk/( d(k,j,i) + d(k,j,i+1) ) * &
-                        ( ( tauxxe - tauxxw ) * rdx(i) + &
-                          ( tauxyn - tauxys ) * rddy(j) + &
-                          ( tauxzt - tauxzb ) * rddz(k) )
+                    uo(k,j,i) = uo(k,j,i) + 2.0_realk/(d(k,j,i) + d(k,j,i+1))* &
+                        ((tauxxe - tauxxw)*rdx(i) + &
+                        (tauxyn - tauxys)*rddy(j) + &
+                        (tauxzt - tauxzb)*rddz(k))
                 END DO
             END DO
         END DO
@@ -854,23 +831,19 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    ! Shear stresses
-                    tauyxe = ge(k,j,i,2) * ( (u(k,j+1,i) - u(k,j,i))     * rdy(j) + (v(k,j,i+1) - v(k,j,i)) * rdx(i)   )
-                    tauyxw = ge(k,j,i-1,2) * ( (u(k,j+1,i-1) - u(k,j,i-1)) * rdy(j) + (v(k,j,i) - v(k,j,i-1)) * rdx(i-1) )
-
-                    ! Normal stresses
-                    tauyyn = gn(k,j,i,2) * 2.0_realk * (v(k,j+1,i) - v(k,j,i)) * rddy(j+1)
-                    tauyys = gn(k,j-1,i,2) * 2.0_realk * (v(k,j,i) - v(k,j-1,i)) * rddy(j)
-                    
-                    ! Shear stresses
-                    tauyzt = gt(k,j,i,2) * ( (v(k+1,j,i) - v(k,j,i)) * rdz(k)   + (w(k,j+1,i) - w(k,j,i))     * rdy(j) )
-                    tauyzb = gt(k-1,j,i,2) * ( (v(k,j,i) - v(k-1,j,i)) * rdz(k-1) + (w(k-1,j+1,i) - w(k-1,j,i)) * rdy(j) )
+                    ! Stresses
+                    tauyxe = gxy(k,j,i) * ((u(k,j+1,i) - u(k,j,i))*rdy(j) + (v(k,j,i+1) - v(k,j,i))*rdx(i))
+                    tauyxw = gxy(k,j,i-1) * ((u(k,j+1,i-1) - u(k,j,i-1))*rdy(j) + (v(k,j,i) - v(k,j,i-1))*rdx(i-1))
+                    tauyyn = g(k,j,i) * 2.0_realk * (v(k,j+1,i) - v(k,j,i))*rddy(j+1)
+                    tauyys = g(k,j-1,i) * 2.0_realk * (v(k,j,i) - v(k,j-1,i))*rddy(j)
+                    tauyzt = gyz(k,j,i) * ((v(k+1,j,i) - v(k,j,i))*rdz(k) + (w(k,j+1,i) - w(k,j,i))*rdy(j))
+                    tauyzb = gyz(k-1,j,i) * ((v(k,j,i) - v(k-1,j,i))*rdz(k-1) + (w(k-1,j+1,i) - w(k-1,j,i))*rdy(j))
 
                     ! Change due to diffusion
-                    vo(k,j,i) = vo(k,j,i) + 2.0_realk/( d(k,j,i) + d(k,j+1,i) ) * &
-                        ( ( tauyxe - tauyxw ) * rddx(i) + &
-                          ( tauyyn - tauyys ) * rdy(j) + &
-                          ( tauyzt - tauyzb ) * rddz(k) )
+                    vo(k,j,i) = vo(k,j,i) + 2.0_realk/(d(k,j,i) + d(k,j+1,i))* &
+                        ((tauyxe - tauyxw)*rddx(i) + &
+                        (tauyyn - tauyys)*rdy(j) + &
+                        (tauyzt - tauyzb)*rddz(k))
                 END DO
             END DO
         END DO
@@ -878,21 +851,19 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    ! Shear stresses
-                    tauzxe = ge(k,j,i,3) * ( (u(k+1,j,i) - u(k,j,i))     * rdz(k) + (w(k,j,i+1) - w(k,j,i)) * rdx(i)   )
-                    tauzxw = ge(k,j,i-1,3) * ( (u(k+1,j,i-1) - u(k,j,i-1)) * rdz(k) + (w(k,j,i) - w(k,j,i-1)) * rdx(i-1) )
-                    tauzyn = gn(k,j,i,3) * ( (v(k+1,j,i) - v(k,j,i))     * rdz(k) + (w(k,j+1,i) - w(k,j,i)) * rdy(j)   )
-                    tauzys = gn(k,j-1,i,3) * ( (v(k+1,j-1,i) - v(k,j-1,i)) * rdz(k) + (w(k,j,i) - w(k,j-1,i)) * rdy(j-1) )
-                    
-                    ! Normal stresses
-                    tauzzt = gt(k,j,i,3) * 2.0_realk * (w(k+1,j,i) - w(k,j,i)) * rddz(k+1)
-                    tauzzb = gt(k-1,j,i,3) * 2.0_realk * (w(k,j,i) - w(k-1,j,i)) * rddz(k)
+                    ! Stresses
+                    tauzxe = gxz(k,j,i) * ((u(k+1,j,i) - u(k,j,i))*rdz(k) + (w(k,j,i+1) - w(k,j,i))*rdx(i))
+                    tauzxw = gxz(k,j,i-1) * ((u(k+1,j,i-1) - u(k,j,i-1))*rdz(k) + (w(k,j,i) - w(k,j,i-1))*rdx(i-1))
+                    tauzyn = gyz(k,j,i) * ((v(k+1,j,i) - v(k,j,i))*rdz(k) + (w(k,j+1,i) - w(k,j,i))*rdy(j))
+                    tauzys = gyz(k,j-1,i) * ((v(k+1,j-1,i) - v(k,j-1,i))*rdz(k) + (w(k,j,i) - w(k,j-1,i))*rdy(j-1))
+                    tauzzt = g(k,j,i) * 2.0_realk * (w(k+1,j,i) - w(k,j,i))*rddz(k+1)
+                    tauzzb = g(k-1,j,i) * 2.0_realk * (w(k,j,i) - w(k-1,j,i))*rddz(k)
 
                     ! Change due to diffusion
-                    wo(k,j,i) = wo(k,j,i) + 2.0_realk/( d(k,j,i) + d(k+1,j,i) ) * &
-                        ( ( tauzxe - tauzxw ) * rddx(i) + &
-                          ( tauzyn - tauzys ) * rddy(j) + &
-                          ( tauzzt - tauzzb ) * rdz(k) )
+                    wo(k,j,i) = wo(k,j,i) + 2.0_realk/(d(k,j,i) + d(k+1,j,i))*&
+                        ((tauzxe - tauzxw)*rddx(i) + &
+                        (tauzyn - tauzys)*rddy(j) + &
+                        (tauzzt - tauzzb)*rdz(k))
                 END DO
             END DO
         END DO
@@ -920,7 +891,7 @@ CONTAINS
         REAL(realk) :: gpx, gpy, gpz
         INTEGER(intk) :: i, j, k
 
-        CALL comp_property_face_value(kk, jj, ii, vff, rho1, rho2, 'ARI', rhoe, rhon, rhot)
+        CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', rhoe, rhon, rhot)
 
         CALL get_gradpxflag(gradpflag, igrid)
         gpx = gradp(1)*gradpflag
@@ -1197,90 +1168,6 @@ CONTAINS
         END DO
 
     END SUBROUTINE comp_cWy
-
-    !================================================================
-
-    SUBROUTINE comp_mean_harm(kk, jj, ii, q, vff, g, ge, gn, gt)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   
-    !   
-    !   Source: 
-    !   
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii, q
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii), g(kk, jj, ii)
-        REAL(realk), INTENT(out) :: ge(kk, jj, ii), gn(kk, jj, ii), gt(kk, jj, ii)
-
-        ! Loval variables
-        INTEGER(intk) :: k, j, i
-        INTEGER(intk) :: kq, jq, iq
-
-        CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
-
-        DO i = 2, ii-2
-            DO j = 2, jj-2
-                DO k = 2, kk-2
-
-                    ge(k,j,i) = iq * g(k,j,i+1) + &
-                                jq * 1.0_realk / ( vff(k,j,i+1) / gmol1 + ( 1.0_realk - vff(k,j,i+1) ) / gmol2 ) + &
-                                kq * 1.0_realk / ( vff(k,j,i+1) / gmol1 + ( 1.0_realk - vff(k,j,i+1) ) / gmol2 )
-                    gn(k,j,i) = iq * 1.0_realk / ( vff(k,j+1,i) / gmol1 + ( 1.0_realk - vff(k,j+1,i) ) / gmol2 ) + &
-                                jq * g(k,j+1,i) + &
-                                kq * 1.0_realk / ( vff(k,j+1,i) / gmol1 + ( 1.0_realk - vff(k,j+1,i) ) / gmol2 )
-                    gt(k,j,i) = iq * 1.0_realk / ( vff(k+1,j,i) / gmol1 + ( 1.0_realk - vff(k+1,j,i) ) / gmol2 ) + &
-                                jq * 1.0_realk / ( vff(k+1,j,i) / gmol1 + ( 1.0_realk - vff(k+1,j,i) ) / gmol2 ) + &
-                                kq * g(k+1,j,i)
-
-                ENDDO
-            ENDDO
-        ENDDO
-
-    END SUBROUTINE comp_mean_harm
-
-    !================================================================
-
-    ! SUBROUTINE comp_mean_arit(kk, jj, ii, q, vff, g, ge, gn, gt)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !   
-    ! !   
-    ! !   Source: 
-    ! !   
-    ! !----------------------------------------------------------------
-
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii, q
-    !     REAL(realk), INTENT(in) :: vff(kk, jj, ii), g(kk, jj, ii)
-    !     REAL(realk), INTENT(out) :: ge(kk, jj, ii), gn(kk, jj, ii), gt(kk, jj, ii)
-
-    !     ! Loval variables
-    !     INTEGER(intk) :: k, j, i
-    !     INTEGER(intk) :: kq, jq, iq
-
-    !     CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
-
-    !     DO i = 2, ii-2
-    !         DO j = 2, jj-2
-    !             DO k = 2, kk-2
-
-    !                 ge(k,j,i) = fx * g(k,j,i+1) + &
-    !                             jl * ( vff(k,j,i+1) * gmol1 + ( 1.0_realk - vff(k,j,i+1) ) * gmol2 ) + &
-    !                             kl * ( vff(k,j,i+1) * gmol1 + ( 1.0_realk - vff(k,j,i+1) ) * gmol2 )
-    !                 gn(k,j,i) = fx * ( vff(k,j+1,i) * gmol1 + ( 1.0_realk - vff(k,j+1,i) ) * gmol2 ) + &
-    !                             jl * g(k,j+1,i) + &
-    !                             kl * ( vff(k,j+1,i) * gmol1 + ( 1.0_realk - vff(k,j+1,i) ) * gmol2 )
-    !                 gt(k,j,i) = fx * ( vff(k+1,j,i) * gmol1 + ( 1.0_realk - vff(k+1,j,i) ) * gmol2 ) + &
-    !                             jl * ( vff(k+1,j,i) * gmol1 + ( 1.0_realk - vff(k+1,j,i) ) * gmol2 ) + &
-    !                             kl * g(k+1,j,i)
-
-    !             ENDDO
-    !         ENDDO
-    !     ENDDO
-
-    ! END SUBROUTINE comp_mean_arit
 
     !================================================================
 

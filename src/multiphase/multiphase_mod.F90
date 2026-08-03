@@ -18,7 +18,7 @@ MODULE multiphase_mod
     USE multiphasecore_mod, ONLY: init_multiphasecore, finish_multiphasecore, has_multiphase, solve_multiphase
     USE multiphase_vof_transport_mod, ONLY: init_multiphase_vof_transport, finish_multiphase_vof_transport
     USE multiphase_plic_mod, ONLY: init_multiphase_plic, finish_multiphase_plic
-    USE multiphase_material_mod, ONLY: init_multiphase_material, finish_multiphase_material, comp_property_face_value
+    USE multiphase_material_mod, ONLY: init_multiphase_material, finish_multiphase_material, comp_property_face_value_cent
     USE multiphase_io_mod, ONLY: init_multiphase_io, finish_multiphase_io
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
     USE multiphase_utils_mod, ONLY: init_multiphase_utils, finish_multiphase_utils
@@ -126,7 +126,7 @@ CONTAINS
             IF ( .NOT. ALLOCATED(rhon)) ALLOCATE(rhon(kk, jj, ii))
             IF ( .NOT. ALLOCATED(rhot)) ALLOCATE(rhot(kk, jj, ii))
 
-            CALL comp_property_face_value(kk, jj, ii, vff, rho1, rho2, 'ARI', rhoe, rhon, rhot)
+            CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', rhoe, rhon, rhot)
 
             DO i = 3, ii-2
                 DO j = 3, jj-2

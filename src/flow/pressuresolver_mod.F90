@@ -7,7 +7,7 @@ MODULE pressuresolver_mod
     USE plog_mod
     USE multiphasecore_mod, ONLY: solve_multiphase, rho1, rho2
     USE multiphase_mod, ONLY: comp_matrix_coeff_multiphase, comp_factor_coeff_multiphase
-    USE multiphase_material_mod, ONLY: comp_property_face_value
+    USE multiphase_material_mod, ONLY: comp_property_face_value_cent
 
     IMPLICIT NONE (type, external)
     PRIVATE
@@ -1507,7 +1507,7 @@ CONTAINS
         INTEGER(intk) :: k, j, i
         REAL(realk) :: rfak
 
-        CALL comp_property_face_value(kk, jj, ii, vff, rho1, rho2, 'ARI', rhoe, rhon, rhot)
+        CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', rhoe, rhon, rhot)
 
         rfak = 1.0_realk/fak
 

@@ -54,12 +54,13 @@ CONTAINS
 
         ! Local variables
         TYPE(config_t) :: multiphaseconf
-        INTEGER(intk), PARAMETER :: unitsd(7) = [1, -3, 0, 0, 0, 0, 0]
+        INTEGER(intk), PARAMETER :: unitsvp(7) = [0, 1, -1, 0, 0, 0, 0]
         INTEGER(intk), PARAMETER :: unitsvff(7) = [0, 0, 0, 0, 0, 0, 0]
         INTEGER(intk), PARAMETER :: unitsnorm(7) = [0, 0, 0, 0, 0, 0, 0]
         INTEGER(intk), PARAMETER :: unitsalpha(7) = [0, 1, 0, 0, 0, 0, 0]
-        CHARACTER(len=*), PARAMETER :: descriptiond = "Density"
+        CHARACTER(len=*), PARAMETER :: descriptionvp = "Prev. Velocity"
         CHARACTER(len=*), PARAMETER :: descriptionvff = "Volume Fraction Field"
+        CHARACTER(len=*), PARAMETER :: descriptionvffp = "Prev. Volume Fraction Field"
         CHARACTER(len=*), PARAMETER :: descriptionnorm = "Norm"
         CHARACTER(len=*), PARAMETER :: descriptionalpha = "Alpha"
 
@@ -110,10 +111,16 @@ CONTAINS
         END IF
 
         ! Initialize multiphase fields
-        CALL set_field("D", description=descriptiond , units=unitsd, &
-            dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("UP", description=descriptionvp, istag=1, units=unitsvp, &
+            dread=.FALSE., required=dread, dwrite=.FALSE., buffers=.TRUE.)
+        CALL set_field("VP", description=descriptionvp, jstag=1, units=unitsvp, &
+            dread=.FALSE., required=dread, dwrite=.FALSE., buffers=.TRUE.)
+        CALL set_field("WP", description=descriptionvp, kstag=1, units=unitsvp, &
+            dread=.FALSE., required=dread, dwrite=.FALSE., buffers=.TRUE.)
         CALL set_field("VFF", description=descriptionvff , units=unitsvff, &
             dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("VFFP", description=descriptionvffp , units=unitsvff, &
+            dread=dread, required=dread, dwrite=.FALSE., buffers=.TRUE.)
         CALL set_field("NORMX", description=descriptionnorm , units=unitsnorm, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("NORMY", description=descriptionnorm , units=unitsnorm, &
