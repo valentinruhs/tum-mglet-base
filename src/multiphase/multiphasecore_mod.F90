@@ -31,6 +31,7 @@ MODULE multiphasecore_mod
     LOGICAL, PROTECTED :: has_multiphase, solve_multiphase
     CHARACTER(len=6), PROTECTED :: test_multiphase
     INTEGER(intk), PROTECTED :: permutation_multiphase
+    LOGICAL, PROTECTED :: omitAdve, omitDiff, omitExte
     REAL(realk), PROTECTED :: tol
     LOGICAL, PROTECTED :: checkContinuity, checkSolenoidality, checkBalance
 
@@ -41,9 +42,9 @@ MODULE multiphasecore_mod
 
     PUBLIC :: init_multiphasecore, finish_multiphasecore, &
         has_multiphase, solve_multiphase, test_multiphase, &
-        permutation_multiphase, tol, checkContinuity, &
-        checkSolenoidality, checkBalance, rho1, rho2, &
-        gmol1, gmol2, grav
+        permutation_multiphase, omitAdve, omitDiff, omitExte, &
+        tol, checkContinuity, checkSolenoidality, checkBalance, &
+        rho1, rho2, gmol1, gmol2, grav
 
 CONTAINS
 
@@ -81,6 +82,9 @@ CONTAINS
         ! Read steering input
         CALL multiphaseconf%get_value("/solve", solve_multiphase, .TRUE.)
         CALL multiphaseconf%get_value("/test", test_multiphase, "none")
+        CALL multiphaseconf%get_value("/omitAdve", omitAdve, .FALSE.)
+        CALL multiphaseconf%get_value("/omitDiff", omitDiff, .FALSE.)
+        CALL multiphaseconf%get_value("/omitExte", omitExte, .FALSE.)
         CALL multiphaseconf%get_value("/permutation", permutation_multiphase, 3_intk)
         CALL multiphaseconf%get_value("/tolerance", tol, 1.0E-12_realk)
         CALL multiphaseconf%get_value("/checkContinuity", checkContinuity, .FALSE.)
@@ -105,10 +109,6 @@ CONTAINS
 
         ! Read gravity
         CALL multiphaseconf%get_array("/gravity", grav)
-        IF ( MINVAL(grav) < 0.0_realk ) THEN
-            WRITE(*, *) "Gravity must be positive. grav = ", grav
-            CALL errr(__FILE__, __LINE__)
-        END IF
 
         ! Initialize multiphase fields
         CALL set_field("UP", description=descriptionvp, istag=1, units=unitsvp, &

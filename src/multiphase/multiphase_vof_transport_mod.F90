@@ -21,7 +21,7 @@ MODULE multiphase_vof_transport_mod
     USE pointers_mod, ONLY: get_ip3
     USE err_mod, ONLY: errr
     USE multiphase_plic_mod, ONLY: comp_frac, iface_reconstruction, comp_stag_frac, track_iface, track_iface_vic
-    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, permutation_multiphase, tol, checkContinuity, checkSolenoidality, checkBalance
+    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, permutation_multiphase, omitAdve, omitDiff, omitExte, tol, checkContinuity, checkSolenoidality, checkBalance
     USE multiphase_material_mod, ONLY: comp_material_property_field, comp_property_face_value_cent, comp_property_face_value_stag
     USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
@@ -467,7 +467,7 @@ CONTAINS
 
             CALL diff_operator(kk, jj, ii, up, vp, wp, vffp, vff, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
             CALL pres_operator(kk, jj, ii, vff, p, rdx, rdy, rdz, igrid, uo, vo, wo)
-            CALL exte_operator(kk, jj, ii, vff, dx, dy, dz, ddx, ddy, ddz, uo, vo, wo)
+            CALL exte_operator(kk, jj, ii, uo, vo, wo)
         END DO
 
     END SUBROUTINE multiphase_solve
@@ -535,6 +535,8 @@ CONTAINS
         REAL(realk), ALLOCATABLE :: vffFlux1Stag(:,:,:), vffFlux2Stag(:,:,:), vel(:,:,:), vffFlux1(:,:,:)
         LOGICAL, ALLOCATABLE :: isIface(:,:,:)
         REAL(realk) :: volPhase1r, volPhase1r1, volFluxPhase1, volCompPhase1, volClipPhase1
+
+        IF ( omitAdve ) RETURN
 
         volPhase1r = 0.0_realk
         volPhase1r1 = 0.0_realk
@@ -804,6 +806,8 @@ CONTAINS
         REAL(realk) :: tauyxe, tauyxw, tauyyn, tauyys, tauyzt, tauyzb
         REAL(realk) :: tauzxe, tauzxw, tauzyn, tauzys, tauzzt, tauzzb
 
+        IF ( omitDiff ) RETURN
+
         CALL comp_material_property_field(kk, jj, ii, vffp, g, gmol1, gmol2)
         CALL comp_property_face_value_stag(kk, jj, ii, vffp, gmol1, gmol2, gxy, gxz, gyz)
         CALL comp_material_property_field(kk, jj, ii, vff, d, rho1, rho2)
@@ -926,7 +930,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE exte_operator(kk, jj, ii, vff, dx, dy, dz, ddx, ddy, ddz, uo, vo, wo)
+    SUBROUTINE exte_operator(kk, jj, ii, uo, vo, wo)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -934,23 +938,19 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: i, j, k
-        REAL(realk) :: d(kk, jj, ii)
-        return
-        CALL comp_material_property_field(kk, jj, ii, vff, d, rho1, rho2)
+
+        IF ( omitExte ) RETURN
 
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    uo(k,j,i) = uo(k,j,i) - grav(1) ! * 0.5 * ( d(k,j,i) + d(k,j,i+1) )
-                    vo(k,j,i) = vo(k,j,i) - grav(2) ! * 0.5 * ( d(k,j,i) + d(k,j+1,i) )
-                    wo(k,j,i) = wo(k,j,i) - grav(3) ! * 0.5 * ( d(k,j,i) + d(k+1,j,i) )
+                    uo(k,j,i) = uo(k,j,i) + grav(1)
+                    vo(k,j,i) = vo(k,j,i) + grav(2)
+                    wo(k,j,i) = wo(k,j,i) + grav(3)
                 ENDDO
             ENDDO
         ENDDO
@@ -1232,59 +1232,95 @@ CONTAINS
 
     !================================================================
 
-    ! SUBROUTINE comp_adve_eno(kk, jj, ii, q, l, u, v, w, &
-    !     advr, dx, dy, dz, ddx, ddy, ddz, tol, adve)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !   QUICK interpolation to compute the advected veloctiy
-    ! !   (advectee) on staggered grid cells.
-    ! !   adve = advected q (advectee)
-    ! !   advr = advecting q (advector)
-    ! !   An indicator function is used to avoid if-statements within
-    ! !   loops.
-    ! !   
-    ! !   Source: 
-    ! !   T. Arrufat et al., “A mass-momentum consistent, 
-    ! !   Volume-of-Fluid method for incompressible flow on staggered 
-    ! !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
-    ! !   doi: 10.1016/j.compfluid.2020.104785.
-    ! !----------------------------------------------------------------
+    SUBROUTINE comp_adve_eno(kk, jj, ii, q, l, u, v, w, &
+        advr, dx, dy, dz, ddx, ddy, ddz, adve)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   ENO interpolation to compute the advected veloctiy
+    !   (advectee) on staggered grid cells.
+    !   adve = advected q (advectee)
+    !   advr = advecting q (advector)
+    !   An indicator function is used to avoid if-statements within
+    !   loops.
+    !   
+    !   Source: 
+    !   G. Tryggvason, R. Scardovelli, and S. Zaleski, Direct
+    !   Numerical Simulations of Gas–Liquid Multiphase Flows,
+    !   1st ed. Cambridge University Press, 2011.
+    !   doi: 10.1017/CBO9780511975264.
+    !----------------------------------------------------------------
 
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii, q, l
-    !     REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: advr(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
-    !     REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-    !     REAL(realk), INTENT(in) :: tol
-    !     REAL(realk), INTENT(out) :: adve(kk, jj, ii)
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii, q, l
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: advr(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(out) :: adve(kk, jj, ii)
 
-    !     ! Loval variables
-    !     INTEGER(intk) :: k, j, i
-    !     INTEGER(intk) :: kl, jl, il
-    !     REAL(realk) :: vel(kk,jj,ii)
-    !     REAL(realk) :: signInd(2)
-    !     REAL(realk) :: slopeLimLe, slopeLimRi
+        ! Loval variables
+        INTEGER(intk) :: k, j, i
+        INTEGER(intk) :: kl, jl, il
+        REAL(realk) :: vel(kk,jj,ii)
+        REAL(realk) :: signInd(2)
+        REAL(realk) :: sMi, sPl
 
-    !     CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
-    !     CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
+        CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
+        CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
 
-    !     DO i = 2, ii-2
-    !         DO j = 2, jj-2
-    !             DO k = 2, kk-2
-    !                 signInd(1) = MERGE(1.0_realk, 0.0_realk, advr(k,j,i) >= 0.0_realk)
-    !                 signInd(2) = 1.0_realk - signInd(1)
+        IF ( q == l ) THEN
+            dnx = ddx
+            dny = ddy
+            dnz = ddz
+        ELSE 
+            dnx = dx
+            dny = dy
+            dnz = dz
+        ENDIF
 
-    !                 slopeLimRi = 0.5_realk * ( SIGN(1.0_realk, ABS(vel(k+kl,j+jl,i+il))-ABS(vel(k,j,i)) * ( vel(k,j,i) - vel(k+kl,j+jl,i+il) ) + vel(k,j,i) + vel(k+kl,j+jl,i+il) ) )
-    !                 slopeLimLe = 0.5_realk * ( SIGN(1.0_realk, ABS(vel(k,j,i))-ABS(vel(k-kl,j-jl,i-il)) * ( vel(k-kl,j-jl,i-il) - vel(k,j,i) ) + vel(k-kl,j-jl,i-il) + vel(k,j,i) ) )
+        DO i = 2, ii-2
+            DO j = 2, jj-2
+                DO k = 2, kk-2
+                    signInd(1) = MERGE(1.0_realk, 0.0_realk, advr(k,j,i) >= 0.0_realk)
+                    signInd(2) = 1.0_realk - signInd(1)
 
-    !                 adve(k,j,i) = signInd(1) * vel(k,j,i) + slopeLimRi * 0.5_realk + &
-    !                               signInd(2) * vel(k+kl,j+jl,i+il) - slopeLimLe * 0.5_realk
-    !             END DO
-    !         END DO
-    !     END DO
+                    dnslMi = il*dnx(i) + jl*dny(j) + kl*dnz(k)
+                    dnslCe = il*dnx(i+1) + jl*dny(j+1) + kl*dnz(k+1)
+                    dnslPl = il*dnx(i+2) + jl*dny(j+2) + kl*dnz(k+2)
 
-    ! END SUBROUTINE comp_adve_eno
+                    slopeMi = (vel(k,j,i) - vel(k-kl,j-jl,i-il))/dnslMi
+                    slopeCe = (vel(k+kl,j+jl,i+il) - vel(k,j,i))/dnslCe
+                    slopePl = (vel(k+2*kl,j+2*jl,i+2*il) - vel(k+kl,j+jl,i+il))/dnslPl
+
+                    s = signInd(1) * minmod(slopeMi, slopeCe) + &
+                        signInd(2) * minmod(slopeCe, slopePl)
+
+                    extraLen = signInd(1) * ... + &
+                               signInd(2) * ...
+
+                    adve(k,j,i) = signInd(1) * (vel(k,j,i) + s*(extraLen - ABS(advr)*dt)/2.0_realk) + &
+                                  signInd(2) * (vel(k+kl,j+jl,i+il) - s*(extraLen - ABS(advr)*dt)/2.0_realk)
+                END DO
+            END DO
+        END DO
+
+    CONTAINS
+
+        PURE REAL(realk) FUNCTION minmod(a, b) RESULT(res)
+        !------------------------------------------------------------
+        !   Source:
+        !   P. K. Sweby, “High Resolution Schemes Using Flux Limiters
+        !   for Hyperbolic Conservation Laws,” SIAM J. Numer. Anal.,
+        !   vol. 21, no. 5, pp. 995–1011, Oct. 1984,
+        !   doi: 10.1137/0721062.
+        !------------------------------------------------------------
+            REAL(realk), INTENT(in) :: a, b
+
+            res = 0.5_realk * ( SIGN(1.0_realk, a) + SIGN(1.0_realk, b) ) * MIN(ABS(a), ABS(b))
+
+        END FUNCTION minmod
+
+    END SUBROUTINE comp_adve_eno
 
     !================================================================
 
