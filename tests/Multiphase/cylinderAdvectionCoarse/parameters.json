@@ -37,6 +37,7 @@
 	"omitDiff" : false,
 	"omitExte" : false,
 	"tolerance": 0.000000000001,
+	"fluxLimiter" : "ENO",
 	"checkContinuity" : true,
        	"checkSolenoidality" : true,
 	"checkBalance" : false,	

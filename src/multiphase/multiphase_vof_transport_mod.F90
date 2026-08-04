@@ -19,9 +19,8 @@ MODULE multiphase_vof_transport_mod
     USE fields_mod, ONLY: get_field
     USE grids_mod, ONLY: get_mgdims, get_mgbasb, get_gradpxflag
     USE pointers_mod, ONLY: get_ip3
-    USE err_mod, ONLY: errr
     USE multiphase_plic_mod, ONLY: comp_frac, iface_reconstruction, comp_stag_frac, track_iface, track_iface_vic
-    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, permutation_multiphase, omitAdve, omitDiff, omitExte, tol, checkContinuity, checkSolenoidality, checkBalance
+    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, permutation_multiphase, omitAdve, omitDiff, omitExte, tol, checkContinuity, checkSolenoidality, checkBalance, fluxLimiter
     USE multiphase_material_mod, ONLY: comp_material_property_field, comp_property_face_value_cent, comp_property_face_value_stag
     USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
@@ -63,7 +62,8 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_flux_cent(kk, jj, ii, l, vff, vel, vffFlux1, ddx, ddy, ddz, normx, normy, normz, alpha, isIface, dt)
+    SUBROUTINE comp_flux_cent(kk, jj, ii, l, vff, vel, vffFlux1, &
+        ddx, ddy, ddz, normx, normy, normz, alpha, isIface, dt)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the volume fraction fluxes depending on the current
@@ -112,7 +112,9 @@ CONTAINS
                             dimz = kl*fluxWidth + (1-kl)*ddz(k)
 
                             ! Compute vff in fluxed cuboid
-                            CALL comp_frac(fluxedProp, fluxAlpha, vff(k,j,i), dimx, dimy, dimz, normx(k,j,i), normy(k,j,i), normz(k,j,i))
+                            CALL comp_frac(fluxedProp, fluxAlpha, vff(k,j,i), &
+                                dimx, dimy, dimz, &
+                                normx(k,j,i), normy(k,j,i), normz(k,j,i))
                         ELSE
                             ! Compute characteristic length
                             dds = il * ddx(i) + jl * ddy(j) + kl * ddz(k)
@@ -136,7 +138,9 @@ CONTAINS
                             dimz = kl*fluxWidth + (1-kl)*ddz(k+kl)
 
                             ! Compute vff in fluxed cuboid
-                            CALL comp_frac(fluxedProp, fluxAlpha, vff(k+kl,j+jl,i+il), dimx, dimy, dimz, normx(k+kl,j+jl,i+il), normy(k+kl,j+jl,i+il), normz(k+kl,j+jl,i+il))
+                            CALL comp_frac(fluxedProp, fluxAlpha, vff(k+kl,j+jl,i+il), &
+                                dimx, dimy, dimz, &
+                                normx(k+kl,j+jl,i+il), normy(k+kl,j+jl,i+il), normz(k+kl,j+jl,i+il))
                         ELSE
                             ! Compute characteristic length
                             dds = il * ddx(i+1) + jl * ddy(j+1) + kl * ddz(k+1)
@@ -157,7 +161,9 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_flux_stag(kk, jj, ii, q, l, vff, advr, vffFlux1, vffFlux2, dx, dy, dz, ddx, ddy, ddz, normx, normy, normz, alpha, isIface, dt)
+    SUBROUTINE comp_flux_stag(kk, jj, ii, q, l, vff, advr, &
+        vffFlux1, vffFlux2, dx, dy, dz, ddx, ddy, ddz, &
+        normx, normy, normz, alpha, isIface, dt)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the volume fraction fluxes depending on the current
@@ -182,7 +188,9 @@ CONTAINS
         INTEGER(intk) :: k, j, i, kl, jl, il, kq, jq, iq
         INTEGER(intk) :: kDonMi, jDonMi, iDonMi, kDonPl, jDonPl, iDonPl
         REAL(realk) :: ddsDon, normDon, fluxWidth, fluxAlpha, fluxDimx, fluxDimy, fluxDimz, fluxedProp
-        REAL(realk) :: farEnd, ddslMi, ddslPl, ddsqMi, ddsqPl, normlMi, normlPl, normqMi, normqPl, fluxAlphaMi, fluxAlphaPl, fluxDimxMi, fluxDimyMi, fluxDimzMi, fluxDimxPl, fluxDimyPl, fluxDimzPl, fracMi, fracPl
+        REAL(realk) :: farEnd, ddslMi, ddslPl, ddsqMi, ddsqPl
+        REAL(realk) :: normlMi, normlPl, normqMi, normqPl, fluxAlphaMi, fluxAlphaPl
+        REAL(realk) :: fluxDimxMi, fluxDimyMi, fluxDimzMi, fluxDimxPl, fluxDimyPl, fluxDimzPl, fracMi, fracPl
 
 
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
@@ -345,7 +353,6 @@ CONTAINS
     !   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
     !   (PARIS),” Computer Physics Communications, vol. 263, 
     !   p. 107849, Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
-    !   
     !   PARIS source code (accessed: Mai 2026)
     !----------------------------------------------------------------
 
@@ -379,7 +386,8 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE multiphase_solve(u_f, v_f, w_f, vff_f, p_f, dt, itstep, uo_f, vo_f, wo_f)
+    SUBROUTINE multiphase_solve(u_f, v_f, w_f, vff_f, p_f, dt, &
+        itstep, uo_f, vo_f, wo_f)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -465,8 +473,10 @@ CONTAINS
             CALL rddy_f%get_ptr(rddy, igrid)
             CALL rddz_f%get_ptr(rddz, igrid)
 
-            CALL diff_operator(kk, jj, ii, up, vp, wp, vffp, vff, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
-            CALL pres_operator(kk, jj, ii, vff, p, rdx, rdy, rdz, igrid, uo, vo, wo)
+            CALL diff_operator(kk, jj, ii, up, vp, wp, vffp, vff, &
+                rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
+            CALL pres_operator(kk, jj, ii, vff, p, rdx, rdy, rdz, &
+                igrid, uo, vo, wo)
             CALL exte_operator(kk, jj, ii, uo, vo, wo)
         END DO
 
@@ -626,8 +636,10 @@ CONTAINS
             CALL track_iface(isIface, kk, jj, ii, vff)
 
             DO q = 1, 3
-                CALL comp_stag_frac(kk, jj, ii, q, vff, vffStag(q)%arr(ip3), ddx, ddy, ddz, normx, normy, normz, alpha, isIface)
-                CALL comp_material_property_field(kk, jj, ii, vffStag(q)%arr(ip3), dStag, rho1, rho2)
+                CALL comp_stag_frac(kk, jj, ii, q, vff, vffStag(q)%arr(ip3), &
+                    ddx, ddy, ddz, normx, normy, normz, alpha, isIface)
+                CALL comp_material_property_field(kk, jj, ii, vffStag(q)%arr(ip3), &
+                    dStag, rho1, rho2)
                 CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom(q)%arr(ip3))
                 CALL comp_cWy(kk, jj, ii, vffStag(q)%arr(ip3), cWyStag(q)%arr(ip3))
             END DO
@@ -682,15 +694,21 @@ CONTAINS
 
                 DO q = 1, 3
                     CALL comp_advr_linear_interpolation(kk, jj, ii, q, l, u, v, w, advr)
-                    CALL comp_adve_quick(kk, jj, ii, q, l, vffStag(q)%arr(ip3), u, v, w, advr, adve)
-                    CALL comp_flux_stag(kk, jj, ii, q, l, vff, advr, vffFlux1Stag, vffFlux2Stag, dx, dy, dz, ddx, ddy, ddz, normx, normy, normz, alpha, isIface, dt)
-                    CALL adv_mom(kk, jj, ii, q, l, vffStag(q)%arr(ip3), cWyStag(q)%arr(ip3), u, v, w, advr, adve, mom(q)%arr(ip3), vffFlux1Stag, vffFlux2Stag, dx, dy, dz, ddx, ddy, ddz, dt)
-                    CALL adv_vof(kk, jj, ii, q, l, vffStag(q)%arr(ip3), cWyStag(q)%arr(ip3), advr, vffFlux1Stag, dx, dy, dz, ddx, ddy, ddz, dt)
+                    CALL comp_adve(kk, jj, ii, q, l, vffStag(q)%arr(ip3), u, v, w, &
+                        advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
+                    CALL comp_flux_stag(kk, jj, ii, q, l, vff, advr, vffFlux1Stag, vffFlux2Stag, &
+                        dx, dy, dz, ddx, ddy, ddz, normx, normy, normz, alpha, isIface, dt)
+                    CALL adv_mom(kk, jj, ii, q, l, vffStag(q)%arr(ip3), cWyStag(q)%arr(ip3), u, v, w, &
+                        advr, adve, mom(q)%arr(ip3), vffFlux1Stag, vffFlux2Stag, dx, dy, dz, ddx, ddy, ddz, dt)
+                    CALL adv_vof(kk, jj, ii, q, l, vffStag(q)%arr(ip3), cWyStag(q)%arr(ip3), &
+                        advr, vffFlux1Stag, dx, dy, dz, ddx, ddy, ddz, dt)
                 END DO
 
                 CALL get_condit_velocity(kk, jj, ii, l, u, v, w, vel)
-                CALL comp_flux_cent(kk, jj, ii, l, vff, vel, vffFlux1, ddx, ddy, ddz, normx, normy, normz, alpha, isIface, dt)
-                CALL adv_vof(kk, jj, ii, 0, l, vff, cWy%arr(ip3), vel, vffFlux1, dx, dy, dz, ddx, ddy, ddz, dt, volFluxPhase1, volCompPhase1)
+                CALL comp_flux_cent(kk, jj, ii, l, vff, vel, vffFlux1, &
+                    ddx, ddy, ddz, normx, normy, normz, alpha, isIface, dt)
+                CALL adv_vof(kk, jj, ii, 0, l, vff, cWy%arr(ip3), vel, vffFlux1, &
+                    dx, dy, dz, ddx, ddy, ddz, dt, volFluxPhase1, volCompPhase1)
 
                 ! Deallocate sweep-temporary fields
                 IF ( ALLOCATED(vffFlux1) ) DEALLOCATE(vffFlux1)
@@ -784,7 +802,8 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE diff_operator(kk, jj, ii, u, v, w, vffp, vff, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
+    SUBROUTINE diff_operator(kk, jj, ii, u, v, w, vffp, vff, &
+        rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -816,8 +835,8 @@ CONTAINS
             DO j = 3, jj-2
                 DO k = 3, kk-2
                     ! Stresses
-                    tauxxe = g(k,j,i) * 2.0_realk * (u(k,j,i+1) - u(k,j,i))*rddx(i+1)
-                    tauxxw = g(k,j,i-1) * 2.0_realk * (u(k,j,i) - u(k,j,i-1))*rddx(i)
+                    tauxxe = g(k,j,i+1) * 2.0_realk * (u(k,j,i+1) - u(k,j,i))*rddx(i+1)
+                    tauxxw = g(k,j,i) * 2.0_realk * (u(k,j,i) - u(k,j,i-1))*rddx(i)
                     tauxyn = gxy(k,j,i) * ((u(k,j+1,i) - u(k,j,i))*rdy(j) + (v(k,j,i+1) - v(k,j,i))*rdx(i))
                     tauxys = gxy(k,j-1,i) * ((u(k,j,i) - u(k,j-1,i))*rdy(j-1) + (v(k,j-1,i+1) - v(k,j-1,i))*rdx(i))
                     tauxzt = gxz(k,j,i) * ((u(k+1,j,i) - u(k,j,i))*rdz(k) + (w(k,j,i+1) - w(k,j,i))*rdx(i))
@@ -838,8 +857,8 @@ CONTAINS
                     ! Stresses
                     tauyxe = gxy(k,j,i) * ((u(k,j+1,i) - u(k,j,i))*rdy(j) + (v(k,j,i+1) - v(k,j,i))*rdx(i))
                     tauyxw = gxy(k,j,i-1) * ((u(k,j+1,i-1) - u(k,j,i-1))*rdy(j) + (v(k,j,i) - v(k,j,i-1))*rdx(i-1))
-                    tauyyn = g(k,j,i) * 2.0_realk * (v(k,j+1,i) - v(k,j,i))*rddy(j+1)
-                    tauyys = g(k,j-1,i) * 2.0_realk * (v(k,j,i) - v(k,j-1,i))*rddy(j)
+                    tauyyn = g(k,j+1,i) * 2.0_realk * (v(k,j+1,i) - v(k,j,i))*rddy(j+1)
+                    tauyys = g(k,j,i) * 2.0_realk * (v(k,j,i) - v(k,j-1,i))*rddy(j)
                     tauyzt = gyz(k,j,i) * ((v(k+1,j,i) - v(k,j,i))*rdz(k) + (w(k,j+1,i) - w(k,j,i))*rdy(j))
                     tauyzb = gyz(k-1,j,i) * ((v(k,j,i) - v(k-1,j,i))*rdz(k-1) + (w(k-1,j+1,i) - w(k-1,j,i))*rdy(j))
 
@@ -860,8 +879,8 @@ CONTAINS
                     tauzxw = gxz(k,j,i-1) * ((u(k+1,j,i-1) - u(k,j,i-1))*rdz(k) + (w(k,j,i) - w(k,j,i-1))*rdx(i-1))
                     tauzyn = gyz(k,j,i) * ((v(k+1,j,i) - v(k,j,i))*rdz(k) + (w(k,j+1,i) - w(k,j,i))*rdy(j))
                     tauzys = gyz(k,j-1,i) * ((v(k+1,j-1,i) - v(k,j-1,i))*rdz(k) + (w(k,j,i) - w(k,j-1,i))*rdy(j-1))
-                    tauzzt = g(k,j,i) * 2.0_realk * (w(k+1,j,i) - w(k,j,i))*rddz(k+1)
-                    tauzzb = g(k-1,j,i) * 2.0_realk * (w(k,j,i) - w(k-1,j,i))*rddz(k)
+                    tauzzt = g(k+1,j,i) * 2.0_realk * (w(k+1,j,i) - w(k,j,i))*rddz(k+1)
+                    tauzzb = g(k,j,i) * 2.0_realk * (w(k,j,i) - w(k-1,j,i))*rddz(k)
 
                     ! Change due to diffusion
                     wo(k,j,i) = wo(k,j,i) + 2.0_realk/(d(k,j,i) + d(k+1,j,i))*&
@@ -876,7 +895,8 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE pres_operator(kk, jj, ii, vff, p, rdx, rdy, rdz, igrid, uo, vo, wo)
+    SUBROUTINE pres_operator(kk, jj, ii, vff, p, rdx, rdy, rdz, &
+        igrid, uo, vo, wo)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -959,7 +979,8 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE adv_vof(kk, jj, ii, q, l, vff, cWy, vel, vffFlux1, dx, dy, dz, ddx, ddy, ddz, dt, volFluxPhase1, volCompPhase1)
+    SUBROUTINE adv_vof(kk, jj, ii, q, l, vff, cWy, vel, vffFlux1, &
+        dx, dy, dz, ddx, ddy, ddz, dt, volFluxPhase1, volCompPhase1)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -996,7 +1017,9 @@ CONTAINS
                         volCompPhase1 = volCompPhase1 + dt * cWy(k,j,i) * div(k,j,i) * dV
                     ENDIF
 
-                    vff(k,j,i) = vff(k,j,i) - dt/dsCV * ( vffFlux1(k,j,i) - vffFlux1(k-kl,j-jl,i-il) ) + dt * cWy(k,j,i) * div(k,j,i)
+                    vff(k,j,i) = vff(k,j,i) &
+                        - dt/dsCV * ( vffFlux1(k,j,i) - vffFlux1(k-kl,j-jl,i-il) ) &
+                        + dt * cWy(k,j,i) * div(k,j,i)
                 END DO
             END DO
         END DO
@@ -1005,7 +1028,9 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE adv_mom(kk, jj, ii, q, l, vff, cWy, u, v, w, advr, adve, mom, vffFlux1, vffFlux2, dx, dy, dz, ddx, ddy, ddz, dt)
+    SUBROUTINE adv_mom(kk, jj, ii, q, l, vff, cWy, u, v, w, &
+        advr, adve, mom, vffFlux1, vffFlux2, dx, dy, dz, &
+        ddx, ddy, ddz, dt)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -1048,7 +1073,10 @@ CONTAINS
                     dsCV = il * dsx(i) + jl * dsy(j) + kl * dsz(k)
                     div = ( advr(k,j,i) - advr(k-kl,j-jl,i-il) ) / dsCV
                     com = ( rho1 * cWy(k,j,i) + rho2 * ( 1.0_realk - cWy(k,j,i) ) ) * div
-                    mom(k,j,i) = mom(k,j,i) - dt/dsCV * ( momFlux(k,j,i) - momFlux(k-kl,j-jl,i-il) ) + dt * vel(k,j,i) * com
+
+                    mom(k,j,i) = mom(k,j,i) &
+                        - dt/dsCV * ( momFlux(k,j,i) - momFlux(k-kl,j-jl,i-il) ) &
+                        + dt * vel(k,j,i) * com
                 END DO
             END DO
         END DO
@@ -1088,7 +1116,8 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE update_velocity(kk, jj, ii, q, vffStag, u, v, w, mom, dt)
+    SUBROUTINE update_velocity(kk, jj, ii, q, vffStag, u, v, w, mom, &
+        dt)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -1171,6 +1200,38 @@ CONTAINS
 
     !================================================================
 
+    SUBROUTINE comp_adve(kk, jj, ii, q, l, vff, u, v, w, &
+        advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Selects interpolation scheme.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii, q, l
+        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: advr(kk, jj, ii)
+        REAL(realk), INTENT(out) :: adve(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: dt
+
+        ! Local variables
+        ! None
+
+        IF ( fluxLimiter == 'QUICK' ) THEN
+            CALL comp_adve_quick(kk, jj, ii, q, l, vff, u, v, w, advr, adve)
+        ELSEIF ( fluxLimiter == 'ENO' ) THEN
+            CALL comp_adve_eno(kk, jj, ii, q, l, u, v, w, advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
+        ELSE
+            CALL err_abort(155, "Unknown flux limiter!", __FILE__, __LINE__)
+        ENDIF
+
+    END SUBROUTINE comp_adve
+
+    !================================================================
+
     SUBROUTINE comp_adve_quick(kk, jj, ii, q, l, vff, u, v, w, &
         advr, adve)
     !----------------------------------------------------------------
@@ -1196,7 +1257,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: advr(kk, jj, ii)
         REAL(realk), INTENT(out) :: adve(kk, jj, ii)
 
-        ! Loval variables
+        ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kl, jl, il
         REAL(realk) :: vel(kk,jj,ii)
@@ -1233,7 +1294,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE comp_adve_eno(kk, jj, ii, q, l, u, v, w, &
-        advr, dx, dy, dz, ddx, ddy, ddz, adve)
+        advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
     !----------------------------------------------------------------
     !   What it does:
     !   ENO interpolation to compute the advected veloctiy
@@ -1248,34 +1309,47 @@ CONTAINS
     !   Numerical Simulations of Gas–Liquid Multiphase Flows,
     !   1st ed. Cambridge University Press, 2011.
     !   doi: 10.1017/CBO9780511975264.
+    !
+    !   P. K. Sweby, “High Resolution Schemes Using Flux Limiters
+    !   for Hyperbolic Conservation Laws,” SIAM J. Numer. Anal.,
+    !   vol. 21, no. 5, pp. 995–1011, Oct. 1984,
+    !   doi: 10.1137/0721062.
+    !
+    !   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
+    !   (PARIS),” Computer Physics Communications, vol. 263,
+    !   p. 107849, Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
+    !   PARIS source code (accessed: Mai 2026)
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii, q, l
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: advr(kk, jj, ii)
+        REAL(realk), INTENT(out) :: adve(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(out) :: adve(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dt
 
         ! Loval variables
-        INTEGER(intk) :: k, j, i
-        INTEGER(intk) :: kl, jl, il
+        INTEGER(intk) :: k, j, i, kl, jl, il
         REAL(realk) :: vel(kk,jj,ii)
+        REAL(realk) :: dnx(ii), dny(jj), dnz(kk)
+        REAL(realk) :: dcx(ii), dcy(jj), dcz(kk)
         REAL(realk) :: signInd(2)
-        REAL(realk) :: sMi, sPl
+        REAL(realk) :: dnslMi, dnslCe, dnslPl, dcslCe
+        REAL(realk) :: slopeMi, slopeCe, slopePl, s, extraLen
 
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
         CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
 
         IF ( q == l ) THEN
-            dnx = ddx
-            dny = ddy
-            dnz = ddz
-        ELSE 
-            dnx = dx
-            dny = dy
-            dnz = dz
+            dnx(1:ii-1) = ddx(2:ii) ; dnx(ii) = ddx(ii)
+            dny(1:jj-1) = ddy(2:jj) ; dny(jj) = ddy(jj)
+            dnz(1:kk-1) = ddz(2:kk) ; dnz(kk) = ddz(kk)
+            dcx = dnx ; dcy = dny ; dcz = dnz
+        ELSE
+            dnx = dx  ; dny = dy  ; dnz = dz
+            dcx = ddx ; dcy = ddy ; dcz = ddz
         ENDIF
 
         DO i = 2, ii-2
@@ -1284,9 +1358,9 @@ CONTAINS
                     signInd(1) = MERGE(1.0_realk, 0.0_realk, advr(k,j,i) >= 0.0_realk)
                     signInd(2) = 1.0_realk - signInd(1)
 
-                    dnslMi = il*dnx(i) + jl*dny(j) + kl*dnz(k)
-                    dnslCe = il*dnx(i+1) + jl*dny(j+1) + kl*dnz(k+1)
-                    dnslPl = il*dnx(i+2) + jl*dny(j+2) + kl*dnz(k+2)
+                    dnslMi = il*dnx(i-1) + jl*dny(j-1) + kl*dnz(k-1)
+                    dnslCe = il*dnx(i) + jl*dny(j) + kl*dnz(k)
+                    dnslPl = il*dnx(i+1) + jl*dny(j+1) + kl*dnz(k+1)
 
                     slopeMi = (vel(k,j,i) - vel(k-kl,j-jl,i-il))/dnslMi
                     slopeCe = (vel(k+kl,j+jl,i+il) - vel(k,j,i))/dnslCe
@@ -1295,11 +1369,13 @@ CONTAINS
                     s = signInd(1) * minmod(slopeMi, slopeCe) + &
                         signInd(2) * minmod(slopeCe, slopePl)
 
-                    extraLen = signInd(1) * ... + &
-                               signInd(2) * ...
+                    dcslCe = il*dcx(i) + jl*dcy(j) + kl*dcz(k)
 
-                    adve(k,j,i) = signInd(1) * (vel(k,j,i) + s*(extraLen - ABS(advr)*dt)/2.0_realk) + &
-                                  signInd(2) * (vel(k+kl,j+jl,i+il) - s*(extraLen - ABS(advr)*dt)/2.0_realk)
+                    extraLen = signInd(1) * (dcslCe - ABS(advr(k,j,i))*dt)/2.0_realk + &
+                               signInd(2) * ( 2.0_realk*dnslCe - dcslCe - ABS(advr(k,j,i))*dt)/2.0_realk
+
+                    adve(k,j,i) = signInd(1) * (vel(k,j,i) + s*extraLen) + &
+                                  signInd(2) * (vel(k+kl,j+jl,i+il) - s*extraLen)
                 END DO
             END DO
         END DO
@@ -1307,24 +1383,16 @@ CONTAINS
     CONTAINS
 
         PURE REAL(realk) FUNCTION minmod(a, b) RESULT(res)
-        !------------------------------------------------------------
-        !   Source:
-        !   P. K. Sweby, “High Resolution Schemes Using Flux Limiters
-        !   for Hyperbolic Conservation Laws,” SIAM J. Numer. Anal.,
-        !   vol. 21, no. 5, pp. 995–1011, Oct. 1984,
-        !   doi: 10.1137/0721062.
-        !------------------------------------------------------------
             REAL(realk), INTENT(in) :: a, b
-
             res = 0.5_realk * ( SIGN(1.0_realk, a) + SIGN(1.0_realk, b) ) * MIN(ABS(a), ABS(b))
-
         END FUNCTION minmod
 
     END SUBROUTINE comp_adve_eno
 
     !================================================================
 
-    SUBROUTINE comp_advr_linear_interpolation(kk, jj, ii, q, l, u, v, w, advr)
+    SUBROUTINE comp_advr_linear_interpolation(kk, jj, ii, q, l, &
+        u, v, w, advr)
     !----------------------------------------------------------------
     !   What it does:
     !   Linear interpolation to compute the advecting velocity
