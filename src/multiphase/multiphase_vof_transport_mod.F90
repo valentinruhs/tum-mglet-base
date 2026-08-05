@@ -20,7 +20,7 @@ MODULE multiphase_vof_transport_mod
     USE grids_mod, ONLY: get_mgdims, get_mgbasb, get_gradpxflag
     USE pointers_mod, ONLY: get_ip3
     USE multiphase_plic_mod, ONLY: comp_frac, iface_reconstruction, comp_stag_frac, track_iface, track_iface_vic
-    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, permutation_multiphase, omitAdve, omitDiff, omitExte, tol, checkContinuity, checkSolenoidality, checkBalance, fluxLimiter
+    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, permutation_multiphase, omitAdve, omitDiff, omitExte, tol, checkContinuity, checkSolenoidality, checkBalance, fluxLimiter, fluxCentered
     USE multiphase_material_mod, ONLY: comp_material_property_field, comp_property_face_value_cent, comp_property_face_value_stag
     USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
@@ -1221,7 +1221,7 @@ CONTAINS
         ! None
 
         IF ( fluxLimiter == 'QUICK' ) THEN
-            CALL comp_adve_quick(kk, jj, ii, q, l, vff, u, v, w, advr, adve)
+            CALL comp_adve_quick(kk, jj, ii, q, l, vff, u, v, w, advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
         ELSEIF ( fluxLimiter == 'ENO' ) THEN
             CALL comp_adve_eno(kk, jj, ii, q, l, u, v, w, advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
         ELSE
@@ -1233,7 +1233,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE comp_adve_quick(kk, jj, ii, q, l, vff, u, v, w, &
-        advr, adve)
+        advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
     !----------------------------------------------------------------
     !   What it does:
     !   QUICK interpolation to compute the advected veloctiy
@@ -1242,12 +1242,23 @@ CONTAINS
     !   advr = advecting q (advector)
     !   An indicator function is used to avoid if-statements within
     !   loops.
-    !   
-    !   Source: 
+    !
+    !   Sources: 
     !   T. Arrufat et al., “A mass-momentum consistent, 
     !   Volume-of-Fluid method for incompressible flow on staggered 
     !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
     !   doi: 10.1016/j.compfluid.2020.104785.
+    !
+    !   B. P. Leonard, “A stable and accurate convective modelling 
+    !   procedure based on quadratic upstream interpolation,”
+    !   Computer Methods in Applied Mechanics and Engineering,
+    !   vol. 19, no. 1, pp. 59–98, Jun. 1979,
+    !   doi: 10.1016/0045-7825(79)90034-3.
+    !
+    !   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
+    !   (PARIS),” Computer Physics Communications, vol. 263,
+    !   p. 107849, Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
+    !   PARIS source code, grep "interpole_quad" (accessed: Mai 2026)
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1256,18 +1267,36 @@ CONTAINS
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: advr(kk, jj, ii)
         REAL(realk), INTENT(out) :: adve(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: dt
 
         ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kl, jl, il
         REAL(realk) :: vel(kk,jj,ii)
         LOGICAL :: isIface(kk, jj, ii), isIfaceVic(kk, jj, ii)
+        REAL(realk) :: dnx(ii), dny(jj), dnz(kk)
+        REAL(realk) :: dcx(ii), dcy(jj), dcz(kk)
         REAL(realk) :: signInd(2), iFacInd(2)
+        REAL(realk) :: dnslL, dnslC, dnslR, dcslMi, dcslPl
+        REAL(realk) :: adveMi, advePl
+        REAL(realk) :: velMi, velCe, velPl, velFP
 
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
         CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
         CALL track_iface(isIface, kk, jj, ii, vff)
         CALL track_iface_vic(isIfaceVic, kk, jj, ii, isIface)
+
+        IF ( q == l ) THEN
+            dnx(1:ii-1) = ddx(2:ii) ; dnx(ii) = 0.0_realk
+            dny(1:jj-1) = ddy(2:jj) ; dny(jj) = 0.0_realk
+            dnz(1:kk-1) = ddz(2:kk) ; dnz(kk) = 0.0_realk
+            dcx = dnx ; dcy = dny ; dcz = dnz
+        ELSE
+            dnx = dx  ; dny = dy  ; dnz = dz
+            dcx = ddx ; dcy = ddy ; dcz = ddz
+        ENDIF
 
         DO i = 2, ii-2
             DO j = 2, jj-2
@@ -1277,17 +1306,40 @@ CONTAINS
                     iFacInd(1) = MERGE(1.0_realk, 0.0_realk, isIfaceVic(k,j,i))
                     iFacInd(2) = 1.0_realk - iFacInd(1)
 
-                    adve(k,j,i) = iFacInd(1) * ( signInd(1) * vel(k,j,i) + &
-                                                 signInd(2) * vel(k+kl,j+jl,i+il) ) + &
-                                  iFacInd(2) * ( signInd(1) * ( 0.750_realk * vel(k,j,i) + &
-                                                                0.375_realk * vel(k+kl,j+jl,i+il) - &
-                                                                0.125_realk * vel(k-kl,j-jl,i-il) ) + &
-                                                 signInd(2) * ( 0.750_realk * vel(k+kl,j+jl,i+il) + &
-                                                                0.375_realk * vel(k,j,i) - &
-                                                                0.125_realk * vel(k+2*kl,j+2*jl,i+2*il) ) )
+                    dnslL = il*dnx(i-il) + jl*dny(j-jl) + kl*dnz(k-kl)
+                    dnslC = il*dnx(i) + jl*dny(j) + kl*dnz(k)
+                    dnslR = il*dnx(i+il) + jl*dny(j+jl) + kl*dnz(k+kl)
+
+                    dcslMi = 0.5_realk * (il*dcx(i) + jl*dcy(j) + kl*dcz(k))
+                    dcslPl  = dnslC - dcslMi
+
+                    IF ( fluxCentered ) THEN
+                        dcslMi = dcslMi - ABS(advr(k,j,i))*dt/2.0_realk
+                        dcslPl = dcslPl - ABS(advr(k,j,i))*dt/2.0_realk
+                    ENDIF
+
+                    velMi = vel(k-kl,j-jl,i-il)
+                    velCe = vel(k,j,i)
+                    velPl = vel(k+kl,j+jl,i+il)
+                    velFP = vel(k+2*kl,j+2*jl,i+2*il)
+
+                    adveMi = quadratic_interpolation(velMi, velCe, velPl, dnslL, dnslC, dcslMi)
+                    advePl = quadratic_interpolation(velFP, velPl, velCe, dnslR, dnslC, dcslPl)
+
+                    adve(k,j,i) = iFacInd(1) * (signInd(1)*velCe + signInd(2)*velPl) + &
+                                  iFacInd(2) * (signInd(1)*adveMi + signInd(2)*advePl)
                 END DO
             END DO
         END DO
+
+    CONTAINS
+
+        PURE REAL(realk) FUNCTION quadratic_interpolation(phiUU, phiU, phiD, dsUU, dsD, dsr) RESULT(r)
+            REAL(realk), INTENT(in) :: phiUU, phiU, phiD, dsUU, dsD, dsr
+            r = phiUU*(dsr*(dsr-dsD))/(dsUU*(dsUU+dsD)) &
+                - phiU*((dsr+dsUU)*(dsr-dsD))/(dsUU*dsD) &
+                + phiD*(dsr*(dsr+dsUU))/(dsD*(dsUU+dsD))
+        END FUNCTION quadratic_interpolation
 
     END SUBROUTINE comp_adve_quick
 
@@ -1304,7 +1356,7 @@ CONTAINS
     !   An indicator function is used to avoid if-statements within
     !   loops.
     !   
-    !   Source: 
+    !   Sources: 
     !   G. Tryggvason, R. Scardovelli, and S. Zaleski, Direct
     !   Numerical Simulations of Gas–Liquid Multiphase Flows,
     !   1st ed. Cambridge University Press, 2011.
@@ -1318,7 +1370,7 @@ CONTAINS
     !   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
     !   (PARIS),” Computer Physics Communications, vol. 263,
     !   p. 107849, Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
-    !   PARIS source code (accessed: Mai 2026)
+    !   PARIS source code, grep "interpole3" (accessed: Mai 2026)
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1336,16 +1388,16 @@ CONTAINS
         REAL(realk) :: dnx(ii), dny(jj), dnz(kk)
         REAL(realk) :: dcx(ii), dcy(jj), dcz(kk)
         REAL(realk) :: signInd(2)
-        REAL(realk) :: dnslMi, dnslCe, dnslPl, dcslCe
-        REAL(realk) :: slopeMi, slopeCe, slopePl, s, extraLen
+        REAL(realk) :: dnslMi, dnslCe, dnslPl, dcslMi, dcslPl
+        REAL(realk) :: slopeMi, slopeCe, slopePl, s
 
         CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
         CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
 
         IF ( q == l ) THEN
-            dnx(1:ii-1) = ddx(2:ii) ; dnx(ii) = ddx(ii)
-            dny(1:jj-1) = ddy(2:jj) ; dny(jj) = ddy(jj)
-            dnz(1:kk-1) = ddz(2:kk) ; dnz(kk) = ddz(kk)
+            dnx(1:ii-1) = ddx(2:ii) ; dnx(ii) = 0.0_realk
+            dny(1:jj-1) = ddy(2:jj) ; dny(jj) = 0.0_realk
+            dnz(1:kk-1) = ddz(2:kk) ; dnz(kk) = 0.0_realk
             dcx = dnx ; dcy = dny ; dcz = dnz
         ELSE
             dnx = dx  ; dny = dy  ; dnz = dz
@@ -1369,13 +1421,16 @@ CONTAINS
                     s = signInd(1) * minmod(slopeMi, slopeCe) + &
                         signInd(2) * minmod(slopeCe, slopePl)
 
-                    dcslCe = il*dcx(i) + jl*dcy(j) + kl*dcz(k)
+                    dcslMi = 0.5_realk * (il*dcx(i) + jl*dcy(j) + kl*dcz(k))
+                    dcslPl = dnslCe - dcslMi
 
-                    extraLen = signInd(1) * (dcslCe - ABS(advr(k,j,i))*dt)/2.0_realk + &
-                               signInd(2) * ( 2.0_realk*dnslCe - dcslCe - ABS(advr(k,j,i))*dt)/2.0_realk
+                    IF ( fluxCentered ) THEN
+                        dcslMi = dcslMi - ABS(advr(k,j,i))*dt/2.0_realk
+                        dcslPl = dcslPl - ABS(advr(k,j,i))*dt/2.0_realk
+                    ENDIF
 
-                    adve(k,j,i) = signInd(1) * (vel(k,j,i) + s*extraLen) + &
-                                  signInd(2) * (vel(k+kl,j+jl,i+il) - s*extraLen)
+                    adve(k,j,i) = signInd(1) * (vel(k,j,i) + s*dcslMi) + &
+                                  signInd(2) * (vel(k+kl,j+jl,i+il) - s*dcslPl)
                 END DO
             END DO
         END DO
@@ -1418,6 +1473,8 @@ CONTAINS
 
         CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
         CALL get_condit_velocity(kk, jj, ii, l, u, v, w, vel)
+
+        
 
         DO i = 2, ii-2
             DO j = 2, jj-2

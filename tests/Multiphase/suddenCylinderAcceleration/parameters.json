@@ -20,7 +20,7 @@
         "uinf": [0.0, 0.0, 0.0],
         "pressuresolver": {
             "type": "sip",
-            "epcorr": 0.000000000001,
+            "epcorr": 0.0000000000001,
             "nouter": 90,
             "ninner": 100,
 	    "loglevel": 3
@@ -39,6 +39,7 @@
 	"omitExte" : true,       
 	"tolerance": 0.00000000000001,
 	"fluxLimiter" : "QUICK",
+	"fluxCentered" : true,
 	"checkContinuity": true,
 	"checkSolenoidality": true,
 	"checkBalance": false,

@@ -34,6 +34,7 @@ MODULE multiphasecore_mod
     LOGICAL, PROTECTED :: omitAdve, omitDiff, omitExte
     REAL(realk), PROTECTED :: tol
     CHARACTER(len=5), PROTECTED :: fluxLimiter
+    LOGICAL, PROTECTED :: fluxCentered
     LOGICAL, PROTECTED :: checkContinuity, checkSolenoidality, checkBalance
 
     ! Physical parameters
@@ -44,8 +45,9 @@ MODULE multiphasecore_mod
     PUBLIC :: init_multiphasecore, finish_multiphasecore, &
         has_multiphase, solve_multiphase, test_multiphase, &
         permutation_multiphase, omitAdve, omitDiff, omitExte, &
-        tol, fluxLimiter, checkContinuity, checkSolenoidality, &
-        checkBalance, rho1, rho2, gmol1, gmol2, grav
+        tol, fluxLimiter, fluxCentered, checkContinuity, &
+        checkSolenoidality, checkBalance, rho1, rho2, &
+        gmol1, gmol2, grav
 
 CONTAINS
 
@@ -89,6 +91,7 @@ CONTAINS
         CALL multiphaseconf%get_value("/permutation", permutation_multiphase, 3_intk)
         CALL multiphaseconf%get_value("/tolerance", tol, 1.0E-12_realk)
         CALL multiphaseconf%get_value("/fluxLimiter", fluxLimiter, 'QUICK')
+        CALL multiphaseconf%get_value("/fluxCentered", fluxCentered, .FALSE.)
         CALL multiphaseconf%get_value("/checkContinuity", checkContinuity, .FALSE.)
         CALL multiphaseconf%get_value("/checkSolenoidality", checkSolenoidality, .FALSE.)
         CALL multiphaseconf%get_value("/checkBalance", checkBalance, .FALSE.)

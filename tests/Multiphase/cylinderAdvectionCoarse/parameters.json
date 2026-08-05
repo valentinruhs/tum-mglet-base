@@ -1,7 +1,7 @@
 {
     "time": {
-        "dt": 0.01,
-        "mtstep": 6250,
+        "dt": 0.1,
+        "mtstep": 625,
 	"itinfo": 10,
         "tstat": 10.0,
 	"read": false
@@ -20,7 +20,7 @@
         "uinf": [0.0, 0.0, 0.0],
         "pressuresolver": {
             "type": "sip",
-            "epcorr": 0.0000000001,
+            "epcorr": 0.00000000001,
             "nouter": 9,
             "ninner": 50
         },
@@ -37,11 +37,12 @@
 	"omitDiff" : false,
 	"omitExte" : false,
 	"tolerance": 0.000000000001,
-	"fluxLimiter" : "ENO",
+	"fluxLimiter" : "QUICK",
+	"fluxCentered" : true,
 	"checkContinuity" : true,
        	"checkSolenoidality" : true,
 	"checkBalance" : false,	
-	"rho1" : 1000000.0,
+	"rho1" : 1000.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.0001,
 	"gmol2" : 0.0001,
