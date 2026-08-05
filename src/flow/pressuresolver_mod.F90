@@ -1454,15 +1454,18 @@ CONTAINS
         INTEGER(intk) :: i, igrid, ip3
         INTEGER(intk) :: kk, jj, ii
 
-        TYPE(field_t), POINTER :: rdx_f
-        TYPE(field_t), POINTER :: rdy_f
-        TYPE(field_t), POINTER :: rdz_f
+        TYPE(field_t), POINTER :: rdx_f, rdy_f, rdz_f
+        TYPE(field_t), POINTER :: ddx_f, ddy_f, ddz_f
         TYPE(field_t), POINTER :: vff_f
 
         REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:), bp(:, :, :)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
 
         NULLIFY(bp)
 
+        CALL get_field(ddx_f, "DDX")
+        CALL get_field(ddy_f, "DDY")
+        CALL get_field(ddz_f, "DDZ")
         CALL get_field(rdx_f, "RDX")
         CALL get_field(rdy_f, "RDY")
         CALL get_field(rdz_f, "RDZ")
@@ -1473,6 +1476,9 @@ CONTAINS
             CALL get_mgdims(kk, jj, ii, igrid)
             CALL get_ip3(ip3, igrid)
 
+            CALL ddx_f%get_ptr(ddx, igrid)
+            CALL ddy_f%get_ptr(ddy, igrid)
+            CALL ddz_f%get_ptr(ddz, igrid)
             CALL rdx_f%get_ptr(rdx, igrid)
             CALL rdy_f%get_ptr(rdy, igrid)
             CALL rdz_f%get_ptr(rdz, igrid)
@@ -1481,12 +1487,12 @@ CONTAINS
             END IF
 
             CALL mgpcorr_grid(kk, jj, ii, u%arr(ip3), v%arr(ip3), w%arr(ip3), &
-                p%arr(ip3), dp%arr(ip3), vff_f%arr(ip3), rdx, rdy, rdz, fak, bp)
+                p%arr(ip3), dp%arr(ip3), vff_f%arr(ip3), ddx, ddy, ddz, rdx, rdy, rdz, fak, bp)
         END DO
     END SUBROUTINE mgpcorr
 
 
-    SUBROUTINE mgpcorr_grid(kk, jj, ii, u, v, w, p, dp, vff, rdx, rdy, rdz, &
+    SUBROUTINE mgpcorr_grid(kk, jj, ii, u, v, w, p, dp, vff, ddx, ddy, ddz, rdx, rdy, rdz, &
             fak, bp)
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
@@ -1496,9 +1502,8 @@ CONTAINS
         REAL(realk), INTENT(inout) :: p(kk, jj, ii)
         REAL(realk), INTENT(in) :: dp(kk, jj, ii)
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(in) :: rdx(ii)
-        REAL(realk), INTENT(in) :: rdy(jj)
-        REAL(realk), INTENT(in) :: rdz(kk)
+        REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: fak
         REAL(realk), INTENT(in), OPTIONAL :: bp(kk, jj, ii)
 
@@ -1507,7 +1512,8 @@ CONTAINS
         INTEGER(intk) :: k, j, i
         REAL(realk) :: rfak
 
-        CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', rhoe, rhon, rhot)
+        CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', &
+            rhoe, rhon, rhot, ddx, ddy, ddz)
 
         rfak = 1.0_realk/fak
 

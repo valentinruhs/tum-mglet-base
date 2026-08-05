@@ -94,7 +94,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_property_face_value_cent(kk, jj, ii, vff, prop1, prop2, average, pe, pn, pt)
+    SUBROUTINE comp_property_face_value_cent(kk, jj, ii, vff, prop1, prop2, average, pe, pn, pt, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -106,6 +106,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: prop1, prop2
         CHARACTER(len=3), INTENT(in) :: average
         REAL(realk), INTENT(out) :: pe(kk, jj, ii), pn(kk, jj, ii), pt(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
 
         ! Local variables
         REAL(realk) :: propFld(kk, jj, ii)
@@ -117,9 +118,9 @@ CONTAINS
             DO i = 2, ii-2
                 DO j = 2, jj-2
                     DO k = 2, kk-2
-                        pe(k,j,i) = ( propFld(k,j,i) + propFld(k,j,i+1) ) / 2.0_realk
-                        pn(k,j,i) = ( propFld(k,j,i) + propFld(k,j+1,i) ) / 2.0_realk
-                        pt(k,j,i) = ( propFld(k,j,i) + propFld(k+1,j,i) ) / 2.0_realk
+                        pe(k,j,i) = (propFld(k,j,i)*ddx(i) + propFld(k,j,i+1)*ddx(i+1))/(ddx(i) + ddx(i+1))
+                        pn(k,j,i) = (propFld(k,j,i)*ddy(j) + propFld(k,j+1,i)*ddy(j+1))/(ddy(j) + ddy(j+1))
+                        pt(k,j,i) = (propFld(k,j,i)*ddz(k) + propFld(k+1,j,i)*ddz(k+1))/(ddz(k) + ddz(k+1))
                     ENDDO
                 ENDDO
             ENDDO
@@ -127,9 +128,9 @@ CONTAINS
             DO i = 2, ii-2
                 DO j = 2, jj-2
                     DO k = 2, kk-2
-                        pe(k,j,i) = 2.0_realk / ( 1.0_realk / propFld(k,j,i) + 1.0_realk / propFld(k,j,i+1) )
-                        pn(k,j,i) = 2.0_realk / ( 1.0_realk / propFld(k,j,i) + 1.0_realk / propFld(k,j+1,i) )
-                        pt(k,j,i) = 2.0_realk / ( 1.0_realk / propFld(k,j,i) + 1.0_realk / propFld(k+1,j,i) )
+                        pe(k,j,i) = (ddx(i) + ddx(i+1))/(ddx(i)/propFld(k,j,i) + ddx(i+1)/propFld(k,j,i+1))
+                        pn(k,j,i) = (ddy(j) + ddy(j+1))/(ddy(j)/propFld(k,j,i) + ddy(j+1)/propFld(k,j+1,i))
+                        pt(k,j,i) = (ddz(k) + ddz(k+1))/(ddz(k)/propFld(k,j,i) + ddz(k+1)/propFld(k+1,j,i))
                     ENDDO
                 ENDDO
             ENDDO
@@ -139,7 +140,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_property_face_value_stag(kk, jj, ii, vff, prop1, prop2, pxy, pxz, pyz)
+    SUBROUTINE comp_property_face_value_stag(kk, jj, ii, vff, prop1, prop2, pxy, pxz, pyz, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
     !   Compute the "matrix" of a property on the staggered cells
@@ -163,21 +164,43 @@ CONTAINS
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: prop1, prop2
         REAL(realk), INTENT(out) :: pxy(kk, jj, ii), pxz(kk, jj, ii), pyz(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
-        REAL(realk) :: phi
+        REAL(realk) :: w(4), phi
 
         DO i = 2, ii-2
             DO j = 2, jj-2
                 DO k = 2, kk-2
-                    phi = MIN(MAX(0.5_realk*(vff(k,j,i) + vff(k,j,i+1) + vff(k,j+1,i) + vff(k,j+1,i+1)) - 0.5_realk, 0.0_realk), 1.0_realk)
+                    w(1) = ddx(i)*ddy(j)
+                    w(2) = ddx(i+1)*ddy(j)
+                    w(3) = ddx(i)*ddy(j+1)
+                    w(4) = ddx(i+1)*ddy(j+1)
+                    phi = MIN(MAX(2.0_realk*(vff(k,j,i)*w(1) &
+                                             + vff(k,j,i+1)*w(2) &
+                                             + vff(k,j+1,i)*w(3) &
+                                             + vff(k,j+1,i+1)*w(4))/SUM(w) - 0.5_realk, 0.0_realk), 1.0_realk)
                     pxy(k,j,i) = 1.0_realk / ( phi/prop1 + (1.0_realk - phi)/prop2 )
 
-                    phi = MIN(MAX(0.5_realk*(vff(k,j,i) + vff(k,j,i+1) + vff(k+1,j,i) + vff(k+1,j,i+1)) - 0.5_realk, 0.0_realk), 1.0_realk)
+                    w(1) = ddx(i)*ddz(k)
+                    w(2) = ddx(i+1)*ddz(k)
+                    w(3) = ddx(i)*ddz(k+1)
+                    w(4) = ddx(i+1)*ddz(k+1)
+                    phi = MIN(MAX(2.0_realk*(vff(k,j,i)*w(1) &
+                                             + vff(k,j,i+1)*w(2) &
+                                             + vff(k+1,j,i)*w(3) &
+                                             + vff(k+1,j,i+1)*w(4))/SUM(w) - 0.5_realk, 0.0_realk), 1.0_realk)
                     pxz(k,j,i) = 1.0_realk / ( phi/prop1 + (1.0_realk - phi)/prop2 )
 
-                    phi = MIN(MAX(0.5_realk*(vff(k,j,i) + vff(k,j+1,i) + vff(k+1,j,i) + vff(k+1,j+1,i)) - 0.5_realk, 0.0_realk), 1.0_realk)
+                    w(1) = ddy(j)*ddz(k)
+                    w(2) = ddy(j+1)*ddz(k)
+                    w(3) = ddy(j)*ddz(k+1)
+                    w(4) = ddy(j+1)*ddz(k+1)
+                    phi = MIN(MAX(2.0_realk*(vff(k,j,i)*w(1) &
+                                             + vff(k,j+1,i)*w(2) &
+                                             + vff(k+1,j,i)*w(3) &
+                                             + vff(k+1,j+1,i)*w(4))/SUM(w) - 0.5_realk, 0.0_realk), 1.0_realk)
                     pyz(k,j,i) = 1.0_realk / ( phi/prop1 + (1.0_realk - phi)/prop2 )
                 ENDDO
             ENDDO

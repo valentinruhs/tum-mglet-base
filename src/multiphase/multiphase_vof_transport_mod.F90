@@ -126,7 +126,7 @@ CONTAINS
                     ELSE IF ( vel(k,j,i) < -tol ) THEN
                         IF ( isIface(k+kl,j+jl,i+il) ) THEN
                             ! Compute characteristic length
-                            dds = il * ddx(i+1) + jl * ddy(j+1) + kl * ddz(k+1)
+                            dds = il * ddx(i+il) + jl * ddy(j+jl) + kl * ddz(k+kl)
 
                             ! Compute face fluxwidth and proper alpha
                             fluxWidth = abs( vel(k,j,i) ) * dt
@@ -143,7 +143,7 @@ CONTAINS
                                 normx(k+kl,j+jl,i+il), normy(k+kl,j+jl,i+il), normz(k+kl,j+jl,i+il))
                         ELSE
                             ! Compute characteristic length
-                            dds = il * ddx(i+1) + jl * ddy(j+1) + kl * ddz(k+1)
+                            dds = il * ddx(i+il) + jl * ddy(j+jl) + kl * ddz(k+kl)
 
                             ! Compute face fluxwidth
                             fluxWidth = abs( vel(k,j,i) ) * dt
@@ -473,10 +473,10 @@ CONTAINS
             CALL rddy_f%get_ptr(rddy, igrid)
             CALL rddz_f%get_ptr(rddz, igrid)
 
-            CALL diff_operator(kk, jj, ii, up, vp, wp, vffp, vff, &
+            CALL diff_operator(kk, jj, ii, up, vp, wp, vffp, vff, ddx, ddy, ddz, &
                 rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
-            CALL pres_operator(kk, jj, ii, vff, p, rdx, rdy, rdz, &
-                igrid, uo, vo, wo)
+            CALL pres_operator(kk, jj, ii, vff, p, ddx, ddy, ddz, &
+                rdx, rdy, rdz, igrid, uo, vo, wo)
             CALL exte_operator(kk, jj, ii, uo, vo, wo)
         END DO
 
@@ -589,6 +589,9 @@ CONTAINS
 
             ! Get pointers to truly time-persistant fields
             CALL vff_f%get_ptr(vff, igrid)
+            CALL dx_f%get_ptr(dx, igrid)
+            CALL dy_f%get_ptr(dy, igrid)
+            CALL dz_f%get_ptr(dz, igrid)
             CALL ddx_f%get_ptr(ddx, igrid)
             CALL ddy_f%get_ptr(ddy, igrid)
             CALL ddz_f%get_ptr(ddz, igrid)
@@ -600,7 +603,7 @@ CONTAINS
             CALL alpha_f%get_ptr(alpha, igrid)
 
             ! Interface reconstruction and Weymouth-Yue-Coefficient on all grids
-            CALL iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, normx, normy, normz, alpha)
+            CALL iface_reconstruction(kk, jj, ii, vff, dx, dy, dz, ddx, ddy, ddz, normx, normy, normz, alpha)
             CALL comp_cWy(kk, jj, ii, vff, cWy%arr(ip3))
 
             ! Compute Volume of Phase 1 at rk-step r
@@ -693,7 +696,8 @@ CONTAINS
                 CALL track_iface(isIface, kk, jj, ii, vff)
 
                 DO q = 1, 3
-                    CALL comp_advr_linear_interpolation(kk, jj, ii, q, l, u, v, w, advr)
+                    CALL comp_advr_linear_interpolation(kk, jj, ii, q, l, u, v, w, &
+                        advr, ddx, ddy, ddz)
                     CALL comp_adve(kk, jj, ii, q, l, vffStag(q)%arr(ip3), u, v, w, &
                         advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
                     CALL comp_flux_stag(kk, jj, ii, q, l, vff, advr, vffFlux1Stag, vffFlux2Stag, &
@@ -732,6 +736,9 @@ CONTAINS
 
                 ! Get pointers to truly time-persistant fields
                 CALL vff_f%get_ptr(vff, igrid)
+                CALL dx_f%get_ptr(dx, igrid)
+                CALL dy_f%get_ptr(dy, igrid)
+                CALL dz_f%get_ptr(dz, igrid)
                 CALL ddx_f%get_ptr(ddx, igrid)
                 CALL ddy_f%get_ptr(ddy, igrid)
                 CALL ddz_f%get_ptr(ddz, igrid)
@@ -743,7 +750,7 @@ CONTAINS
                 CALL alpha_f%get_ptr(alpha, igrid)
 
                 ! Interface reconstruction
-                CALL iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, normx, normy, normz, alpha)
+                CALL iface_reconstruction(kk, jj, ii, vff, dx, dy, dz, ddx, ddy, ddz, normx, normy, normz, alpha)
             ENDDO
         END DO
 
@@ -803,7 +810,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE diff_operator(kk, jj, ii, u, v, w, vffp, vff, &
-        rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
+        ddx, ddy, ddz, rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -813,14 +820,16 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: vffp(kk, jj, ii), vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
         REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
         REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
-        REAL(realk) :: d(kk, jj, ii), g(kk, jj, ii)
+        REAL(realk) :: g(kk, jj, ii)
         REAL(realk) :: gxy(kk, jj, ii), gxz(kk, jj, ii), gyz(kk, jj, ii)
+        REAL(realk) :: rhoe(kk, jj, ii), rhon(kk, jj, ii), rhot(kk, jj, ii)
         REAL(realk) :: tauxxe, tauxxw, tauxyn, tauxys, tauxzt, tauxzb
         REAL(realk) :: tauyxe, tauyxw, tauyyn, tauyys, tauyzt, tauyzb
         REAL(realk) :: tauzxe, tauzxw, tauzyn, tauzys, tauzzt, tauzzb
@@ -828,8 +837,10 @@ CONTAINS
         IF ( omitDiff ) RETURN
 
         CALL comp_material_property_field(kk, jj, ii, vffp, g, gmol1, gmol2)
-        CALL comp_property_face_value_stag(kk, jj, ii, vffp, gmol1, gmol2, gxy, gxz, gyz)
-        CALL comp_material_property_field(kk, jj, ii, vff, d, rho1, rho2)
+        CALL comp_property_face_value_stag(kk, jj, ii, vffp, gmol1, gmol2, &
+            gxy, gxz, gyz, ddx, ddy, ddz)
+        CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', &
+            rhoe, rhon, rhot, ddx, ddy, ddz)
 
         DO i = 3, ii-2
             DO j = 3, jj-2
@@ -843,7 +854,7 @@ CONTAINS
                     tauxzb = gxz(k-1,j,i) * ((u(k,j,i) - u(k-1,j,i))*rdz(k-1) + (w(k-1,j,i+1) - w(k-1,j,i))*rdx(i))
 
                     ! Change due to diffusion
-                    uo(k,j,i) = uo(k,j,i) + 2.0_realk/(d(k,j,i) + d(k,j,i+1))* &
+                    uo(k,j,i) = uo(k,j,i) + 1.0_realk/rhoe(k,j,i)* &
                         ((tauxxe - tauxxw)*rdx(i) + &
                         (tauxyn - tauxys)*rddy(j) + &
                         (tauxzt - tauxzb)*rddz(k))
@@ -863,7 +874,7 @@ CONTAINS
                     tauyzb = gyz(k-1,j,i) * ((v(k,j,i) - v(k-1,j,i))*rdz(k-1) + (w(k-1,j+1,i) - w(k-1,j,i))*rdy(j))
 
                     ! Change due to diffusion
-                    vo(k,j,i) = vo(k,j,i) + 2.0_realk/(d(k,j,i) + d(k,j+1,i))* &
+                    vo(k,j,i) = vo(k,j,i) + 1.0_realk/rhon(k,j,i)* &
                         ((tauyxe - tauyxw)*rddx(i) + &
                         (tauyyn - tauyys)*rdy(j) + &
                         (tauyzt - tauyzb)*rddz(k))
@@ -883,7 +894,7 @@ CONTAINS
                     tauzzb = g(k,j,i) * 2.0_realk * (w(k,j,i) - w(k-1,j,i))*rddz(k)
 
                     ! Change due to diffusion
-                    wo(k,j,i) = wo(k,j,i) + 2.0_realk/(d(k,j,i) + d(k+1,j,i))*&
+                    wo(k,j,i) = wo(k,j,i) + 1.0_realk/rhot(k,j,i)*&
                         ((tauzxe - tauzxw)*rddx(i) + &
                         (tauzyn - tauzys)*rddy(j) + &
                         (tauzzt - tauzzb)*rdz(k))
@@ -895,7 +906,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE pres_operator(kk, jj, ii, vff, p, rdx, rdy, rdz, &
+    SUBROUTINE pres_operator(kk, jj, ii, vff, p, ddx, ddy, ddz, rdx, rdy, rdz, &
         igrid, uo, vo, wo)
     !----------------------------------------------------------------
     !   What it does:
@@ -905,6 +916,7 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: vff(kk, jj, ii), p(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
         INTEGER(intk), INTENT(in) :: igrid
         REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
@@ -915,7 +927,8 @@ CONTAINS
         REAL(realk) :: gpx, gpy, gpz
         INTEGER(intk) :: i, j, k
 
-        CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', rhoe, rhon, rhot)
+        CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', &
+            rhoe, rhon, rhot, ddx, ddy, ddz)
 
         CALL get_gradpxflag(gradpflag, igrid)
         gpx = gradp(1)*gradpflag
@@ -1447,7 +1460,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE comp_advr_linear_interpolation(kk, jj, ii, q, l, &
-        u, v, w, advr)
+        u, v, w, advr, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
     !   Linear interpolation to compute the advecting velocity
@@ -1465,24 +1478,36 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii, q, l
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(out) :: advr(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
 
         ! Loval variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kq, jq, iq
         REAL(realk) :: vel(kk,jj,ii)
+        REAL(realk) :: ddnqMi, ddnqPl
 
         CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
         CALL get_condit_velocity(kk, jj, ii, l, u, v, w, vel)
 
-        
-
-        DO i = 2, ii-2
-            DO j = 2, jj-2
-                DO k = 2, kk-2
-                    advr(k,j,i) = 0.5_realk * ( vel(k,j,i) + vel(k+kq,j+jq,i+iq) )
-                END DO
-            END DO
-        END DO
+        IF ( q == l ) THEN
+            DO i = 2, ii-2
+                DO j = 2, jj-2
+                    DO k = 2, kk-2
+                        advr(k,j,i) = 0.5_realk*(vel(k,j,i) + vel(k+kq,j+jq,i+iq))
+                    ENDDO
+                ENDDO
+            ENDDO
+        ELSE
+            DO i = 2, ii-2
+                DO j = 2, jj-2
+                    DO k = 2, kk-2
+                        ddnqMi = iq*ddx(i) + jq*ddy(j) + kq*ddz(k)
+                        ddnqPl = iq*ddx(i+iq) + jq*ddy(j+jq) + kq*ddz(k+kq)
+                        advr(k,j,i) = (vel(k,j,i)*ddnqMi + vel(k+kq,j+jq,i+iq)*ddnqPl)/(ddnqMi + ddnqPl)
+                    ENDDO
+                ENDDO
+            ENDDO
+        ENDIF
 
     END SUBROUTINE comp_advr_linear_interpolation
 

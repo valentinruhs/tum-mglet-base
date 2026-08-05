@@ -93,6 +93,7 @@ CONTAINS
         INTEGER(intk) :: igr, igrid
 
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ae(:,:,:), aw(:,:,:), &
                                             an(:,:,:), as(:,:,:), &
                                             at(:,:,:), ab(:,:,:)
@@ -111,6 +112,10 @@ CONTAINS
             CALL get_fieldptr(dy, "DY", igrid)
             CALL get_fieldptr(dz, "DZ", igrid)
 
+            CALL get_fieldptr(ddx, "DDX", igrid)
+            CALL get_fieldptr(ddy, "DDY", igrid)
+            CALL get_fieldptr(ddz, "DDZ", igrid)
+
             CALL get_fieldptr(aw, "GSAW", igrid)
             CALL get_fieldptr(ae, "GSAE", igrid)
             CALL get_fieldptr(as, "GSAS", igrid)
@@ -126,7 +131,7 @@ CONTAINS
             IF ( .NOT. ALLOCATED(rhon)) ALLOCATE(rhon(kk, jj, ii))
             IF ( .NOT. ALLOCATED(rhot)) ALLOCATE(rhot(kk, jj, ii))
 
-            CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', rhoe, rhon, rhot)
+            CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', rhoe, rhon, rhot, ddx, ddy, ddz)
 
             DO i = 3, ii-2
                 DO j = 3, jj-2

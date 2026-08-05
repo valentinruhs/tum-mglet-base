@@ -121,7 +121,7 @@
 
     !================================================================
 
-    SUBROUTINE comp_norm_vec(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz)
+    SUBROUTINE comp_norm_vec(normx, normy, normz, kk, jj, ii, vff, dx, dy, dz)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the normal vector components normx, normy and normz
@@ -133,15 +133,13 @@
     !            / 1  2  1 \
     !   stcl =   | 2  4  2 |
     !            \ 1  2  1 /
-    !   The gradient is approximated by a central-difference scheme:
-    !   norm(.) = (upwind SUM - downwind SUM) / 2 * dd(.) * stcl SUM
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
 
         ! Local variables
         INTEGER(intk) :: k, j, i, d1, d2
@@ -171,9 +169,9 @@
                         ENDDO
                     ENDDO
 
-                    normx(k,j,i) = sumx / ( 2.0_realk * SUM(stcl) * ddx(i) )
-                    normy(k,j,i) = sumy / ( 2.0_realk * SUM(stcl) * ddy(j) )
-                    normz(k,j,i) = sumz / ( 2.0_realk * SUM(stcl) * ddz(k) )
+                    normx(k,j,i) = sumx / ( SUM(stcl) * (dx(i-1)+dx(i)) )
+                    normy(k,j,i) = sumy / ( SUM(stcl) * (dy(j-1)+dy(j)) )
+                    normz(k,j,i) = sumz / ( SUM(stcl) * (dz(k-1)+dz(k)) )
 
                     ! Calculate normal vector length
                     length = SQRT( normx(k,j,i)**2.0_realk + &
@@ -199,7 +197,7 @@
 
     !================================================================
 
-    SUBROUTINE iface_reconstruction(kk, jj, ii, vff, ddx, ddy, ddz, normx, normy, normz, alpha)
+    SUBROUTINE iface_reconstruction(kk, jj, ii, vff, dx, dy, dz, ddx, ddy, ddz, normx, normy, normz, alpha)
     !----------------------------------------------------------------
     !   What it does:
     !   The subroutine is just a wrapper for the subroutines, which
@@ -209,6 +207,7 @@
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
@@ -217,7 +216,7 @@
         LOGICAL :: isIface(kk, jj, ii)
 
         CALL track_iface(isIface, kk, jj, ii, vff)
-        CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, vff, ddx, ddy, ddz)
+        CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, vff, dx, dy, dz)
         CALL comp_alph(alpha, kk, jj, ii, vff, isIface, ddx, ddy, ddz, normx, normy, normz)
 
     END SUBROUTINE iface_reconstruction
