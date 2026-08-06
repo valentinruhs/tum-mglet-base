@@ -633,8 +633,8 @@ CONTAINS
             CALL alpha_f%get_ptr(alpha, igrid)
 
             ! Allocate sweep-temporary fields
-            IF ( .NOT. ALLOCATED(dStag) ) ALLOCATE(dStag(kk, jj, ii))
-            IF ( .NOT. ALLOCATED(isIface) ) ALLOCATE(isIface(kk, jj, ii))
+            ALLOCATE(dStag(kk, jj, ii))
+            ALLOCATE(isIface(kk, jj, ii))
 
             CALL track_iface(isIface, kk, jj, ii, vff)
 
@@ -685,13 +685,13 @@ CONTAINS
                 CALL alpha_f%get_ptr(alpha, igrid)
 
                 ! Allocate sweep-temporary fields
-                IF ( .NOT. ALLOCATED(advr) ) ALLOCATE(advr(kk, jj, ii))
-                IF ( .NOT. ALLOCATED(adve) ) ALLOCATE(adve(kk, jj, ii))
-                IF ( .NOT. ALLOCATED(vffFlux1Stag) ) ALLOCATE(vffFlux1Stag(kk, jj, ii))
-                IF ( .NOT. ALLOCATED(vffFlux2Stag) ) ALLOCATE(vffFlux2Stag(kk, jj, ii))
-                IF ( .NOT. ALLOCATED(isIface) ) ALLOCATE(isIface(kk, jj, ii))
-                IF ( .NOT. ALLOCATED(vel) ) ALLOCATE(vel(kk, jj, ii))
-                IF ( .NOT. ALLOCATED(vffFlux1) ) ALLOCATE(vffFlux1(kk, jj, ii))
+                ALLOCATE(advr(kk, jj, ii))
+                ALLOCATE(adve(kk, jj, ii))
+                ALLOCATE(vffFlux1Stag(kk, jj, ii))
+                ALLOCATE(vffFlux2Stag(kk, jj, ii))
+                ALLOCATE(isIface(kk, jj, ii))
+                ALLOCATE(vel(kk, jj, ii))
+                ALLOCATE(vffFlux1(kk, jj, ii))
 
                 CALL track_iface(isIface, kk, jj, ii, vff)
 

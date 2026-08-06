@@ -6,7 +6,7 @@ MODULE pressuresolver_mod
     USE itinfo_mod, ONLY: itinfo_sample
     USE plog_mod
     USE multiphasecore_mod, ONLY: solve_multiphase, rho1, rho2
-    USE multiphase_mod, ONLY: comp_matrix_coeff_multiphase, comp_factor_coeff_multiphase
+    USE multiphase_mod, ONLY: comp_matrix_coeff_multiphase
     USE multiphase_material_mod, ONLY: comp_property_face_value_cent
 
     IMPLICIT NONE (type, external)
@@ -163,14 +163,19 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: ae(:,:,:), aw(:,:,:), &
                                             an(:,:,:), as(:,:,:), &
                                             at(:,:,:), ab(:,:,:), ap(:, :, :)
+        TYPE(field_t), POINTER :: dummy
+        LOGICAL :: exists
 
-        CALL set_field("SIPLW")
-        CALL set_field("SIPLS")
-        CALL set_field("SIPLB")
-        CALL set_field("SIPUE")
-        CALL set_field("SIPUN")
-        CALL set_field("SIPUT")
-        CALL set_field("SIPLPR")
+        CALL get_field(dummy, "SIPLW", exists)
+        IF ( .NOT. exists ) THEN
+            CALL set_field("SIPLW")
+            CALL set_field("SIPLS")
+            CALL set_field("SIPLB")
+            CALL set_field("SIPUE")
+            CALL set_field("SIPUN")
+            CALL set_field("SIPUT")
+            CALL set_field("SIPLPR")
+        ENDIF
 
         DO igr = 1, nmygrids
             igrid = mygrids(igr)
@@ -272,8 +277,13 @@ CONTAINS
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kk, jj, ii
         REAL(realk), POINTER, CONTIGUOUS :: ap(:, :, :), rap(:, :, :)
+        TYPE(field_t), POINTER :: dummy
+        LOGICAL :: exists
 
-        CALL set_field("SOR_RAP")
+        CALL get_field(dummy, "SOR_RAP", exists)
+        IF ( .NOT. exists ) THEN
+            CALL set_field("SOR_RAP")
+        ENDIF
 
         DO igr = 1, nmygrids
             igrid = mygrids(igr)
@@ -333,7 +343,8 @@ CONTAINS
             ! div(1/rho * grad(p)) = prefak * div(u) is the underlying equation
             prefak = 1.0_realk/dt
             CALL comp_matrix_coeff_multiphase()
-            CALL comp_factor_coeff_multiphase()
+            CALL init_sip()
+            CALL init_sor()
         ELSE
             ! laplace(dp) = prefak * div(u) is the underlying equation
             prefak = rho/dt

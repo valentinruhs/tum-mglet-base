@@ -29,6 +29,11 @@ MODULE multiphase_utils_mod
     REAL(realk), PROTECTED :: currErr = 0.0_realk
     REAL(realk), PROTECTED :: relaErr = 0.0_realk
 
+    REAL(realk), PROTECTED :: cumFlux = 0.0_realk, cumComp = 0.0_realk
+    REAL(realk), PROTECTED :: cumClip = 0.0_realk, cumResi = 0.0_realk
+    REAL(realk), PROTECTED :: volRef  = 0.0_realk
+    INTEGER(intk), PROTECTED :: nBal  = 0
+
     PUBLIC :: init_multiphase_utils, finish_multiphase_utils, &
         get_spatial_indices, get_spatial_extents, get_condit_velocity, clip_vff, &
         check_continuity, check_solenoidality, comp_vol_phase1, sanity_check
@@ -376,17 +381,28 @@ CONTAINS
         REAL(realk), INTENT(in) :: volFluxPhase1, volCompPhase1, volClipPhase1
 
         ! Local variables
-        REAL(realk) :: volResi
+        REAL(realk) :: volResi, volTres
+
+        IF ( nBal == 0 ) volRef = volPhase1r
 
         volResi = ( volPhase1r1 - volPhase1r ) - ( volFluxPhase1 + volCompPhase1 + volClipPhase1 )
 
+        cumFlux = cumFlux + volFluxPhase1
+        cumComp = cumComp + volCompPhase1
+        cumClip = cumClip + volClipPhase1
+        cumResi = cumResi + volResi
+        nBal    = nBal + 1
+
+        volTres = ( volPhase1r1 - volRef ) - ( cumFlux + cumComp + cumClip + cumResi )
+
         IF ( myid == 0 ) THEN
-            WRITE(*,'(A,5(A,ES14.6))') "VOF budget: ", &
-            "  dV/V = ", ( volPhase1r1 - volPhase1r ) / volPhase1r, &
-            "  flux/V = ", volFluxPhase1 / volPhase1r, &
-            "  comp/V = ", volCompPhase1 / volPhase1r, &
-            "  clip/V = ", volClipPhase1 / volPhase1r, &
-            "  resi/V = ", volResi / volPhase1r
+            WRITE(*,'(A,6(A,ES14.6))') "VOF acc. budget: ", &
+            "  dV/V = ", ( volPhase1r1 - volRef ) / volRef, &
+            "  flux/V = ", cumFlux / volRef, &
+            "  comp/V = ", cumComp / volRef, &
+            "  clip/V = ", cumClip / volRef, &
+            "  resi/V = ", cumResi / volRef, &
+            "  tres/V = ", volTres / volRef
         ENDIF
 
     END SUBROUTINE sanity_check

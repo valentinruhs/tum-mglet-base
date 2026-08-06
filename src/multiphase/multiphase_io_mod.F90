@@ -154,8 +154,8 @@ CONTAINS
                 DO i = 2, ii-1
                     DO j = 2, jj-1
                         DO k = 2, kk-1
-                            u(k,j,i) = (psi(k,j,i) - psi(k,j-1,i))/dy(j)
-                            v(k,j,i) = - (psi(k,j,i) - psi(k,j,i-1))/dx(i)
+                            u(k,j,i) = (psi(k,j,i) - psi(k,j-1,i))/ddy(j)
+                            v(k,j,i) = - (psi(k,j,i) - psi(k,j,i-1))/ddx(i)
                             w(k,j,i) = 0.0_realk
                         END DO
                     END DO
@@ -418,8 +418,8 @@ CONTAINS
                 DO i = 2, ii-1
                     DO j = 2, jj-1
                         DO k = 2, kk-1
-                            u(k,j,i) = (psi(k,j,i) - psi(k,j-1,i))/dy(j)
-                            v(k,j,i) = - (psi(k,j,i) - psi(k,j,i-1))/dx(i)
+                            u(k,j,i) = (psi(k,j,i) - psi(k,j-1,i))/ddy(j)
+                            v(k,j,i) = - (psi(k,j,i) - psi(k,j,i-1))/ddx(i)
                             w(k,j,i) = 0.0_realk
                         END DO
                     END DO
