@@ -1,7 +1,7 @@
 {
     "time": {
         "dt": 0.003125,
-        "mtstep": 1,
+        "mtstep": 640,
 	"itinfo": 10,
         "tstat": 10.0,
 	"read": false
@@ -31,8 +31,17 @@
     
     "multiphase": {
     	"solve": true,
-	"test": "VorBoC",
-	"splitting": "direction-wise",
+	"test": "Vortex in a Box",
+	"omitAdve": false,
+       	"omitDiff": true,
+	"omitExte": true,
+	"permutation": 6,
+	"tolerance": 1E-12,
+	"fluxLimiter": "QUICK",
+	"fluxCentered": false,
+	"checkContinuity": true,
+	"checkSolenoidality": true,
+	"checkBalance": false,
 	"rho1" : 1000.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.0001,

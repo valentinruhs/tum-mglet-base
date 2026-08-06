@@ -45,21 +45,22 @@ CONTAINS
         ! None
 
         ! Local variables
-        TYPE(field_t), POINTER :: vff_f
+        TYPE(field_t), POINTER :: u_f, v_f, w_f, vff_f
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
-        INTEGER(intk) :: i, j, k, di, dj, dk, r, ilevel
+        INTEGER(intk) :: i, j, k, di, dj, dk, r, ilevel, halo
         INTEGER(intk) :: iSub, jSub, kSub
-        REAL(realk), POINTER, CONTIGUOUS :: vff(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:), vff(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
+        REAL(realk), ALLOCATABLE :: xPl(:), yPl(:), zPl(:), psi(:,:,:)
         REAL(realk) :: centx, centy, centz, rad, x, y, z, inside, a, b, e, maxTrans, theta
         REAL(realk) :: randx(10), randy(10), randt(10)
         REAL(realk) :: vol
 
-        CALL get_field(vff_f, "VFF")
+        CALL get_field(u_f, "U"); CALL get_field(v_f, "V"); CALL get_field(w_f, "W"); CALL get_field(vff_f, "VFF")
         CALL get_field(dx_f, "DX"); CALL get_field(dy_f, "DY"); CALL get_field(dz_f, "DZ")
         CALL get_field(ddx_f, "DDX"); CALL get_field(ddy_f, "DDY"); CALL get_field(ddz_f, "DDZ")
 
@@ -72,154 +73,164 @@ CONTAINS
             CALL get_mgdims(kk, jj, ii, igrid)
             CALL get_bbox(minx, maxx, miny, maxy, minz, maxz, igrid)
 
-            CALL vff_f%get_ptr(vff, igrid)
+            CALL u_f%get_ptr(u, igrid); CALL v_f%get_ptr(v, igrid); cALL w_f%get_ptr(w, igrid); CALL vff_f%get_ptr(vff, igrid)
             CALL dx_f%get_ptr(dx, igrid); CALL dy_f%get_ptr(dy, igrid); CALL dz_f%get_ptr(dz, igrid)
             CALL ddx_f%get_ptr(ddx, igrid); CALL ddy_f%get_ptr(ddy, igrid); CALL ddz_f%get_ptr(ddz, igrid)
 
+            ALLOCATE(xPl(ii))
+            ALLOCATE(yPl(jj))
+            ALLOCATE(zPl(kk))
+
+            CALL get_top_right_corner(xPl, ddx, minx, ii)
+            CALL get_top_right_corner(yPl, ddy, miny, jj)
+            CALL get_top_right_corner(zPl, ddz, minz, kk)
+
             SELECT CASE( test_multiphase )
-            CASE ( 'SphTrF' ) ! Sphere Translation Fine
+            CASE ( 'Sphere Translation' )
                 !----------------------------------------------------
-                centx = 0.5_realk ; centy = 0.5_realk ; centz = 0.5_realk ; rad = 0.06875_realk
-                iSub = 32 ; jSub = 32 ; kSub = 32
-                ! Outer loop over cells
-                DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
-                    inside = 0.0_realk
-                    ! Inner loop over (.)Sub for refinement
-                    DO di = 0, iSub-1 ; DO dj = 0, jSub-1 ; DO dk = 0, kSub-1
-                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
-                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
-                        z = minz + ( k-3 + (dk + 0.5_realk)/kSub ) * dz(1) ! assume equidistance
-                        IF ( (x - centx)**2.0_realk + &
-                             (y - centy)**2.0_realk + &
-                             (z - centz)**2.0_realk <= rad**2.0_realk ) THEN
-                            inside = inside + 1.0_realk
-                        ENDIF
-                    ENDDO ; ENDDO ; ENDDO
-                    vff(k,j,i) = inside / (iSub * jSub * kSub)
-                ENDDO ; ENDDO ; ENDDO
+                centx = 0.5_realk
+                centy = 0.5_realk
+                centz = 0.5_realk
+                rad = 0.06875_realk
                 trueVol = 4.0_realk / 3.0_realk * pi * rad**3.0_realk
+                iSub = 2048
+                jSub = 2048
+                DO i = 3, ii-2
+                    DO j = 3, jj-2
+                        DO k = 3, kk-2
+                            inside = 0.0_realk
+                            DO di = 0, iSub-1
+                                x = xPl(i) + (di + 0.5_realk)/iSub*ddx(i)
+                                DO dj = 0, jSub-1
+                                    y = yPl(j) + (dj + 0.5_realk)/jSub*ddy(j)
+                                    DO dk = 0, kSub-1
+                                        z = zPl(k) + (dk + 0.5_realk)/kSub*ddz(k)
+                                        IF ((x - centx)**2 + (y - centy)**2 + (z - centz)**2 <= rad**2) THEN
+                                            inside = inside + 1.0_realk
+                                        ENDIF
+                                    ENDDO
+                                ENDDO
+                            ENDDO
+                            vff(3:kk-2,j,i) = inside / (iSub*jSub)
+                        ENDDO
+                    ENDDO
+                ENDDO
                 !----------------------------------------------------
-            CASE ( 'SphTrC' ) ! Sphere Translation Coarse
+            CASE ( 'Vortex in a Box' )
                 !----------------------------------------------------
-                centx = 0.5_realk ; centy = 0.5_realk ; centz = 0.5_realk ; rad = 0.06875_realk
-                iSub = 32 ; jSub = 32 ; kSub = 32
-                ! Outer loop over cells
-                DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
-                    inside = 0.0_realk
-                    ! Inner loop over (.)Sub for refinement
-                    DO di = 0, iSub-1 ; DO dj = 0, jSub-1 ; DO dk = 0, kSub-1
-                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
-                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
-                        z = minz + ( k-3 + (dk + 0.5_realk)/kSub ) * dz(1) ! assume equidistance
-                        IF ( (x - centx)**2.0_realk + &
-                             (y - centy)**2.0_realk + &
-                             (z - centz)**2.0_realk <= rad**2.0_realk ) THEN
-                            inside = inside + 1.0_realk
-                        ENDIF
-                    ENDDO ; ENDDO ; ENDDO
-                    vff(k,j,i) = inside / (iSub * jSub * kSub)
-                ENDDO ; ENDDO ; ENDDO
-                trueVol = 4.0_realk / 3.0_realk * pi * rad**3.0_realk
+                centx = 0.5_realk
+                centy = 0.75_realk
+                centz = 0.0_realk
+                rad = 0.15_realk
+                trueVol = pi * rad**2.0_realk * (maxz - minz)
+                iSub = 2048
+                jSub = 2048
+                DO i = 3, ii-2
+                    DO j = 3, jj-2
+                        inside = 0.0_realk
+                        DO di = 0, iSub-1
+                            x = xPl(i) + (di + 0.5_realk)/iSub*ddx(i)
+                            DO dj = 0, jSub-1
+                                y = yPl(j) + (dj + 0.5_realk)/jSub*ddy(j)
+                                IF ((x - centx)**2 + (y - centy)**2 <= rad**2) THEN
+                                    inside = inside + 1.0_realk
+                                ENDIF
+                            ENDDO
+                        ENDDO
+                        vff(3:kk-2,j,i) = inside / (iSub*jSub)
+                    ENDDO
+                ENDDO
+
+                ALLOCATE(psi(kk,jj,ii))
+                DO i = 1, ii
+                    DO j = 1, jj
+                        DO k = 1, kk
+                            psi(k,j,i) = 1/pi * &
+                                SIN(pi*(xPl(i)+ddx(i)))**2 * &
+                                SIN(pi*(yPl(j)+ddy(j)))**2
+                        END DO
+                    END DO 
+                END DO
+                DO i = 2, ii-1
+                    DO j = 2, jj-1
+                        DO k = 2, kk-1
+                            u(k,j,i) = (psi(k,j,i) - psi(k,j-1,i))/dy(j)
+                            v(k,j,i) = - (psi(k,j,i) - psi(k,j,i-1))/dx(i)
+                            w(k,j,i) = 0.0_realk
+                        END DO
+                    END DO
+                END DO
+                DEALLOCATE(psi)
                 !----------------------------------------------------
-            CASE ( 'VorBoF' ) ! Vortex-in-a-Box Fine
+            CASE ( 'Cylinder Advection' ) 
                 !----------------------------------------------------
-                centx = 0.5_realk ; centy = 0.75_realk ; centz = 0.0_realk ; rad = 0.15_realk
-                iSub = 512 ; jSub = 512 ; kSub = 1
-                ! Outer loop over cells
-                DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
-                    inside = 0.0_realk
-                    ! Inner loop over (.)Sub for refinement
-                    DO di = 0, iSub-1 ; DO dj = 0, jSub-1
-                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
-                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
-                        IF ( (x - centx)**2.0_realk + &
-                             (y - centy)**2.0_realk <= rad**2.0_realk ) THEN
-                            inside = inside + 1.0_realk
-                        ENDIF
-                    ENDDO ; ENDDO
-                    vff(k,j,i) = inside / (iSub * jSub * kSub)
-                ENDDO ; ENDDO ; ENDDO
-                trueVol = pi * rad**2.0_realk * ( maxz - minz )
+                centx = 0.2_realk
+                centy = 0.2_realk
+                centz = 0.0_realk
+                rad = 0.1_realk
+                trueVol = pi * rad**2.0_realk * (maxz - minz)
+                iSub = 2048
+                jSub = 2048
+                DO i = 3, ii-2
+                    DO j = 3, jj-2
+                        inside = 0.0_realk
+                        DO di = 0, iSub-1
+                            x = xPl(i) + (di + 0.5_realk)/iSub*ddx(i)
+                            DO dj = 0, jSub-1
+                                y = yPl(j) + (dj + 0.5_realk)/jSub*ddy(j)
+                                IF ((x - centx)**2 + (y - centy)**2 <= rad**2) THEN
+                                    inside = inside + 1.0_realk
+                                ENDIF
+                            ENDDO
+                        ENDDO
+                        vff(3:kk-2,j,i) = inside / (iSub*jSub)
+                    ENDDO
+                ENDDO
+
+                u = 0.016_realk
+                v = 0.016_realk
+                w = 0.0_realk
                 !----------------------------------------------------
-            CASE ( 'VorBoC' ) ! Vortex-in-a-Box Coarse
+            CASE ( 'Sudden Cylinder Acceleration' )
                 !----------------------------------------------------
-                centx = 0.5_realk ; centy = 0.75_realk ; centz = 0.0_realk ; rad = 0.15_realk
-                iSub = 512 ; jSub = 512 ; kSub = 1
-                ! Outer loop over cells
-                DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
-                    inside = 0.0_realk
-                    ! Inner loop over (.)Sub for refinement
-                    DO di = 0, iSub-1 ; DO dj = 0, jSub-1
-                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
-                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
-                        IF ( (x - centx)**2.0_realk + &
-                             (y - centy)**2.0_realk <= rad**2.0_realk ) THEN
-                            inside = inside + 1.0_realk
-                        ENDIF
-                    ENDDO ; ENDDO
-                    vff(k,j,i) = inside / (iSub * jSub * kSub)
-                ENDDO ; ENDDO ; ENDDO
-                trueVol = pi * rad**2.0_realk * ( maxz - minz )
-                !----------------------------------------------------
-            CASE ( 'CylAdF' ) ! Cylinder Advection Fine
-                !----------------------------------------------------
-                centx = 0.2_realk ; centy = 0.2_realk ; centz = 0.0_realk ; rad = 0.1_realk
-                iSub = 512 ; jSub = 512 ; kSub = 1
-                ! Outer loop over cells
-                DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
-                    inside = 0.0_realk
-                    ! Inner loop over (.)Sub for refinement
-                    DO di = 0, iSub-1 ; DO dj = 0, jSub-1
-                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
-                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
-                        IF ( (x - centx)**2.0_realk + &
-                             (y - centy)**2.0_realk <= rad**2.0_realk ) THEN
-                            inside = inside + 1.0_realk
-                        ENDIF
-                    ENDDO ; ENDDO
-                    vff(k,j,i) = inside / (iSub * jSub * kSub)
-                ENDDO ; ENDDO ; ENDDO
-                trueVol = pi * rad**2.0_realk * ( maxy - miny )
-                !----------------------------------------------------
-            CASE ( 'CylAdC' ) ! Cylinder Advection Coarse
-                !----------------------------------------------------
-                centx = 0.2_realk ; centy = 0.2_realk ; centz = 0.0_realk ; rad = 0.1_realk
-                iSub = 512 ; jSub = 512 ; kSub = 1
-                ! Outer loop over cells
-                DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
-                    inside = 0.0_realk
-                    ! Inner loop over (.)Sub for refinement
-                    DO di = 0, iSub-1 ; DO dj = 0, jSub-1
-                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
-                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
-                        IF ( (x - centx)**2.0_realk + &
-                             (y - centy)**2.0_realk <= rad**2.0_realk ) THEN
-                            inside = inside + 1.0_realk
-                        ENDIF
-                    ENDDO ; ENDDO
-                    vff(k,j,i) = inside / (iSub * jSub * kSub)
-                ENDDO ; ENDDO ; ENDDO
-                trueVol = pi * rad**2.0_realk * ( maxz - minz )
-                !----------------------------------------------------
-            CASE ( 'SCylAc' ) ! Sudden Cylinder Accerleration
-                !----------------------------------------------------
-                centx = 0.2_realk ; centy = 0.2_realk ; centz = 0.0_realk ; rad = 0.1_realk
-                iSub = 1024 ; jSub = 1024 ; kSub = 1
-                ! Outer loop over cells
-                DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
-                    inside = 0.0_realk
-                    ! Inner loop over (.)Sub for refinement
-                    DO di = 0, iSub-1 ; DO dj = 0, jSub-1
-                        x = minx + ( i-3 + (di + 0.5_realk)/iSub ) * dx(1) ! assume equidistance
-                        y = miny + ( j-3 + (dj + 0.5_realk)/jSub ) * dy(1) ! assume equidistance
-                        IF ( (x - centx)**2.0_realk + &
-                             (y - centy)**2.0_realk <= rad**2.0_realk ) THEN
-                            inside = inside + 1.0_realk
-                        ENDIF
-                    ENDDO ; ENDDO
-                    vff(k,j,i) = inside / (iSub * jSub * kSub)
-                ENDDO ; ENDDO ; ENDDO
-                trueVol = pi * rad**2.0_realk * ( maxz - minz )
+                centx = 0.2_realk
+                centy = 0.2_realk
+                centz = 0.0_realk
+                rad = 0.1_realk
+                trueVol = pi * rad**2.0_realk * (maxz - minz)
+                iSub = 2048
+                jSub = 2048
+                DO i = 3, ii-2
+                    DO j = 3, jj-2
+                        inside = 0.0_realk
+                        DO di = 0, iSub-1
+                            x = xPl(i) + (di + 0.5_realk)/iSub*ddx(i)
+                            DO dj = 0, jSub-1
+                                y = yPl(j) + (dj + 0.5_realk)/jSub*ddy(j)
+                                IF ((x - centx)**2 + (y - centy)**2 <= rad**2) THEN
+                                    inside = inside + 1.0_realk
+                                ENDIF
+                            ENDDO
+                        ENDDO
+                        vff(3:kk-2,j,i) = inside / (iSub*jSub)
+                    ENDDO
+                ENDDO
+
+                halo = 1
+                DO i = 3, ii-2
+                    DO j = 3, jj-2
+                        DO k = 3, kk-2
+                            IF ( vff(k,j,i) > 0.0_realk .OR. &
+                                 vff(k,j,i+halo) > 0.0_realk .OR. vff(k,j,i-halo) > 0.0_realk .OR. &
+                                 vff(k,j+halo,i) > 0.0_realk .OR. vff(k,j-halo,i) > 0.0_realk .OR. &
+                                 vff(k+halo,j,i) > 0.0_realk .OR. vff(k-halo,j,i) > 0.0_realk ) THEN
+                                u(k,j,i) = 0.016_realk
+                                v(k,j,i) = 0.016_realk
+                                w(k,j,i) = 0.0_realk
+                            ENDIF
+                        ENDDO
+                    ENDDO
+                ENDDO
                 !----------------------------------------------------
             CASE ( 'PlicEl' ) ! PLIC Ellipse
                 !----------------------------------------------------
@@ -277,6 +288,10 @@ CONTAINS
                     ENDDO
                 ENDDO
             ENDDO
+
+            DEALLOCATE(xPl)
+            DEALLOCATE(yPl)
+            DEALLOCATE(zPl)
         ENDDO
 
         CALL MPI_Allreduce(MPI_IN_PLACE, initVol, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
@@ -284,7 +299,7 @@ CONTAINS
         initErr = trueVol - initVol
 
         IF ( myid == 0 ) THEN
-            WRITE(*,'(A,ES14.6)') "Initial volume error is ", initErr, " (trueVol - initVol)"
+            WRITE(*,'(A,ES24.16)') "Initial volume error is ", initErr, " (trueVol - initVol)"
             WRITE(*,*) ""
         ENDIF
 
@@ -330,9 +345,9 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         INTEGER(intk) :: kk, jj, ii, k, j, i
+        REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
         REAL(realk) :: magnitude, fac(6)
-        REAL(realk), ALLOCATABLE :: psi(:,:,:)
-        INTEGER(intk) :: halo
+        REAL(realk), ALLOCATABLE :: psi(:,:,:), xPl(:), yPl(:), zPl(:)
 
         CALL get_field(dx_f, "DX")
         CALL get_field(dy_f, "DY")
@@ -346,6 +361,7 @@ CONTAINS
             igrid = mygrids(n)
 
             CALL get_mgdims(kk, jj, ii, igrid)
+            CALL get_bbox(minx, maxx, miny, maxy, minz, maxz, igrid)
 
             CALL u_f%get_ptr(u, igrid)
             CALL v_f%get_ptr(v, igrid)
@@ -360,7 +376,16 @@ CONTAINS
             CALL ddy_f%get_ptr(ddy, igrid)
             CALL ddz_f%get_ptr(ddz, igrid)
 
-            IF ( test_multiphase == 'SphTrF' .OR. test_multiphase == 'SphTrC' ) THEN
+            ALLOCATE(xPl(ii))
+            ALLOCATE(yPl(jj))
+            ALLOCATE(zPl(kk))
+
+            CALL get_top_right_corner(xPl, ddx, minx, ii)
+            CALL get_top_right_corner(yPl, ddy, miny, jj)
+            CALL get_top_right_corner(zPl, ddz, minz, kk)
+
+            SELECT CASE( test_multiphase )
+            CASE ( 'Sphere Translation' )
                 fac = [0.7686000, 0.5968000, 0.1035700, &
                        0.5514000, 0.2242010, 0.2512981]
                 magnitude = 0.0125_realk
@@ -379,58 +404,32 @@ CONTAINS
                     v = 0.0_realk
                 END IF
                 w = 0.0_realk
-            ELSE IF ( test_multiphase == 'VorBoF' .OR. test_multiphase == 'VorBoC' ) THEN
-                IF (.NOT. ALLOCATED(psi)) ALLOCATE(psi(kk,jj,ii))
+            CASE ( 'Vortex in a Box' )
+                ALLOCATE(psi(kk,jj,ii))
                 DO i = 1, ii
                     DO j = 1, jj
                         DO k = 1, kk
-                            psi(k,j,i) = 1/pi * COS(pi * itstep * dt / 2.0_realk) * &
-                                SIN(pi*(- 1.5_realk * ddx(1) + (i-1) * ddx(1)))**2.0_realk * &
-                                SIN(pi*(- 1.5_realk * ddy(1) + (j-1) * ddy(1)))**2.0_realk
+                            psi(k,j,i) = 1/pi * COS(pi*dt*itstep/2.0_realk) * &
+                                SIN(pi*(xPl(i)+ddx(i)))**2 * &
+                                SIN(pi*(yPl(j)+ddy(j)))**2
                         END DO
                     END DO 
                 END DO
                 DO i = 2, ii-1
                     DO j = 2, jj-1
                         DO k = 2, kk-1
-                            u(k,j,i) = ( psi(k,j,i) - psi(k,j-1,i) ) / ddy(j)
-                            v(k,j,i) = - ( psi(k,j,i) - psi(k,j,i-1) ) / ddx(i)
+                            u(k,j,i) = (psi(k,j,i) - psi(k,j-1,i))/dy(j)
+                            v(k,j,i) = - (psi(k,j,i) - psi(k,j,i-1))/dx(i)
                             w(k,j,i) = 0.0_realk
                         END DO
                     END DO
                 END DO
-            ELSE IF ( test_multiphase == 'CylAdF' .OR. test_multiphase == 'CylAdC' ) THEN
-                IF ( itstep == 1 ) THEN
-                    u = 0.016_realk
-                    v = 0.016_realk
-                    w = 0.0_realk
-                END IF
-            ELSE IF ( test_multiphase == 'SCylAc' ) THEN
-                halo = 3
-                IF ( itstep == 1 ) THEN
-                    DO i = 3, ii-2
-                        DO j = 3, jj-2
-                            DO k = 3, kk-2
-                                IF ( vff(k,j,i) > 0.0_realk .OR. &
-                                     vff(k,j,i+halo) > 0.0_realk .OR. vff(k,j,i-halo) > 0.0_realk .OR. &
-                                     vff(k,j+halo,i) > 0.0_realk .OR. vff(k,j-halo,i) > 0.0_realk .OR. &
-                                     vff(k+halo,j,i) > 0.0_realk .OR. vff(k-halo,j,i) > 0.0_realk ) THEN
-                                    u(k,j,i) = 0.016_realk
-                                    v(k,j,i) = 0.016_realk
-                                    w(k,j,i) = 0.0_realk
-                                ENDIF
-                            ENDDO
-                        ENDDO
-                    ENDDO
-                END IF
-            ELSE IF ( test_multiphase == 'StFstP' ) THEN
-                IF ( itstep == 1 ) THEN
-                    u = 0.0_realk
-                    v = 0.0_realk
-                    w = 0.0_realk
-                ENDIF
-            END IF
+                DEALLOCATE(psi)
+            END SELECT
 
+            DEALLOCATE(xPl)
+            DEALLOCATE(yPl)
+            DEALLOCATE(zPl)
         END DO
 
     END SUBROUTINE
@@ -557,6 +556,32 @@ CONTAINS
         ENDDO
 
     END SUBROUTINE validate_velocity
+
+    !================================================================
+
+    SUBROUTINE get_top_right_corner(c, ddn, cmin, nmax)
+    !----------------------------------------------------------------
+    !   What it does:
+    !    
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        REAL(realk), INTENT(out) :: c(:)
+        REAL(realk), INTENT(in)  :: ddn(:), cmin
+        INTEGER, INTENT(in)      :: nmax
+
+        ! Local variables
+        INTEGER :: n
+
+        c(3) = cmin
+        DO n = 4, nmax
+            c(n) = c(n-1) + ddn(n-1)
+        END DO
+
+        DO n = 2, 1, -1
+            c(n) = c(n+1) - ddn(n)
+        END DO
+    END SUBROUTINE
 
     !================================================================
 

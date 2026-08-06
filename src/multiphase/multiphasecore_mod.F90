@@ -29,7 +29,7 @@ MODULE multiphasecore_mod
 
     ! Control parameters
     LOGICAL, PROTECTED :: has_multiphase, solve_multiphase
-    CHARACTER(len=6), PROTECTED :: test_multiphase
+    CHARACTER(len=30), PROTECTED :: test_multiphase
     INTEGER(intk), PROTECTED :: permutation_multiphase
     LOGICAL, PROTECTED :: omitAdve, omitDiff, omitExte
     REAL(realk), PROTECTED :: tol

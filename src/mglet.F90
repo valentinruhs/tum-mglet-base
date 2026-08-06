@@ -6,6 +6,7 @@ PROGRAM main
     USE flow_mod, ONLY: init_flow, finish_flow
     USE multiphase_mod, ONLY: init_multiphase, finish_multiphase
     USE multiphasecore_mod, ONLY: init_multiphasecore, finish_multiphasecore
+    USE multiphase_io_mod, ONLY: init_multiphase_io
     USE ib_mod, ONLY: init_ib, finish_ib, ib
     USE timeloop_mod, ONLY: init_timeloop, finish_timeloop, timeloop
     USE scalar_mod, ONLY: init_scalar, finish_scalar
@@ -35,6 +36,7 @@ PROGRAM main
 
         ! Initialize builtin physical models
         CALL init_flow()
+        CALL init_multiphase_io()
         CALL init_scalar()
 
         ! This initialize the time loop. Reads the RUNINFO table in case of
