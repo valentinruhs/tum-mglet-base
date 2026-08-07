@@ -13,6 +13,9 @@ MODULE noib_restrict_mod
         PROCEDURE :: restrict_v
         PROCEDURE :: restrict_w
         PROCEDURE :: restrict_s
+        PROCEDURE :: restrict_a
+        PROCEDURE :: restrict_b
+        PROCEDURE :: restrict_c
     END TYPE noib_restrict_t
 
     PUBLIC :: noib_restrict_t
@@ -27,6 +30,9 @@ CONTAINS
         CHARACTER(len=1), INTENT(in) :: ctyp
         INTEGER(intk), INTENT(in) :: igrid
 
+        ! restrict_a/_b/_c are for scalar quantities on the staggered
+        ! grid. They could be combined in a single routine using a
+        ! parameter q for the shift and two inner loops.
         SELECT CASE (ctyp)
         CASE ("U")
             CALL this%restrict_u(kk, jj, ii, ff, sendbuf, ctyp, igrid)
@@ -34,8 +40,14 @@ CONTAINS
             CALL this%restrict_v(kk, jj, ii, ff, sendbuf, ctyp, igrid)
         CASE ("W")
             CALL this%restrict_w(kk, jj, ii, ff, sendbuf, ctyp, igrid)
-        CASE ("P", "R", "S", "T")
+        CASE ("P", "R", "S", "T", "D")
             CALL this%restrict_s(kk, jj, ii, ff, sendbuf, ctyp, igrid)
+        CASE ("A")
+            CALL this%restrict_a(kk, jj, ii, ff, sendbuf, ctyp, igrid)
+        CASE ("B")
+            CALL this%restrict_b(kk, jj, ii, ff, sendbuf, ctyp, igrid)
+        CASE ("C")
+            CALL this%restrict_c(kk, jj, ii, ff, sendbuf, ctyp, igrid)
         CASE DEFAULT
             CALL errr(__FILE__, __LINE__)
         END SELECT
@@ -296,4 +308,158 @@ CONTAINS
             END DO
         END DO
     END SUBROUTINE restrict_s
+
+
+    SUBROUTINE restrict_a(this, kk, jj, ii, ff, sendbuf, ctyp, igrid)
+        ! Subroutine arguments
+        CLASS(noib_restrict_t), INTENT(inout) :: this
+        INTEGER(intk), INTENT(IN) :: kk, jj, ii
+        REAL(realk), INTENT(IN) :: ff(kk, jj, ii)
+        REAL(realk), CONTIGUOUS, INTENT(INOUT) :: sendbuf(:)
+        CHARACTER(len=1), INTENT(in) :: ctyp
+        INTEGER(intk), INTENT(in) :: igrid
+
+        ! Local variables
+        INTEGER(intk) :: i, j, k, icount
+        INTEGER(intk) :: istart, istop, jstart, jstop, kstart, kstop
+        REAL(realk) :: sum_pv, sum_v
+        REAL(realk), POINTER, CONTIGUOUS :: dx(:), ddy(:), ddz(:)
+
+        CALL this%start_and_stop(istart, istop, jstart, jstop, &
+            kstart, kstop, ctyp, igrid)
+
+        CALL get_fieldptr(dx, "DX", igrid)
+        CALL get_fieldptr(ddy, "DDY", igrid)
+        CALL get_fieldptr(ddz, "DDZ", igrid)
+
+        icount = 0
+        DO i = istart, istop, 2
+            DO j = jstart, jstop, 2
+                DO k = kstart, kstop, 2
+                    sum_pv = ff(k, j, i)*ddz(k)*ddy(j)*dx(i)/2.0_realk &
+                        + ff(k, j, i+1)*ddz(k)*ddy(j)*dx(i+1) &
+                        + ff(k, j, i+2)*ddz(k)*ddy(j)*dx(i+2)/2.0_realk &
+                        + ff(k, j+1, i)*ddz(k)*ddy(j+1)*dx(i)/2.0_realk &
+                        + ff(k, j+1, i+1)*ddz(k)*ddy(j+1)*dx(i+1) &
+                        + ff(k, j+1, i+2)*ddz(k)*ddy(j+1)*dx(i+2)/2.0_realk &
+                        + ff(k+1, j, i)*ddz(k+1)*ddy(j)*dx(i)/2.0_realk &
+                        + ff(k+1, j, i+1)*ddz(k+1)*ddy(j)*dx(i+1) &
+                        + ff(k+1, j, i+2)*ddz(k+1)*ddy(j)*dx(i+2)/2.0_realk &
+                        + ff(k+1, j+1, i)*ddz(k+1)*ddy(j+1)*dx(i)/2.0_realk &
+                        + ff(k+1, j+1, i+1)*ddz(k+1)*ddy(j+1)*dx(i+1) &
+                        + ff(k+1, j+1, i+2)*ddz(k+1)*ddy(j+1)*dx(i+2)/2.0_realk
+
+                    sum_v = (dx(i)/2.0_realk + dx(i+1) + dx(i+2)/2.0_realk) &
+                        *(ddy(j) + ddy(j+1)) &
+                        *(ddz(k) + ddz(k+1))
+
+                    icount = icount + 1
+                    sendbuf(icount) = sum_pv/sum_v
+                END DO
+            END DO
+        END DO
+    END SUBROUTINE restrict_a
+
+
+    SUBROUTINE restrict_b(this, kk, jj, ii, ff, sendbuf, ctyp, igrid)
+        ! Subroutine arguments
+        CLASS(noib_restrict_t), INTENT(inout) :: this
+        INTEGER(intk), INTENT(IN) :: kk, jj, ii
+        REAL(realk), INTENT(IN) :: ff(kk, jj, ii)
+        REAL(realk), CONTIGUOUS, INTENT(INOUT) :: sendbuf(:)
+        CHARACTER(len=1), INTENT(in) :: ctyp
+        INTEGER(intk), INTENT(in) :: igrid
+
+        ! Local variables
+        INTEGER(intk) :: i, j, k, icount
+        INTEGER(intk) :: istart, istop, jstart, jstop, kstart, kstop
+        REAL(realk) :: sum_pv, sum_v
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), dy(:), ddz(:)
+
+        CALL this%start_and_stop(istart, istop, jstart, jstop, &
+            kstart, kstop, ctyp, igrid)
+
+        CALL get_fieldptr(ddx, "DDX", igrid)
+        CALL get_fieldptr(dy, "DY", igrid)
+        CALL get_fieldptr(ddz, "DDZ", igrid)
+
+        icount = 0
+        DO i = istart, istop, 2
+            DO j = jstart, jstop, 2
+                DO k = kstart, kstop, 2
+                    sum_pv = ff(k, j, i)*ddz(k)*dy(j)/2.0_realk*ddx(i) &
+                        + ff(k, j+1, i)*ddz(k)*dy(j+1)*ddx(i) &
+                        + ff(k, j+2, i)*ddz(k)*dy(j+2)/2.0_realk*ddx(i) &
+                        + ff(k, j, i+1)*ddz(k)*dy(j)/2.0_realk*ddx(i+1) &
+                        + ff(k, j+1, i+1)*ddz(k)*dy(j+1)*ddx(i+1) &
+                        + ff(k, j+2, i+1)*ddz(k)*dy(j+2)/2.0_realk*ddx(i+1) &
+                        + ff(k+1, j, i)*ddz(k+1)*dy(j)/2.0_realk*ddx(i) &
+                        + ff(k+1, j+1, i)*ddz(k+1)*dy(j+1)*ddx(i) &
+                        + ff(k+1, j+2, i)*ddz(k+1)*dy(j+2)/2.0_realk*ddx(i) &
+                        + ff(k+1, j, i+1)*ddz(k+1)*dy(j)/2.0_realk*ddx(i+1) &
+                        + ff(k+1, j+1, i+1)*ddz(k+1)*dy(j+1)*ddx(i+1) &
+                        + ff(k+1, j+2, i+1)*ddz(k+1)*dy(j+2)/2.0_realk*ddx(i+1)
+
+                    sum_v = (ddx(i) + ddx(i+1)) &
+                        *(dy(j)/2.0_realk + dy(j+1) + dy(j+2)/2.0_realk) &
+                        *(ddz(k) + ddz(k+1))
+
+                    icount = icount + 1
+                    sendbuf(icount) = sum_pv/sum_v
+                END DO
+            END DO
+        END DO
+    END SUBROUTINE restrict_b
+
+
+    SUBROUTINE restrict_c(this, kk, jj, ii, ff, sendbuf, ctyp, igrid)
+        ! Subroutine arguments
+        CLASS(noib_restrict_t), INTENT(inout) :: this
+        INTEGER(intk), INTENT(IN) :: kk, jj, ii
+        REAL(realk), INTENT(IN) :: ff(kk, jj, ii)
+        REAL(realk), CONTIGUOUS, INTENT(INOUT) :: sendbuf(:)
+        CHARACTER(len=1), INTENT(in) :: ctyp
+        INTEGER(intk), INTENT(in) :: igrid
+
+        ! Local variables
+        INTEGER(intk) :: i, j, k, icount
+        INTEGER(intk) :: istart, istop, jstart, jstop, kstart, kstop
+        REAL(realk) :: sum_pv, sum_v
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), dz(:)
+
+        CALL this%start_and_stop(istart, istop, jstart, jstop, &
+            kstart, kstop, ctyp, igrid)
+
+        CALL get_fieldptr(ddx, "DDX", igrid)
+        CALL get_fieldptr(ddy, "DDY", igrid)
+        CALL get_fieldptr(dz, "DZ", igrid)
+
+        icount = 0
+        DO i = istart, istop, 2
+            DO j = jstart, jstop, 2
+                DO k = kstart, kstop, 2
+                    sum_pv = ff(k, j, i)*dz(k)/2.0_realk*ddy(j)*ddx(i) &
+                        + ff(k+1, j, i)*dz(k+1)*ddy(j)*ddx(i) &
+                        + ff(k+2, j, i)*dz(k+2)/2.0_realk*ddy(j)*ddx(i) &
+                        + ff(k, j, i+1)*dz(k)/2.0_realk*ddy(j)*ddx(i+1) &
+                        + ff(k+1, j, i+1)*dz(k+1)*ddy(j)*ddx(i+1) &
+                        + ff(k+2, j, i+1)*dz(k+2)/2.0_realk*ddy(j)*ddx(i+1) &
+                        + ff(k, j+1, i)*dz(k)/2.0_realk*ddy(j+1)*ddx(i) &
+                        + ff(k+1, j+1, i)*dz(k+1)*ddy(j+1)*ddx(i) &
+                        + ff(k+2, j+1, i)*dz(k+2)/2.0_realk*ddy(j+1)*ddx(i) &
+                        + ff(k, j+1, i+1)*dz(k)/2.0_realk*ddy(j+1)*ddx(i+1) &
+                        + ff(k+1, j+1, i+1)*dz(k+1)*ddy(j+1)*ddx(i+1) &
+                        + ff(k+2, j+1, i+1)*dz(k+2)/2.0_realk*ddy(j+1)*ddx(i+1)
+
+                    sum_v = (ddx(i) + ddx(i+1)) &
+                        *(ddy(j) + ddy(j+1)) &
+                        *(dz(k)/2.0_realk + dz(k+1) + dz(k+2)/2.0_realk)
+
+                    icount = icount + 1
+                    sendbuf(icount) = sum_pv/sum_v
+                END DO
+            END DO
+        END DO
+    END SUBROUTINE restrict_c
+
 END MODULE noib_restrict_mod

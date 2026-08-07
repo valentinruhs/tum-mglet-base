@@ -25,6 +25,7 @@ MODULE multiphase_vof_transport_mod
     USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
     USE parent_mod, ONLY: parent
+    USE ftoc_mod, ONLY: ftoc
     USE grids_mod, ONLY: minlevel, maxlevel
     USE err_mod, ONLY: errr, err_abort
     USE multiphase_utils_mod, ONLY: get_spatial_indices, get_spatial_extents, get_condit_velocity, clip_vff, check_continuity, check_solenoidality, comp_vol_phase1, sanity_check
@@ -106,6 +107,10 @@ CONTAINS
                             fluxWidth = abs( vel(k,j,i) ) * dt
                             fluxAlpha = alpha(k,j,i) - norms * ( dds - fluxWidth )
 
+                            IF ( fluxWidth > 0.5_realk*dds  ) THEN
+                                CALL err_abort(155, "fluxWidth > 0.5*cellWidth! Hint: reduce dt", __FILE__, __LINE__)
+                            ENDIF
+
                             ! Compute dimensions of fluxed cuboid
                             dimx = il*fluxWidth + (1-il)*ddx(i)
                             dimy = jl*fluxWidth + (1-jl)*ddy(j)
@@ -131,6 +136,10 @@ CONTAINS
                             ! Compute face fluxwidth and proper alpha
                             fluxWidth = abs( vel(k,j,i) ) * dt
                             fluxAlpha = alpha(k+kl,j+jl,i+il)
+
+                            IF ( fluxWidth > 0.5_realk*dds  ) THEN
+                                CALL err_abort(155, "fluxWidth > 0.5*cellWidth! Hint: reduce dt", __FILE__, __LINE__)
+                            ENDIF
 
                             ! Compute dimensions of fluxed cuboid
                             dimx = il*fluxWidth + (1-il)*ddx(i+il)
@@ -648,8 +657,8 @@ CONTAINS
             END DO
 
             ! Deallocate sweep-temporary fields
-            IF ( ALLOCATED(isIface) ) DEALLOCATE(isIface)
-            IF ( ALLOCATED(dStag) ) DEALLOCATE(dStag)
+            DEALLOCATE(isIface)
+            DEALLOCATE(dStag)
         ENDDO
 
         ! Fill buffers of initial vffStag
@@ -715,13 +724,20 @@ CONTAINS
                     dx, dy, dz, ddx, ddy, ddz, dt, volFluxPhase1, volCompPhase1)
 
                 ! Deallocate sweep-temporary fields
-                IF ( ALLOCATED(vffFlux1) ) DEALLOCATE(vffFlux1)
-                IF ( ALLOCATED(vel) ) DEALLOCATE(vel)
-                IF ( ALLOCATED(isIface) ) DEALLOCATE(isIface)
-                IF ( ALLOCATED(vffFlux2Stag) ) DEALLOCATE(vffFlux2Stag)
-                IF ( ALLOCATED(vffFlux1Stag) ) DEALLOCATE(vffFlux1Stag)
-                IF ( ALLOCATED(adve) ) DEALLOCATE(adve)
-                IF ( ALLOCATED(advr) ) DEALLOCATE(advr)
+                DEALLOCATE(vffFlux1)
+                DEALLOCATE(vel)
+                DEALLOCATE(isIface)
+                DEALLOCATE(vffFlux2Stag)
+                DEALLOCATE(vffFlux1Stag)
+                DEALLOCATE(adve)
+                DEALLOCATE(advr)
+            ENDDO
+
+            DO ilevel = maxlevel, minlevel, -1
+                CALL ftoc(ilevel, vffStag(1)%arr, vffStag(1)%arr, 'A')
+                CALL ftoc(ilevel, vffStag(2)%arr, vffStag(2)%arr, 'B')
+                CALL ftoc(ilevel, vffStag(3)%arr, vffStag(3)%arr, 'C')
+                CALL ftoc(ilevel, vff_f%arr, vff_f%arr, 'D')
             ENDDO
 
             ! Fill buffers of vff and vffStag after l sweep
