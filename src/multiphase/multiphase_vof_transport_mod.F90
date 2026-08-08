@@ -586,9 +586,21 @@ CONTAINS
         END DO
         CALL cWy%init("CWY")
 
-        ! Fill buffers of initial vff
+        ! Fine to coarse within the domain (ftoc)
+        DO ilevel = maxlevel, minlevel, -1
+            CALL ftoc(ilevel, vffStag(1)%arr, vffStag(1)%arr, 'A')
+            CALL ftoc(ilevel, vffStag(2)%arr, vffStag(2)%arr, 'B')
+            CALL ftoc(ilevel, vffStag(3)%arr, vffStag(3)%arr, 'C')
+            CALL ftoc(ilevel, vff_f%arr, vff_f%arr, 'D')
+        ENDDO
+
+        ! Coarse to fine in the buffer (parent)
+        ! Fill buffers of vff and vffStag with initial values (connect)
         DO ilevel = minlevel, maxlevel
+            CALL parent(ilevel, s1=vff_f)
+            CALL parent(ilevel, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3))
             CALL connect(ilevel, 2, s1=vff_f, corners=.TRUE.)
+            CALL connect(ilevel, 2, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3), corners=.TRUE.)
         END DO
 
         DO n = 1, nmygrids
@@ -612,7 +624,8 @@ CONTAINS
             CALL alpha_f%get_ptr(alpha, igrid)
 
             ! Interface reconstruction and Weymouth-Yue-Coefficient on all grids
-            CALL iface_reconstruction(kk, jj, ii, vff, dx, dy, dz, ddx, ddy, ddz, normx, normy, normz, alpha)
+            CALL iface_reconstruction(kk, jj, ii, vff, dx, dy, dz, &
+                ddx, ddy, ddz, normx, normy, normz, alpha)
             CALL comp_cWy(kk, jj, ii, vff, cWy%arr(ip3))
 
             ! Compute Volume of Phase 1 at rk-step r
@@ -661,10 +674,22 @@ CONTAINS
             DEALLOCATE(dStag)
         ENDDO
 
-        ! Fill buffers of initial vffStag
-        DO ilevel = minlevel, maxlevel
-            CALL connect(ilevel, 2, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3), corners=.TRUE.)
+        ! Fine to coarse within the domain (ftoc)
+        DO ilevel = maxlevel, minlevel, -1
+            CALL ftoc(ilevel, vffStag(1)%arr, vffStag(1)%arr, 'A')
+            CALL ftoc(ilevel, vffStag(2)%arr, vffStag(2)%arr, 'B')
+            CALL ftoc(ilevel, vffStag(3)%arr, vffStag(3)%arr, 'C')
+            CALL ftoc(ilevel, vff_f%arr, vff_f%arr, 'D')
         ENDDO
+
+        ! Coarse to fine in the buffer (parent)
+        ! Fill buffers of vff and vffStag with initial values (connect)
+        DO ilevel = minlevel, maxlevel
+            CALL parent(ilevel, s1=vff_f)
+            CALL parent(ilevel, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3))
+            CALL connect(ilevel, 2, s1=vff_f, corners=.TRUE.)
+            CALL connect(ilevel, 2, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3), corners=.TRUE.)
+        END DO
 
         CALL def_advection_sequence(itstep, advSeq)
 
@@ -733,6 +758,7 @@ CONTAINS
                 DEALLOCATE(advr)
             ENDDO
 
+            ! Fine to coarse within the domain (ftoc)
             DO ilevel = maxlevel, minlevel, -1
                 CALL ftoc(ilevel, vffStag(1)%arr, vffStag(1)%arr, 'A')
                 CALL ftoc(ilevel, vffStag(2)%arr, vffStag(2)%arr, 'B')
@@ -740,8 +766,11 @@ CONTAINS
                 CALL ftoc(ilevel, vff_f%arr, vff_f%arr, 'D')
             ENDDO
 
-            ! Fill buffers of vff and vffStag after l sweep
+            ! Coarse to fine in the buffer (parent)
+            ! Fill buffers of vff and vffStag after l sweep (connect)
             DO ilevel = minlevel, maxlevel
+                CALL parent(ilevel, s1=vff_f)
+                CALL parent(ilevel, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3))
                 CALL connect(ilevel, 2, s1=vff_f, corners=.TRUE.)
                 CALL connect(ilevel, 2, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3), corners=.TRUE.)
             END DO
