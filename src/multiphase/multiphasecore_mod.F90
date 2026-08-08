@@ -62,11 +62,13 @@ CONTAINS
         INTEGER(intk), PARAMETER :: unitsvff(7) = [0, 0, 0, 0, 0, 0, 0]
         INTEGER(intk), PARAMETER :: unitsnorm(7) = [0, 0, 0, 0, 0, 0, 0]
         INTEGER(intk), PARAMETER :: unitsalpha(7) = [0, 1, 0, 0, 0, 0, 0]
+        INTEGER(intk), PARAMETER :: unitsgrdmask(7) = [0, 1, 0, 0, 0, 0, 0]
         CHARACTER(len=*), PARAMETER :: descriptionvp = "Prev. Velocity"
         CHARACTER(len=*), PARAMETER :: descriptionvff = "Volume Fraction Field"
         CHARACTER(len=*), PARAMETER :: descriptionvffp = "Prev. Volume Fraction Field"
         CHARACTER(len=*), PARAMETER :: descriptionnorm = "Norm"
         CHARACTER(len=*), PARAMETER :: descriptionalpha = "Alpha"
+        CHARACTER(len=*), PARAMETER :: descriptiongrdmask = "Uncovered Cells"
 
         ! Decide wether multiphase is used or not
         has_multiphase = .FALSE.
@@ -134,6 +136,8 @@ CONTAINS
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("ALPHA", description=descriptionalpha , units=unitsalpha, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
+        CALL set_field("GRDMASK", description=descriptiongrdmask , units=unitsgrdmask, &
+            dread=.FALSE., required=dread, dwrite=.FALSE., buffers=.TRUE.)
 
     END SUBROUTINE init_multiphasecore
 

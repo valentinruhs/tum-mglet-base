@@ -300,17 +300,21 @@ CONTAINS
         ! Local variables
         TYPE(field_t), POINTER :: vff_f
         TYPE(field_t), POINTER :: ddx_f, ddy_f, ddz_f
-        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        TYPE(field_t), POINTER :: grdMask_f
         REAL(realk), POINTER, CONTIGUOUS :: vff(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: grdMask(:,:,:)
         INTEGER(intk) :: kk, jj, ii, k, j, i, n, igrid
-        REAL(realk) :: currVol
+        REAL(realk) :: currVol, domaVol
 
         currVol = 0.0_realk
+        domaVol = 0.0_realk
 
         CALL get_field(vff_f, "VFF")
         CALL get_field(ddx_f, "DDX")
         CALL get_field(ddy_f, "DDY")
         CALL get_field(ddz_f, "DDZ")
+        CALL get_field(grdMask_f, "GRDMASK")
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -320,17 +324,20 @@ CONTAINS
             CALL ddx_f%get_ptr(ddx, igrid)
             CALL ddy_f%get_ptr(ddy, igrid)
             CALL ddz_f%get_ptr(ddz, igrid)
+            CALL grdMask_f%get_ptr(grdMask, igrid)
 
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        currVol = currVol + vff(k,j,i) * ddx(i) * ddy(j) * ddz(k)
+                        domaVol = domaVol + grdMask(k,j,i) * ddx(i) * ddy(j) * ddz(k)
+                        currVol = currVol + grdMask(k,j,i) * vff(k,j,i) * ddx(i) * ddy(j) * ddz(k)
                     ENDDO
                 ENDDO
             ENDDO
         ENDDO
 
         CALL MPI_Allreduce(MPI_IN_PLACE, currVol, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
+        CALL MPI_Allreduce(MPI_IN_PLACE, domaVol, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
 
         currErr = trueVol - currVol
         relaErr = ( currVol - initVol ) / initVol

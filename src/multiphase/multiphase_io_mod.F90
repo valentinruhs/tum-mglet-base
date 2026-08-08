@@ -47,6 +47,7 @@ CONTAINS
         ! Local variables
         TYPE(field_t), POINTER :: u_f, v_f, w_f, vff_f
         TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
+        TYPE(field_t), POINTER :: grdMask_f
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
         INTEGER(intk) :: i, j, k, di, dj, dk, r, ilevel, halo
@@ -54,6 +55,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:), vff(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: grdMask(:,:,:)
         REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
         REAL(realk), ALLOCATABLE :: xPl(:), yPl(:), zPl(:), psi(:,:,:)
         REAL(realk) :: centx, centy, centz, rad, x, y, z, inside, a, b, e, maxTrans, theta
@@ -63,6 +65,7 @@ CONTAINS
         CALL get_field(u_f, "U"); CALL get_field(v_f, "V"); CALL get_field(w_f, "W"); CALL get_field(vff_f, "VFF")
         CALL get_field(dx_f, "DX"); CALL get_field(dy_f, "DY"); CALL get_field(dz_f, "DZ")
         CALL get_field(ddx_f, "DDX"); CALL get_field(ddy_f, "DDY"); CALL get_field(ddz_f, "DDZ")
+        CALL get_field(grdMask_f, "GRDMASK")
 
         WRITE(*,'(A,I0,A)') "Initializing volume fraction field in ", nmygrids, " grids ..."
         WRITE(*,*) ""
@@ -76,6 +79,7 @@ CONTAINS
             CALL u_f%get_ptr(u, igrid); CALL v_f%get_ptr(v, igrid); cALL w_f%get_ptr(w, igrid); CALL vff_f%get_ptr(vff, igrid)
             CALL dx_f%get_ptr(dx, igrid); CALL dy_f%get_ptr(dy, igrid); CALL dz_f%get_ptr(dz, igrid)
             CALL ddx_f%get_ptr(ddx, igrid); CALL ddy_f%get_ptr(ddy, igrid); CALL ddz_f%get_ptr(ddz, igrid)
+            CALL grdMask_f%get_ptr(grdMask, igrid)
 
             ALLOCATE(xPl(ii))
             ALLOCATE(yPl(jj))
@@ -283,7 +287,7 @@ CONTAINS
             DO k = 3, kk-2
                 DO j = 3, jj-2
                     DO i = 3, ii-2
-                        vol = ddx(i) * ddy(j) * ddz(k)
+                        vol = grdMask(k,j,i) * ddx(i) * ddy(j) * ddz(k)
                         initVol = initVol + vff(k,j,i) * vol
                     ENDDO
                 ENDDO

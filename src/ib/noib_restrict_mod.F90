@@ -91,7 +91,7 @@ CONTAINS
             jend = 3
             kstart = 2
             kend = 2
-        CASE ("E", "F", "P", "R", "S", 'I', 'T')
+        CASE ("E", "F", "P", "R", "S", 'I', 'T', 'A', 'B', 'C', 'D')
             istart = 3
             iend = 3
             jstart = 3

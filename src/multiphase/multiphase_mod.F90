@@ -23,9 +23,10 @@ MODULE multiphase_mod
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2
     USE multiphase_utils_mod, ONLY: init_multiphase_utils, finish_multiphase_utils
     USE precision_mod, ONLY: intk, realk
-    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_mgbasb
+    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_mgbasb, idprocofgrd, iposition, jposition, kposition, iparent, ngrid
     USE fields_mod, ONLY: get_field, set_field, get_fieldptr
     USE field_mod, ONLY: field_t
+    USE comms_mod, ONLY: myid
     
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -40,7 +41,9 @@ CONTAINS
         ! None
 
         ! Local variables
-        ! None
+        INTEGER(intk) :: n, igrid, igridf, ipar
+        INTEGER(intk) :: kk, jj, ii, kc0, jc0, ic0
+        REAL(realk), POINTER, CONTIGUOUS :: grdMask(:,:,:)
 
         CALL init_multiphasecore()
         CALL init_multiphase_utils()
@@ -50,6 +53,28 @@ CONTAINS
         IF(.NOT. has_multiphase) RETURN
         IF(.NOT. solve_multiphase) RETURN
 
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+            CALL get_fieldptr(grdMask, "GRDMASK", igrid)
+            grdMask = 1.0_realk
+        END DO
+
+        DO igridf = 1, ngrid
+            ipar = iparent(igridf)
+            IF (ipar == 0) CYCLE
+            IF (idprocofgrd(ipar) /= myid) CYCLE
+
+            CALL get_fieldptr(grdMask, "GRDMASK", ipar)
+            CALL get_mgdims(kk, jj, ii, igridf)
+
+            ic0 = iposition(igridf)
+            jc0 = jposition(igridf)
+            kc0 = kposition(igridf)
+
+            grdMask(kc0:kc0+(kk-4)/2-1, &
+                    jc0:jc0+(jj-4)/2-1, &
+                    ic0:ic0+(ii-4)/2-1) = 0.0_realk
+        END DO
 
     END SUBROUTINE init_multiphase
 
@@ -89,7 +114,7 @@ CONTAINS
         TYPE(field_t), POINTER :: vff_f
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kk, jj, ii
-        INTEGER(intk) :: igr, igrid
+        INTEGER(intk) :: n, igrid
 
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
@@ -102,8 +127,8 @@ CONTAINS
 
         CALL get_field(vff_f, "VFF")
 
-        DO igr = 1, nmygrids
-            igrid = mygrids(igr)
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
 
             CALL get_mgdims(kk, jj, ii, igrid)
 
