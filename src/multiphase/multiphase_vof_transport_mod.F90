@@ -455,9 +455,6 @@ CONTAINS
             igrid = mygrids(i)
             CALL get_mgdims(kk, jj, ii, igrid)
 
-            CALL u_f%get_ptr(u, igrid)
-            CALL v_f%get_ptr(v, igrid)
-            CALL w_f%get_ptr(w, igrid)
             CALL vff_f%get_ptr(vff, igrid)
             CALL p_f%get_ptr(p, igrid)
             CALL uo_f%get_ptr(uo, igrid)
@@ -837,10 +834,6 @@ CONTAINS
                 CALL update_velocity(kk, jj, ii, q, vffStag(q)%arr(ip3), u, v, w, mom(q)%arr(ip3), dt)
             END DO
         ENDDO
-
-        DO ilevel = minlevel, maxlevel
-            CALL connect(ilevel, 2, v1=u_f, v2=v_f, v3=w_f, corners=.TRUE.)
-        END DO
 
         ! Finish sweep persistant fields
         CALL cWy%finish()
