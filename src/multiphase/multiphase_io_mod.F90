@@ -58,7 +58,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: grdMask(:,:,:)
         REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
         REAL(realk), ALLOCATABLE :: xPl(:), yPl(:), zPl(:), psi(:,:,:)
-        REAL(realk) :: centx, centy, centz, rad, x, y, z, inside, a, b, e, maxTrans, theta
+        REAL(realk) :: centx, centy, centz, rad, H, x, y, z, inside, a, b, e, maxTrans, theta
         REAL(realk) :: randx(10), randy(10), randt(10)
         REAL(realk) :: vol
 
@@ -231,6 +231,35 @@ CONTAINS
                                 u(k,j,i) = 0.016_realk
                                 v(k,j,i) = 0.016_realk
                                 w(k,j,i) = 0.0_realk
+                            ENDIF
+                        ENDDO
+                    ENDDO
+                ENDDO
+                !----------------------------------------------------
+            CASE ( 'Open Channel Flow' )
+                !----------------------------------------------------
+                H = 1.0_realk
+                trueVol = (maxx - minx) * (maxy - miny)/2.0_realk * (maxz - minz)
+                jSub = 2
+                DO j = 3, jj-2
+                    inside = 0.0_realk
+                    DO dj = 0, jSub-1
+                        y = yPl(j) + (dj + 0.5_realk)/jSub*ddy(j)
+                        IF ( y <= H) THEN
+                            inside = inside + 1.0_realk
+                        ENDIF
+                    ENDDO
+                    vff(3:kk-2,j,3:ii-2) = inside / (iSub*jSub)
+                ENDDO
+
+                u = 0.05_realk
+                v = 0.0_realk
+                w = 0.0_realk
+                DO i = 3, ii-2
+                    DO j = 3, jj-2
+                        DO k = 3, kk-2
+                            IF ( vff(k,j,i) > 0.0_realk ) THEN
+                                u(k,j,i) = 1.0_realk
                             ENDIF
                         ENDDO
                     ENDDO

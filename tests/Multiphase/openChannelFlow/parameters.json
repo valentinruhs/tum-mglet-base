@@ -1,7 +1,7 @@
 {
     "time": {
         "dt": 0.1,
-        "mtstep": 300,
+        "mtstep": 100,
 	"itinfo": 10,
         "tstat": 10.0,
 	"read": false
@@ -32,7 +32,7 @@
     
     "multiphase": {
     	"solve": true,
-	"test": "Cylinder Advection",
+	"test": "Open Channel Flow",
 	"permutation" : 3,
 	"omitAdve" : false,
 	"omitDiff" : false,
@@ -44,9 +44,9 @@
        	"checkSolenoidality" : true,
 	"checkBalance" : false,	
 	"rho1" : 1000.0,
-	"rho2" : 1.0,
-	"gmol1" : 0.0001,
-	"gmol2" : 0.0001,
+	"rho2" : 50.0,
+	"gmol1" : 0.001,
+	"gmol2" : 0.00005,
 	"gravity" : [0.0, 0.0, 0.0]
     }   
 }

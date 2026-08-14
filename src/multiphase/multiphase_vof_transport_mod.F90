@@ -578,6 +578,7 @@ CONTAINS
             CALL vffStag(q)%init("VFFSTAG"//component(q))
             CALL vffStag(q)%init_buffers()
             CALL mom(q)%init("MOM"//component(q))
+            CALL mom(q)%init_buffers()
             CALL cWyStag(q)%init("CWYSTAG"//component(q))
         END DO
         CALL cWy%init("CWY")
@@ -588,6 +589,9 @@ CONTAINS
             CALL ftoc(ilevel, vffStag(2)%arr, vffStag(2)%arr, 'B')
             CALL ftoc(ilevel, vffStag(3)%arr, vffStag(3)%arr, 'C')
             CALL ftoc(ilevel, vff_f%arr, vff_f%arr, 'D')
+            CALL ftoc(ilevel, mom(1)%arr, mom(1)%arr, 'A')
+            CALL ftoc(ilevel, mom(2)%arr, mom(2)%arr, 'B')
+            CALL ftoc(ilevel, mom(3)%arr, mom(3)%arr, 'C')
         ENDDO
 
         ! Coarse to fine in the buffer (parent)
@@ -595,8 +599,10 @@ CONTAINS
         DO ilevel = minlevel, maxlevel
             CALL parent(ilevel, s1=vff_f)
             CALL parent(ilevel, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3))
+            CALL parent(ilevel, v1=mom(1), v2=mom(2), v3=mom(3))
             CALL connect(ilevel, 2, s1=vff_f, corners=.TRUE.)
             CALL connect(ilevel, 2, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3), corners=.TRUE.)
+            CALL connect(ilevel, 2, v1=mom(1), v2=mom(2), v3=mom(3), corners=.TRUE.)
         END DO
 
         DO n = 1, nmygrids
@@ -676,6 +682,9 @@ CONTAINS
             CALL ftoc(ilevel, vffStag(2)%arr, vffStag(2)%arr, 'B')
             CALL ftoc(ilevel, vffStag(3)%arr, vffStag(3)%arr, 'C')
             CALL ftoc(ilevel, vff_f%arr, vff_f%arr, 'D')
+            CALL ftoc(ilevel, mom(1)%arr, mom(1)%arr, 'A')
+            CALL ftoc(ilevel, mom(2)%arr, mom(2)%arr, 'B')
+            CALL ftoc(ilevel, mom(3)%arr, mom(3)%arr, 'C')
         ENDDO
 
         ! Coarse to fine in the buffer (parent)
@@ -683,8 +692,10 @@ CONTAINS
         DO ilevel = minlevel, maxlevel
             CALL parent(ilevel, s1=vff_f)
             CALL parent(ilevel, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3))
+            CALL parent(ilevel, v1=mom(1), v2=mom(2), v3=mom(3))
             CALL connect(ilevel, 2, s1=vff_f, corners=.TRUE.)
             CALL connect(ilevel, 2, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3), corners=.TRUE.)
+            CALL connect(ilevel, 2, v1=mom(1), v2=mom(2), v3=mom(3), corners=.TRUE.)
         END DO
 
         CALL def_advection_sequence(itstep, advSeq)
@@ -760,6 +771,9 @@ CONTAINS
                 CALL ftoc(ilevel, vffStag(2)%arr, vffStag(2)%arr, 'B')
                 CALL ftoc(ilevel, vffStag(3)%arr, vffStag(3)%arr, 'C')
                 CALL ftoc(ilevel, vff_f%arr, vff_f%arr, 'D')
+                CALL ftoc(ilevel, mom(1)%arr, mom(1)%arr, 'A')
+                CALL ftoc(ilevel, mom(2)%arr, mom(2)%arr, 'B')
+                CALL ftoc(ilevel, mom(3)%arr, mom(3)%arr, 'C')
             ENDDO
 
             ! Coarse to fine in the buffer (parent)
@@ -767,8 +781,10 @@ CONTAINS
             DO ilevel = minlevel, maxlevel
                 CALL parent(ilevel, s1=vff_f)
                 CALL parent(ilevel, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3))
+                CALL parent(ilevel, v1=mom(1), v2=mom(2), v3=mom(3))
                 CALL connect(ilevel, 2, s1=vff_f, corners=.TRUE.)
                 CALL connect(ilevel, 2, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3), corners=.TRUE.)
+                CALL connect(ilevel, 2, v1=mom(1), v2=mom(2), v3=mom(3), corners=.TRUE.)
             END DO
 
             DO n = 1, nmygrids

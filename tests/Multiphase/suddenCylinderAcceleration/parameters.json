@@ -1,9 +1,8 @@
 {
     "time": {
-        "dt": 0.1,
-        "mtstep": 300,
-	"itinfo": 100,
-        "tstat": 10.0,
+        "dt": 0.05,
+        "mtstep": 600,
+	"itinfo": 10,
 	"read": false
     },
     "io": {
@@ -20,7 +19,7 @@
         "uinf": [0.0, 0.0, 0.0],
         "pressuresolver": {
             "type": "sip",
-            "epcorr": 0.0000000000001,
+            "epcorr": 1.0E-13,
             "nouter": 90,
             "ninner": 100,
 	    "loglevel": 3
@@ -32,18 +31,18 @@
     
     "multiphase": {
     	"solve": true,
-	"test": "SCylAc",
-	"permutation" : 3,
+	"test": "Sudden Cylinder Acceleration",
+	"permutation" : 6,
 	"omitAdve" : false,
         "omitDiff" : true,
 	"omitExte" : true,       
-	"tolerance": 0.00000000000001,
+	"tolerance": 1.0E-14,
 	"fluxLimiter" : "QUICK",
-	"fluxCentered" : true,
+	"fluxCentered" : false,
 	"checkContinuity": true,
 	"checkSolenoidality": true,
 	"checkBalance": false,
-	"rho1" : 1000.0,
+	"rho1" : 1.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.0001,
 	"gmol2" : 0.0001,

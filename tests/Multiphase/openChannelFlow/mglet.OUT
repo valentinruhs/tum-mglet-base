@@ -1,0 +1,88 @@
+
+M G L E T - Multi Grid Large Eddy Turbulence
+
+MPI INFORMATION:
+    Processes:     1
+    Serial IO:     F
+    MPI version:   Open MPI v4.1.6, package: Debian OpenMPI, ident: 4.1.6, repo rev: v4.1.6, Sep 30, 2023 
+
+IEEE aritmetic flags:
+    Underflow:     gradual
+    FPE traps:     divide_by_zero invalid overflow
+
+BUILD INFORMATION:
+    Date:          Jul 30 2026
+    Time:          09:36:25
+    Compiler:      GCC version 13.3.0
+    Options:       -cpp -I /usr/lib/x86_64-linux-gnu/fortran/gfortran-mod-15/openmpi -I /usr/lib/x86_64-linux-gnu/openmpi/lib -I /usr/local/hdf5/include -I /usr/include -imultiarch x86_64-linux-gnu -D _MGLET_DOUBLE_PRECISION_=1 -D _MGLET_IFK64_=1 -D NDEBUG -mtune=generic -march=x86-64 -g -O3 -O3 -Wall -Wextra -Wpedantic -Werror -Wno-maybe-uninitialized -Wno-unused-dummy-argument -Wno-uninitialized -std=f2018 -fPIC -fimplicit-none -ffpe-trap=invalid,zero,overflow -fopenmp-simd -ffree-line-length-none -finit-real=zero -J ../../modules -fpre-include=/usr/include/finclude/x86_64-linux-gnu/math-vector-fortran.h
+    OpenMP:        disabled
+
+COMPILED PRECISION:
+    REAL:          8 bytes
+    INTEGER:       4 bytes
+    INTEGER(ifk):  8 bytes
+
+JOB INFORMATION:
+    Date:          2026-08-10
+    Time:          16:44:02
+
+HDF5 collective IO: T
+
+GRIDS PER LEVEL AND PROCESS:
+================================================
+ Level:           1      2      3      4    Sum
+------------------------------------------------
+ Rank     0:      1      8     32    128    169
+------------------------------------------------
+ Sum:             1      8     32    128    169
+================================================
+
+ARRAY DIMENSIONS:
+    idim3d:        405600
+    idim2d:        67600
+    idim1d:        3380
+
+Read gridspacing arrays in  0.004 seconds
+
+CONNECT STATISTICS:
+    Faces:             844    with geometry:     844
+    Lines:            2028    with geometry:    2028
+    Corners:          1352    with geometry:    1352
+
+Using 'noib' immersed boundary method
+
+Initializing volume fraction field in 169 grids ...
+ 
+Initial volume error is   2.4999991859388190E-01
+ (trueVol - initVol)
+ 
+NO SCALAR
+
+ITSTEP, WTIME, DELTA:        0           0.000           0.000
+ITTOT, TIME, DT:             0      0.00000000      1.0000E-01
+LEVEL:  1 IPC=   0 DIVMAX=   9.5000E-01 CFLMAX=   0.10000
+LEVEL:  2 IPC=   0 DIVMAX=   1.9000E+00 CFLMAX=   0.20000
+LEVEL:  3 IPC=   0 DIVMAX=   0.0000E+00 CFLMAX=   0.02000
+LEVEL:  4 IPC=   0 DIVMAX=   0.0000E+00 CFLMAX=   0.04000
+
+Solenoidality violated! max|div| =   1.900000E+00  max|div|*dt =   6.333333E-02
+Continuity violated! Relative volume error of  -3.322917E-02
+Solenoidality violated! max|div| =   5.310435E-02  max|div|*dt =   2.212681E-03
+Continuity violated! Relative volume error of   1.023588E+06
+Solenoidality violated! max|div| =   5.690333E-02  max|div|*dt =   1.422583E-03
+Continuity violated! Relative volume error of   1.332170E+06
+Solenoidality violated! max|div| =   9.810976E-03  max|div|*dt =   3.270325E-04
+Continuity violated! Relative volume error of   1.739035E+06
+Solenoidality violated! max|div| =   1.258248E-02  max|div|*dt =   5.242699E-04
+Continuity violated! Relative volume error of   1.739035E+06
+Solenoidality violated! max|div| =   6.564417E-03  max|div|*dt =   1.641104E-04
+Continuity violated! Relative volume error of   1.739035E+06
+Solenoidality violated! max|div| =   1.549003E-02  max|div|*dt =   5.163343E-04
+Continuity violated! Relative volume error of   1.739072E+06
+Solenoidality violated! max|div| =   1.253886E-02  max|div|*dt =   5.224524E-04
+Continuity violated! Relative volume error of   1.739072E+06
+Solenoidality violated! max|div| =   4.642521E-03  max|div|*dt =   1.160630E-04
+Continuity violated! Relative volume error of   1.739072E+06
+Solenoidality violated! max|div| =   6.784906E-03  max|div|*dt =   2.261635E-04
+Continuity violated! Relative volume error of   1.739072E+06
+Solenoidality violated! max|div| =   3.989472E-03  max|div|*dt =   1.662280E-04
