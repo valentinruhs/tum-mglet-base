@@ -71,6 +71,7 @@ CONTAINS
         CHARACTER(len=*), PARAMETER :: descriptiongrdmask = "Uncovered Cells"
 
         ! Decide wether multiphase is used or not
+        solve_multiphase = .FALSE.
         has_multiphase = .FALSE.
         IF (.NOT. fort7%exists("/multiphase")) THEN
             IF (myid == 0) THEN
@@ -127,7 +128,7 @@ CONTAINS
         CALL set_field("VFF", description=descriptionvff , units=unitsvff, &
             dread=dread, required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("VFFP", description=descriptionvffp , units=unitsvff, &
-            dread=dread, required=dread, dwrite=.FALSE., buffers=.TRUE.)
+            dread=dread, required=.FALSE., dwrite=.FALSE., buffers=.TRUE.)
         CALL set_field("NORMX", description=descriptionnorm , units=unitsnorm, &
             dread=.FALSE., required=dread, dwrite=dwrite, buffers=.TRUE.)
         CALL set_field("NORMY", description=descriptionnorm , units=unitsnorm, &

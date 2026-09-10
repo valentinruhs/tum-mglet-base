@@ -92,24 +92,26 @@ CONTAINS
         REAL(realk) :: dimx, dimy, dimz
         REAL(realk) :: fluxedProp, fluxWidth, fluxAlpha
 
-        CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
+        CALL get_spatial_indices(l, il, jl, kl)
 
         DO i = 2, ii-2
             DO j = 2, jj-2
                 DO k = 2, kk-2
                     IF ( vel(k,j,i) > tol ) THEN
+
+                        ! Compute face flux width and characteristic length
+                        fluxWidth = abs( vel(k,j,i) ) * dt
+                        dds = il * ddx(i) + jl * ddy(j) + kl * ddz(k)
+                        IF ( fluxWidth > 0.5_realk*dds  ) THEN
+                            CALL err_abort(155, "fluxWidth > 0.5*cellWidth! Hint: reduce dt", __FILE__, __LINE__)
+                        ENDIF
+
                         IF ( isIface(k,j,i) ) THEN
-                            ! Compute characteristic length and norm
-                            dds = il * ddx(i) + jl * ddy(j) + kl * ddz(k)
+                            ! Compute norm
                             norms = il * normx(k,j,i) + jl * normy(k,j,i) + kl * normz(k,j,i)
 
-                            ! Compute face fluxwidth and proper alpha
-                            fluxWidth = abs( vel(k,j,i) ) * dt
+                            ! Compute proper alpha
                             fluxAlpha = alpha(k,j,i) - norms * ( dds - fluxWidth )
-
-                            IF ( fluxWidth > 0.5_realk*dds  ) THEN
-                                CALL err_abort(155, "fluxWidth > 0.5*cellWidth! Hint: reduce dt", __FILE__, __LINE__)
-                            ENDIF
 
                             ! Compute dimensions of fluxed cuboid
                             dimx = il*fluxWidth + (1-il)*ddx(i)
@@ -117,29 +119,23 @@ CONTAINS
                             dimz = kl*fluxWidth + (1-kl)*ddz(k)
 
                             ! Compute vff in fluxed cuboid
-                            CALL comp_frac(fluxedProp, fluxAlpha, vff(k,j,i), &
-                                dimx, dimy, dimz, &
+                            CALL comp_frac(fluxedProp, fluxAlpha, dimx, dimy, dimz, &
                                 normx(k,j,i), normy(k,j,i), normz(k,j,i))
                         ELSE
-                            ! Compute characteristic length
-                            dds = il * ddx(i) + jl * ddy(j) + kl * ddz(k)
-
-                            ! Compute face fluxwidth
-                            fluxWidth = abs( vel(k,j,i) ) * dt
                             fluxedProp = vff(k,j,i)
                         END IF
                     ELSE IF ( vel(k,j,i) < -tol ) THEN
+
+                        ! Compute face flux width and characteristic length
+                        fluxWidth = abs( vel(k,j,i) ) * dt
+                        dds = il * ddx(i+il) + jl * ddy(j+jl) + kl * ddz(k+kl)
+                        IF ( fluxWidth > 0.5_realk*dds  ) THEN
+                            CALL err_abort(155, "fluxWidth > 0.5*cellWidth! Hint: reduce dt", __FILE__, __LINE__)
+                        ENDIF
+
                         IF ( isIface(k+kl,j+jl,i+il) ) THEN
-                            ! Compute characteristic length
-                            dds = il * ddx(i+il) + jl * ddy(j+jl) + kl * ddz(k+kl)
-
-                            ! Compute face fluxwidth and proper alpha
-                            fluxWidth = abs( vel(k,j,i) ) * dt
+                            ! Compute proper alpha
                             fluxAlpha = alpha(k+kl,j+jl,i+il)
-
-                            IF ( fluxWidth > 0.5_realk*dds  ) THEN
-                                CALL err_abort(155, "fluxWidth > 0.5*cellWidth! Hint: reduce dt", __FILE__, __LINE__)
-                            ENDIF
 
                             ! Compute dimensions of fluxed cuboid
                             dimx = il*fluxWidth + (1-il)*ddx(i+il)
@@ -147,15 +143,9 @@ CONTAINS
                             dimz = kl*fluxWidth + (1-kl)*ddz(k+kl)
 
                             ! Compute vff in fluxed cuboid
-                            CALL comp_frac(fluxedProp, fluxAlpha, vff(k+kl,j+jl,i+il), &
-                                dimx, dimy, dimz, &
+                            CALL comp_frac(fluxedProp, fluxAlpha, dimx, dimy, dimz, &
                                 normx(k+kl,j+jl,i+il), normy(k+kl,j+jl,i+il), normz(k+kl,j+jl,i+il))
                         ELSE
-                            ! Compute characteristic length
-                            dds = il * ddx(i+il) + jl * ddy(j+jl) + kl * ddz(k+kl)
-
-                            ! Compute face fluxwidth
-                            fluxWidth = abs( vel(k,j,i) ) * dt
                             fluxedProp = vff(k+kl,j+jl,i+il)
                         END IF
                     ELSE
@@ -171,7 +161,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE comp_flux_stag(kk, jj, ii, q, l, vff, advr, &
-        vffFlux1, vffFlux2, dx, dy, dz, ddx, ddy, ddz, &
+        vffFlux1, vffFlux2, ddx, ddy, ddz, &
         normx, normy, normz, alpha, isIface, dt)
     !----------------------------------------------------------------
     !   What it does:
@@ -186,7 +176,6 @@ CONTAINS
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: advr(kk, jj, ii)
         REAL(realk), INTENT(out) :: vffFlux1(kk, jj, ii), vffFlux2(kk, jj, ii)
-        REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
@@ -202,15 +191,15 @@ CONTAINS
         REAL(realk) :: fluxDimxMi, fluxDimyMi, fluxDimzMi, fluxDimxPl, fluxDimyPl, fluxDimzPl, fracMi, fracPl
 
 
-        CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
-        CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
+        CALL get_spatial_indices(l, il, jl, kl)
+        CALL get_spatial_indices(q, iq, jq, kq)
 
         IF ( q == l ) THEN
             DO i = 2, ii-2
                 DO j = 2, jj-2
                     DO k = 2, kk-2
                         IF ( ABS(advr(k,j,i)) < tol ) THEN
-                            vffFlux1(k,j,i)      = 0.0_realk
+                            vffFlux1(k,j,i) = 0.0_realk
                             vffFlux2(k,j,i) = 0.0_realk
                             CYCLE
                         ENDIF
@@ -233,8 +222,7 @@ CONTAINS
                             fluxDimx = il*fluxWidth + (1-il)*ddx(i)
                             fluxDimy = jl*fluxWidth + (1-jl)*ddy(j)
                             fluxDimz = kl*fluxWidth + (1-kl)*ddz(k)
-                            CALL comp_frac(fluxedProp, fluxAlpha, vff(k+kl,j+jl,i+il), &
-                                fluxDimx, fluxDimy, fluxDimz, &
+                            CALL comp_frac(fluxedProp, fluxAlpha, fluxDimx, fluxDimy, fluxDimz, &
                                 normx(k+kl,j+jl,i+il), normy(k+kl,j+jl,i+il), &
                                 normz(k+kl,j+jl,i+il))
                         ELSE
@@ -252,7 +240,7 @@ CONTAINS
                     DO k = 2, kk-2
 
                     IF ( ABS(advr(k,j,i)) < tol ) THEN
-                        vffFlux1(k,j,i)      = 0.0_realk
+                        vffFlux1(k,j,i) = 0.0_realk
                         vffFlux2(k,j,i) = 0.0_realk
                         CYCLE
                     ENDIF
@@ -292,8 +280,7 @@ CONTAINS
                         fluxDimyMi = jl*fluxWidth + jq*ddy(jDonMi)/2.0_realk + (1-jl-jq)*ddy(jDonMi)
                         fluxDimzMi = kl*fluxWidth + kq*ddz(kDonMi)/2.0_realk + (1-kl-kq)*ddz(kDonMi)
 
-                        CALL comp_frac(fracMi, fluxAlphaMi, vff(kDonMi,jDonMi,iDonMi), &
-                            fluxDimxMi, fluxDimyMi, fluxDimzMi, &
+                        CALL comp_frac(fracMi, fluxAlphaMi, fluxDimxMi, fluxDimyMi, fluxDimzMi, &
                             normx(kDonMi,jDonMi,iDonMi), normy(kDonMi,jDonMi,iDonMi), normz(kDonMi,jDonMi,iDonMi))
                     ELSE
                         fracMi = vff(kDonMi,jDonMi,iDonMi)
@@ -307,8 +294,7 @@ CONTAINS
                         fluxDimyPl = jl*fluxWidth + jq*ddy(jDonPl)/2.0_realk + (1-jl-jq)*ddy(jDonPl)
                         fluxDimzPl = kl*fluxWidth + kq*ddz(kDonPl)/2.0_realk + (1-kl-kq)*ddz(kDonPl)
 
-                        CALL comp_frac(fracPl, fluxAlphaPl, vff(kDonPl,jDonPl,iDonPl), &
-                            fluxDimxPl, fluxDimyPl, fluxDimzPl, &
+                        CALL comp_frac(fracPl, fluxAlphaPl, fluxDimxPl, fluxDimyPl, fluxDimzPl, &
                             normx(kDonPl,jDonPl,iDonPl), normy(kDonPl,jDonPl,iDonPl), &
                             normz(kDonPl,jDonPl,iDonPl))
                     ELSE
@@ -583,28 +569,6 @@ CONTAINS
         END DO
         CALL cWy%init("CWY")
 
-        ! Fine to coarse within the domain (ftoc)
-        DO ilevel = maxlevel, minlevel, -1
-            CALL ftoc(ilevel, vffStag(1)%arr, vffStag(1)%arr, 'A')
-            CALL ftoc(ilevel, vffStag(2)%arr, vffStag(2)%arr, 'B')
-            CALL ftoc(ilevel, vffStag(3)%arr, vffStag(3)%arr, 'C')
-            CALL ftoc(ilevel, vff_f%arr, vff_f%arr, 'D')
-            CALL ftoc(ilevel, mom(1)%arr, mom(1)%arr, 'A')
-            CALL ftoc(ilevel, mom(2)%arr, mom(2)%arr, 'B')
-            CALL ftoc(ilevel, mom(3)%arr, mom(3)%arr, 'C')
-        ENDDO
-
-        ! Coarse to fine in the buffer (parent)
-        ! Fill buffers of vff and vffStag with initial values (connect)
-        DO ilevel = minlevel, maxlevel
-            CALL parent(ilevel, s1=vff_f)
-            CALL parent(ilevel, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3))
-            CALL parent(ilevel, v1=mom(1), v2=mom(2), v3=mom(3))
-            CALL connect(ilevel, 2, s1=vff_f, corners=.TRUE.)
-            CALL connect(ilevel, 2, v1=vffStag(1), v2=vffStag(2), v3=vffStag(3), corners=.TRUE.)
-            CALL connect(ilevel, 2, v1=mom(1), v2=mom(2), v3=mom(3), corners=.TRUE.)
-        END DO
-
         DO n = 1, nmygrids
             igrid = mygrids(n)
             CALL get_mgdims(kk, jj, ii, igrid)
@@ -742,7 +706,7 @@ CONTAINS
                     CALL comp_adve(kk, jj, ii, q, l, vffStag(q)%arr(ip3), u, v, w, &
                         advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
                     CALL comp_flux_stag(kk, jj, ii, q, l, vff, advr, vffFlux1Stag, vffFlux2Stag, &
-                        dx, dy, dz, ddx, ddy, ddz, normx, normy, normz, alpha, isIface, dt)
+                        ddx, ddy, ddz, normx, normy, normz, alpha, isIface, dt)
                     CALL adv_mom(kk, jj, ii, q, l, vffStag(q)%arr(ip3), cWyStag(q)%arr(ip3), u, v, w, &
                         advr, adve, mom(q)%arr(ip3), vffFlux1Stag, vffFlux2Stag, dx, dy, dz, ddx, ddy, ddz, dt)
                     CALL adv_vof(kk, jj, ii, q, l, vffStag(q)%arr(ip3), cWyStag(q)%arr(ip3), &
@@ -977,21 +941,31 @@ CONTAINS
         ! Local variables
         REAL(realk) :: rhoe(kk, jj, ii), rhon(kk, jj, ii), rhot(kk, jj, ii)
         INTEGER(intk) :: gradpflag
-        REAL(realk) :: gpx, gpy, gpz
+        REAL(realk) :: gpx(kk, jj, ii), gpy(kk, jj, ii), gpz(kk, jj, ii)
         INTEGER(intk) :: i, j, k
 
         CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', &
             rhoe, rhon, rhot, ddx, ddy, ddz)
 
         CALL get_gradpxflag(gradpflag, igrid)
-        gpx = gradp(1)*gradpflag
-        gpy = gradp(2)*gradpflag
-        gpz = gradp(3)*gradpflag
+
+        gpx = 0.0_realk
+        gpy = 0.0_realk
+        gpz = 0.0_realk
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    gpx(k,j,i) = gradp(1)*gradpflag*MERGE(1.0_realk, 0.0_realk, vff(k,j,i) > tol)
+                    gpy(k,j,i) = gradp(2)*gradpflag*MERGE(1.0_realk, 0.0_realk, vff(k,j,i) > tol)
+                    gpz(k,j,i) = gradp(3)*gradpflag*MERGE(1.0_realk, 0.0_realk, vff(k,j,i) > tol)
+                ENDDO
+            ENDDO
+        ENDDO
 
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    uo(k,j,i) = uo(k,j,i) - 1.0_realk / rhoe(k,j,i) * ( ( p(k,j,i+1) - p(k,j,i) ) * rdx(i) + gpx )
+                    uo(k,j,i) = uo(k,j,i) - 1.0_realk / rhoe(k,j,i) * ( ( p(k,j,i+1) - p(k,j,i) ) * rdx(i) + gpx(k,j,i) )
                 END DO
             END DO
         END DO
@@ -999,7 +973,7 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    vo(k,j,i) = vo(k,j,i) - 1.0_realk / rhon(k,j,i) * ( ( p(k,j+1,i) - p(k,j,i) ) * rdy(j) + gpy )
+                    vo(k,j,i) = vo(k,j,i) - 1.0_realk / rhon(k,j,i) * ( ( p(k,j+1,i) - p(k,j,i) ) * rdy(j) + gpy(k,j,i) )
                 END DO
             END DO
         END DO
@@ -1007,7 +981,7 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    wo(k,j,i) = wo(k,j,i) - 1.0_realk / rhot(k,j,i) * ( ( p(k+1,j,i) - p(k,j,i) ) * rdz(k) + gpz )
+                    wo(k,j,i) = wo(k,j,i) - 1.0_realk / rhot(k,j,i) * ( ( p(k+1,j,i) - p(k,j,i) ) * rdz(k) + gpz(k,j,i) )
                 END DO
             END DO
         END DO
@@ -1054,7 +1028,8 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii, q, l
-        REAL(realk), INTENT(inout) :: vff(kk, jj, ii), cWy(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: cWy(kk, jj, ii)
         REAL(realk), INTENT(in) :: vel(kk,jj,ii)
         REAL(realk), INTENT(in) :: vffFlux1(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
@@ -1068,7 +1043,7 @@ CONTAINS
         REAL(realk) :: dsx(ii), dsy(jj), dsz(kk), dsCV, dV
         REAL(realk) :: div(kk, jj, ii)
 
-        CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
+        CALL get_spatial_indices(l, il, jl, kl)
         CALL get_spatial_extents(kk, jj, ii, q, l, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
 
         DO i = 3, ii-2
@@ -1121,7 +1096,7 @@ CONTAINS
         REAL(realk) :: momFlux(kk, jj, ii)
         REAL(realk) :: div, com
 
-        CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
+        CALL get_spatial_indices(l, il, jl, kl)
         CALL get_spatial_extents(kk, jj, ii, q, l, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
         CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
 
@@ -1325,6 +1300,10 @@ CONTAINS
     !   (PARIS),” Computer Physics Communications, vol. 263,
     !   p. 107849, Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
     !   PARIS source code, grep "interpole_quad" (accessed: Mai 2026)
+    !
+    !   D. Herrmann, Numerische Mathematik — 40 BASIC-Programme. 
+    !   Wiesbaden: Vieweg+Teubner Verlag, 1983. 
+    !   doi: 10.1007/978-3-322-96321-5.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1349,7 +1328,7 @@ CONTAINS
         REAL(realk) :: adveMi, advePl
         REAL(realk) :: velMi, velCe, velPl, velFP
 
-        CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
+        CALL get_spatial_indices(l, il, jl, kl)
         CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
         CALL track_iface(isIface, kk, jj, ii, vff)
         CALL track_iface_vic(isIfaceVic, kk, jj, ii, isIface)
@@ -1389,8 +1368,8 @@ CONTAINS
                     velPl = vel(k+kl,j+jl,i+il)
                     velFP = vel(k+2*kl,j+2*jl,i+2*il)
 
-                    adveMi = quadratic_interpolation(velMi, velCe, velPl, dnslL, dnslC, dcslMi)
-                    advePl = quadratic_interpolation(velFP, velPl, velCe, dnslR, dnslC, dcslPl)
+                    adveMi = newton_interpolation(velMi, velCe, velPl, dnslL, dnslC, dcslMi)
+                    advePl = newton_interpolation(velFP, velPl, velCe, dnslR, dnslC, dcslPl)
 
                     adve(k,j,i) = iFacInd(1) * (signInd(1)*velCe + signInd(2)*velPl) + &
                                   iFacInd(2) * (signInd(1)*adveMi + signInd(2)*advePl)
@@ -1400,12 +1379,28 @@ CONTAINS
 
     CONTAINS
 
-        PURE REAL(realk) FUNCTION quadratic_interpolation(phiUU, phiU, phiD, dsUU, dsD, dsr) RESULT(r)
+        !------------------------------------------------------------
+        ! Both, Lagrange and Newton form yield the same results.
+        ! The Lagrange form was more familiar for me. Hence, I 
+        ! implemented it first. The Newton form is closer to 
+        ! Leonard's formulation and easier to adjust in the future
+        ! (see QUICKEST scheme).
+        !------------------------------------------------------------
+        ! PURE REAL(realk) FUNCTION lagrange_interpolation(phiUU, phiU, phiD, dsUU, dsD, dsr) RESULT(r)
+        !     REAL(realk), INTENT(in) :: phiUU, phiU, phiD, dsUU, dsD, dsr
+        !     r = phiUU*(dsr*(dsr-dsD))/(dsUU*(dsUU+dsD)) &
+        !         - phiU*((dsr+dsUU)*(dsr-dsD))/(dsUU*dsD) &
+        !         + phiD*(dsr*(dsr+dsUU))/(dsD*(dsUU+dsD))
+        ! END FUNCTION lagrange_interpolation
+
+        PURE REAL(realk) FUNCTION newton_interpolation(phiUU, phiU, phiD, dsUU, dsD, dsr) RESULT(r)
             REAL(realk), INTENT(in) :: phiUU, phiU, phiD, dsUU, dsD, dsr
-            r = phiUU*(dsr*(dsr-dsD))/(dsUU*(dsUU+dsD)) &
-                - phiU*((dsr+dsUU)*(dsr-dsD))/(dsUU*dsD) &
-                + phiD*(dsr*(dsr+dsUU))/(dsD*(dsUU+dsD))
-        END FUNCTION quadratic_interpolation
+            REAL(realk) :: dd1U, dd1D, curv
+            dd1D = (phiD - phiU)/dsD
+            dd1U = (phiU - phiUU)/dsUU
+            curv = (dd1D - dd1U)/(dsUU + dsD)
+            r = phiU + dsr*dd1D + dsr*(dsr - dsD)*curv
+        END FUNCTION newton_interpolation
 
     END SUBROUTINE comp_adve_quick
 
@@ -1457,7 +1452,7 @@ CONTAINS
         REAL(realk) :: dnslMi, dnslCe, dnslPl, dcslMi, dcslPl
         REAL(realk) :: slopeMi, slopeCe, slopePl, s
 
-        CALL get_spatial_indices(kk, jj, ii, l, il, jl, kl)
+        CALL get_spatial_indices(l, il, jl, kl)
         CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
 
         IF ( q == l ) THEN
@@ -1539,7 +1534,7 @@ CONTAINS
         REAL(realk) :: vel(kk,jj,ii)
         REAL(realk) :: ddnqMi, ddnqPl
 
-        CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
+        CALL get_spatial_indices(q, iq, jq, kq)
         CALL get_condit_velocity(kk, jj, ii, l, u, v, w, vel)
 
         IF ( q == l ) THEN

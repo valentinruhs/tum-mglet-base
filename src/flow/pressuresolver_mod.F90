@@ -1480,7 +1480,7 @@ CONTAINS
         CALL get_field(rdx_f, "RDX")
         CALL get_field(rdy_f, "RDY")
         CALL get_field(rdz_f, "RDZ")
-        CALL get_field(vff_f, "VFF")
+        IF ( solve_multiphase ) CALL get_field(vff_f, "VFF")
 
         DO i = 1, nmygrids
             igrid = mygrids(i)
@@ -1497,14 +1497,19 @@ CONTAINS
                 CALL bp_f%get_ptr(bp, igrid)
             END IF
 
-            CALL mgpcorr_grid(kk, jj, ii, u%arr(ip3), v%arr(ip3), w%arr(ip3), &
-                p%arr(ip3), dp%arr(ip3), vff_f%arr(ip3), ddx, ddy, ddz, rdx, rdy, rdz, fak, bp)
+            IF ( solve_multiphase ) THEN
+                CALL mgpcorr_grid(kk, jj, ii, u%arr(ip3), v%arr(ip3), w%arr(ip3), &
+                    p%arr(ip3), dp%arr(ip3), ddx, ddy, ddz, rdx, rdy, rdz, fak, bp, vff_f%arr(ip3))
+            ELSE
+                CALL mgpcorr_grid(kk, jj, ii, u%arr(ip3), v%arr(ip3), w%arr(ip3), &
+                    p%arr(ip3), dp%arr(ip3), ddx, ddy, ddz, rdx, rdy, rdz, fak, bp)
+            ENDIF
         END DO
     END SUBROUTINE mgpcorr
 
 
-    SUBROUTINE mgpcorr_grid(kk, jj, ii, u, v, w, p, dp, vff, ddx, ddy, ddz, rdx, rdy, rdz, &
-            fak, bp)
+    SUBROUTINE mgpcorr_grid(kk, jj, ii, u, v, w, p, dp, ddx, ddy, ddz, rdx, rdy, rdz, &
+            fak, bp, vff)
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(inout) :: u(kk, jj, ii)
@@ -1512,19 +1517,16 @@ CONTAINS
         REAL(realk), INTENT(inout) :: w(kk, jj, ii)
         REAL(realk), INTENT(inout) :: p(kk, jj, ii)
         REAL(realk), INTENT(in) :: dp(kk, jj, ii)
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: fak
         REAL(realk), INTENT(in), OPTIONAL :: bp(kk, jj, ii)
+        REAL(realk), INTENT(in), OPTIONAL :: vff(kk, jj, ii)
 
         ! Local variables
         REAL(realk) :: rhoe(kk, jj, ii), rhon(kk, jj, ii), rhot(kk, jj, ii)
         INTEGER(intk) :: k, j, i
         REAL(realk) :: rfak
-
-        CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', &
-            rhoe, rhon, rhot, ddx, ddy, ddz)
 
         rfak = 1.0_realk/fak
 
@@ -1567,40 +1569,80 @@ CONTAINS
                 END DO
             END DO
         ELSE
-            DO i = 2, ii-1
-                DO j = 2, jj-1
-                    DO k = 2, kk-1
-                        p(k, j, i) = p(k, j, i) + dp(k, j, i)
-                    END DO
-                END DO
-            END DO
+            IF ( PRESENT(vff) ) THEN
+                CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', &
+                    rhoe, rhon, rhot, ddx, ddy, ddz)
 
-            DO i = 2, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        u(k, j, i) = u(k, j, i) &
-                            + (dp(k, j, i) - dp(k, j, i+1))*rdx(i)*rfak * 1.0_realk / rhoe(k,j,i)
+                DO i = 2, ii-1
+                    DO j = 2, jj-1
+                        DO k = 2, kk-1
+                            p(k, j, i) = p(k, j, i) + dp(k, j, i)
+                        END DO
                     END DO
                 END DO
-            END DO
 
-            DO i = 3, ii-2
-                DO j = 2, jj-2
-                    DO k = 3, kk-2
-                        v(k, j, i) = v(k, j, i) &
-                            + (dp(k, j, i) - dp(k, j+1, i))*rdy(j)*rfak * 1.0_realk / rhon(k,j,i)
+                DO i = 2, ii-2
+                    DO j = 3, jj-2
+                        DO k = 3, kk-2
+                            u(k, j, i) = u(k, j, i) &
+                                + (dp(k, j, i) - dp(k, j, i+1))*rdx(i)*rfak * 1.0_realk / rhoe(k,j,i)
+                        END DO
                     END DO
                 END DO
-            END DO
 
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 2, kk-2
-                        w(k, j, i) = w(k, j, i) &
-                            + (dp(k, j, i) - dp(k+1, j, i))*rdz(k)*rfak * 1.0_realk / rhot(k,j,i)
+                DO i = 3, ii-2
+                    DO j = 2, jj-2
+                        DO k = 3, kk-2
+                            v(k, j, i) = v(k, j, i) &
+                                + (dp(k, j, i) - dp(k, j+1, i))*rdy(j)*rfak * 1.0_realk / rhon(k,j,i)
+                        END DO
                     END DO
                 END DO
-            END DO
+
+                DO i = 3, ii-2
+                    DO j = 3, jj-2
+                        DO k = 2, kk-2
+                            w(k, j, i) = w(k, j, i) &
+                                + (dp(k, j, i) - dp(k+1, j, i))*rdz(k)*rfak * 1.0_realk / rhot(k,j,i)
+                        END DO
+                    END DO
+                END DO
+            ELSE
+                DO i = 2, ii-1
+                    DO j = 2, jj-1
+                        DO k = 2, kk-1
+                            p(k, j, i) = p(k, j, i) + dp(k, j, i)
+                        END DO
+                    END DO
+                END DO
+
+                DO i = 2, ii-2
+                    DO j = 3, jj-2
+                        DO k = 3, kk-2
+                            u(k, j, i) = u(k, j, i) &
+                                + (dp(k, j, i) - dp(k, j, i+1))*rdx(i)*rfak
+                        END DO
+                    END DO
+                END DO
+
+                DO i = 3, ii-2
+                    DO j = 2, jj-2
+                        DO k = 3, kk-2
+                            v(k, j, i) = v(k, j, i) &
+                                + (dp(k, j, i) - dp(k, j+1, i))*rdy(j)*rfak
+                        END DO
+                    END DO
+                END DO
+
+                DO i = 3, ii-2
+                    DO j = 3, jj-2
+                        DO k = 2, kk-2
+                            w(k, j, i) = w(k, j, i) &
+                                + (dp(k, j, i) - dp(k+1, j, i))*rdz(k)*rfak
+                        END DO
+                    END DO
+                END DO
+            ENDIF
         END IF
 
     END SUBROUTINE mgpcorr_grid

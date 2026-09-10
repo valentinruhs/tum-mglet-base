@@ -45,13 +45,13 @@ CONTAINS
         INTEGER(intk) :: kk, jj, ii, kc0, jc0, ic0
         REAL(realk), POINTER, CONTIGUOUS :: grdMask(:,:,:)
 
+        IF(.NOT. has_multiphase) RETURN
+
         CALL init_multiphasecore()
         CALL init_multiphase_utils()
         CALL init_multiphase_material()
         CALL init_multiphase_vof_transport()
         CALL init_multiphase_plic()
-        IF(.NOT. has_multiphase) RETURN
-        IF(.NOT. solve_multiphase) RETURN
 
         DO n = 1, nmygrids
             igrid = mygrids(n)

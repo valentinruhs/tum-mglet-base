@@ -2,7 +2,7 @@
     "time": {
         "dt": 0.1,
         "mtstep": 100,
-	"itinfo": 10,
+	"itinfo": 1,
         "tstat": 10.0,
 	"read": false
     },
@@ -18,6 +18,7 @@
         "gmol": 0.001,
         "rho": 1.0,
         "uinf": [0.0, 0.0, 0.0],
+	"gradp": [-0.01, 0.0, 0.0],
         "pressuresolver": {
             "type": "sip",
             "epcorr": 1.0E-12,
@@ -45,8 +46,8 @@
 	"checkBalance" : false,	
 	"rho1" : 1000.0,
 	"rho2" : 50.0,
-	"gmol1" : 0.001,
-	"gmol2" : 0.00005,
+	"gmol1" : 0.1,
+	"gmol2" : 0.005,
 	"gravity" : [0.0, 0.0, 0.0]
     }   
 }

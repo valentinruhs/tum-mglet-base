@@ -58,7 +58,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: grdMask(:,:,:)
         REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
         REAL(realk), ALLOCATABLE :: xPl(:), yPl(:), zPl(:), psi(:,:,:)
-        REAL(realk) :: centx, centy, centz, rad, H, x, y, z, inside, a, b, e, maxTrans, theta
+        REAL(realk) :: centx, centy, centz, rad, dh, x, y, z, inside, a, b, e, maxTrans, theta
         REAL(realk) :: randx(10), randy(10), randt(10)
         REAL(realk) :: vol
 
@@ -97,8 +97,8 @@ CONTAINS
                 centz = 0.5_realk
                 rad = 0.06875_realk
                 trueVol = 4.0_realk / 3.0_realk * pi * rad**3.0_realk
-                iSub = 2048
-                jSub = 2048
+                iSub = 128
+                jSub = 128
                 DO i = 3, ii-2
                     DO j = 3, jj-2
                         DO k = 3, kk-2
@@ -127,8 +127,8 @@ CONTAINS
                 centz = 0.0_realk
                 rad = 0.15_realk
                 trueVol = pi * rad**2.0_realk * (maxz - minz)
-                iSub = 2048
-                jSub = 2048
+                iSub = 128
+                jSub = 128
                 DO i = 3, ii-2
                     DO j = 3, jj-2
                         inside = 0.0_realk
@@ -173,8 +173,8 @@ CONTAINS
                 centz = 0.0_realk
                 rad = 0.1_realk
                 trueVol = pi * rad**2.0_realk * (maxz - minz)
-                iSub = 2048
-                jSub = 2048
+                iSub = 128
+                jSub = 128
                 DO i = 3, ii-2
                     DO j = 3, jj-2
                         inside = 0.0_realk
@@ -202,8 +202,8 @@ CONTAINS
                 centz = 0.0_realk
                 rad = 0.1_realk
                 trueVol = pi * rad**2.0_realk * (maxz - minz)
-                iSub = 2048
-                jSub = 2048
+                iSub = 128
+                jSub = 128
                 DO i = 3, ii-2
                     DO j = 3, jj-2
                         inside = 0.0_realk
@@ -238,32 +238,23 @@ CONTAINS
                 !----------------------------------------------------
             CASE ( 'Open Channel Flow' )
                 !----------------------------------------------------
-                H = 1.0_realk
-                trueVol = (maxx - minx) * (maxy - miny)/2.0_realk * (maxz - minz)
-                jSub = 2
-                DO j = 3, jj-2
+                dh = 1.0_realk/64.0_realk
+                trueVol = 2.0_realk * pi**2 * ( 1.0_realk - dh )
+                kSub = 2
+                DO k = 3, kk-2
                     inside = 0.0_realk
-                    DO dj = 0, jSub-1
-                        y = yPl(j) + (dj + 0.5_realk)/jSub*ddy(j)
-                        IF ( y <= H) THEN
+                    DO dk = 0, kSub-1
+                        z = zPl(k) + (dk + 0.5_realk)/kSub*ddz(k)
+                        IF ( z <= - dh ) THEN
                             inside = inside + 1.0_realk
                         ENDIF
                     ENDDO
-                    vff(3:kk-2,j,3:ii-2) = inside / (iSub*jSub)
+                    vff(k,3:jj-2,3:ii-2) = inside / (kSub)
                 ENDDO
 
-                u = 0.05_realk
+                u = 0.0_realk
                 v = 0.0_realk
                 w = 0.0_realk
-                DO i = 3, ii-2
-                    DO j = 3, jj-2
-                        DO k = 3, kk-2
-                            IF ( vff(k,j,i) > 0.0_realk ) THEN
-                                u(k,j,i) = 1.0_realk
-                            ENDIF
-                        ENDDO
-                    ENDDO
-                ENDDO
                 !----------------------------------------------------
             CASE ( 'PlicEl' ) ! PLIC Ellipse
                 !----------------------------------------------------
@@ -276,7 +267,7 @@ CONTAINS
                     centx = 0.5_realk + randx(r) * maxTrans
                     centy = 0.5_realk + randy(r) * maxTrans
                     a = 0.3464_realk ; b = 0.1414_realk ; e = SQRT(a**2.0_realk - b**2.0_realk)
-                    iSub = 1024 ; jSub = 1024 ; kSub = 1
+                    iSub = 128 ; jSub = 128 ; kSub = 1
                     ! Outer loop over cells
                     DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
                         inside = 0.0_realk
@@ -296,7 +287,7 @@ CONTAINS
                 !----------------------------------------------------
                 CASE ( 'StFstP' ) ! Stokes First Problem
                 !----------------------------------------------------
-                iSub = 1 ; jSub = 1024 ; kSub = 1
+                iSub = 1 ; jSub = 128 ; kSub = 1
                 ! Outer loop over cells
                 DO i = 3, ii-2 ; DO j = 3, jj-2 ; DO k = 3, kk-2
                     inside = 0.0_realk
@@ -332,7 +323,9 @@ CONTAINS
         initErr = trueVol - initVol
 
         IF ( myid == 0 ) THEN
-            WRITE(*,'(A,ES24.16)') "Initial volume error is ", initErr, " (trueVol - initVol)"
+            WRITE(*,'(A,ES24.16,A)') "True volume is ", trueVol, " (trueVol)"
+            WRITE(*,'(A,ES24.16,A)') "Initial volume is ", initVol, " (initVol)"
+            WRITE(*,'(A,ES24.16,A)') "Initial volume error is ", initErr, " (trueVol - initVol)"
             WRITE(*,*) ""
         ENDIF
 

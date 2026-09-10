@@ -174,9 +174,9 @@
                     normz(k,j,i) = sumz / ( SUM(stcl) * (dz(k-1)+dz(k)) )
 
                     ! Calculate normal vector length
-                    length = SQRT( normx(k,j,i)**2.0_realk + &
-                                   normy(k,j,i)**2.0_realk + &
-                                   normz(k,j,i)**2.0_realk )
+                    length = SQRT( normx(k,j,i)**2 + &
+                                   normy(k,j,i)**2 + &
+                                   normz(k,j,i)**2 )
 
                     ! Normalize with direction from high vff to low vff
                     IF ( length > tol ) THEN
@@ -251,6 +251,7 @@
         REAL(realk) :: m1, m2, m3, c1, c2, c3
         REAL(realk) :: alphaMax(kk, jj, ii)
 
+        alpha = 0.0_realk
 
         ! Loop over cells
         DO i = 2, ii-1
@@ -305,7 +306,7 @@
 
     !================================================================
 
-    SUBROUTINE comp_frac(cellProportion, alpha, vff, ddx, ddy, ddz, normx, normy, normz)
+    SUBROUTINE comp_frac(cellProportion, alpha, ddx, ddy, ddz, normx, normy, normz)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine calculates the value of the volume fraction 
@@ -321,7 +322,6 @@
         ! Subroutine arguments
         REAL(realk), INTENT(out) :: cellProportion
         REAL(realk), INTENT(in) :: alpha
-        REAL(realk), INTENT(in) :: vff
         REAL(realk), INTENT(in) :: ddx, ddy, ddz
         REAL(realk), INTENT(in) :: normx, normy, normz
 
@@ -376,12 +376,12 @@
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kq, jq, iq
         REAL(realk) :: alphaOffset
-        REAL(realk) :: alphaMi, vffMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi, ddsMi, halfFractionMi
-        REAL(realk) :: alphaPl, vffPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl, ddsPl, halfFractionPl
+        REAL(realk) :: alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi, ddsMi, halfFractionMi
+        REAL(realk) :: alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl, ddsPl, halfFractionPl
 
         vffStag = 0.0_realk
 
-        CALL get_spatial_indices(kk, jj, ii, q, iq, jq, kq)
+        CALL get_spatial_indices(q, iq, jq, kq)
 
         DO i = 2, ii-2
             DO j = 2, jj-2
@@ -389,7 +389,6 @@
                     alphaOffset = ( iq * normx(k,j,i) * ddx(i) + jq * normy(k,j,i) * ddy(j) + kq * normz(k,j,i) * ddz(k) ) / 2.0_realk
 
                     alphaMi = alpha(k,j,i) - alphaOffset
-                    vffMi = vff(k,j,i)
                     ddxMi = ( 1.0_realk - iq ) * ddx(i) + iq * ddx(i) / 2.0_realk
                     ddyMi = ( 1.0_realk - jq ) * ddy(j) + jq * ddy(j) / 2.0_realk
                     ddzMi = ( 1.0_realk - kq ) * ddz(k) + kq * ddz(k) / 2.0_realk
@@ -399,7 +398,6 @@
                     ddsMi = iq * ddxMi + jq * ddyMi + kq * ddzMi
 
                     alphaPl = alpha(k+kq,j+jq,i+iq)
-                    vffPl = vff(k+kq,j+jq,i+iq)
                     ddxPl = ( 1.0_realk - iq ) * ddx(i+iq) + iq * ddx(i+iq) / 2.0_realk
                     ddyPl = ( 1.0_realk - jq ) * ddy(j+jq) + jq * ddy(j+jq) / 2.0_realk
                     ddzPl = ( 1.0_realk - kq ) * ddz(k+kq) + kq * ddz(k+kq) / 2.0_realk
@@ -409,14 +407,14 @@
                     ddsPl = iq * ddxPl + jq * ddyPl + kq * ddzPl
 
                     IF ( isIface(k,j,i) .AND. isIface(k+kq,j+jq,i+iq) ) THEN
-                        CALL comp_frac(halfFractionMi, alphaMi, vffMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
-                        CALL comp_frac(halfFractionPl, alphaPl, vffPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
+                        CALL comp_frac(halfFractionMi, alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
+                        CALL comp_frac(halfFractionPl, alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
                         vffStag(k,j,i) = ( halfFractionMi * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE IF ( isIface(k,j,i) .AND. .NOT. isIface(k+kq,j+jq,i+iq) ) THEN
-                        CALL comp_frac(halfFractionMi, alphaMi, vffMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
+                        CALL comp_frac(halfFractionMi, alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
                         vffStag(k,j,i) = ( halfFractionMi * ddsMi + vff(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE IF ( .NOT. isIface(k,j,i) .AND. isIface(k+kq,j+jq,i+iq) ) THEN
-                        CALL comp_frac(halfFractionPl, alphaPl, vffPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
+                        CALL comp_frac(halfFractionPl, alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
                         vffStag(k,j,i) = ( vff(k,j,i) * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE
                         vffStag(k,j,i) = ( vff(k,j,i) * ddsMi + vff(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
@@ -565,7 +563,7 @@
                 baseArea = vol / c1
                 
                 ! When the critical base area is exceeded the volume shape transforms to a chamfered rectangle prism instead of triangular prism
-                criticalBaseArea = 1.0_realk/2.0_realk * c2**2.0_realk * m2/m3
+                criticalBaseArea = 1.0_realk/2.0_realk * c2**2 * m2/m3
                 
                 IF ( baseArea < criticalBaseArea ) THEN
                     ! Here both interception lines of the interface with the coordinate axis are within the cell => triangular prism
@@ -580,12 +578,12 @@
             alphaMax = mc1 + mc2 + mc3
 
             ! Define interval boundaries V1, V2, V3
-            V1 = mc1**2.0_realk * c1 / ( MAX(6.0_realk * m2 * m3, tol) )
+            V1 = mc1**2 * c1 / ( MAX(6.0_realk * m2 * m3, tol) )
             V2 = V1 + c1 * c2 * ( mc2 - mc1 ) / ( 2.0_realk * m3 )
             IF ( mc3 < mc1 + mc2 ) THEN
-                V3 = ( mc3**2.0_realk * ( 3.0_realk * ( mc1 + mc2 ) - mc3 ) + &
-                        mc1**2.0_realk * ( mc1 - 3.0_realk * mc3 ) + &
-                        mc2**2.0_realk * ( mc2 - 3.0_realk * mc3 ) ) / &
+                V3 = ( mc3**2 * ( 3.0_realk * ( mc1 + mc2 ) - mc3 ) + &
+                        mc1**2 * ( mc1 - 3.0_realk * mc3 ) + &
+                        mc2**2 * ( mc2 - 3.0_realk * mc3 ) ) / &
                         ( 6.0_realk * m1 * m2 * m3 )
             ELSE
                 V3 = c1 * c2 * ( mc1 + mc2 ) / ( 2.0_realk * m3 )
@@ -595,24 +593,24 @@
             IF ( vol < V1 ) THEN
                 alphaStd = ( 6.0_realk * m1 * m2 * m3 * vol )**( 1.0_realk/3.0_realk )
             ELSE IF ( vol < V2 ) THEN
-                alphaStd = 1.0_realk/2.0_realk * ( mc1 + SQRT(mc1**2.0_realk + 8.0_realk * m2 * m3 * (vol - V1) / c1) )
+                alphaStd = 1.0_realk/2.0_realk * ( mc1 + SQRT(mc1**2 + 8.0_realk * m2 * m3 * (vol - V1) / c1) )
             ELSE IF ( vol < V3 ) THEN
                 a2 = - 3.0_realk * ( mc1 + mc2 )
-                a1 = 3.0_realk * ( mc1**2.0_realk + mc2**2.0_realk )
-                a0 = - (mc1**3.0_realk + mc2**3.0_realk) + 6.0_realk * m1 * m2 * m3 * vol
-                po = a1 / 3.0_realk - a2**2.0_realk / 9.0_realk
-                qo = ( a1 * a2 - 3.0_realk * a0 ) / 6.0_realk - a2**3.0_realk / 27.0_realk
+                a1 = 3.0_realk * ( mc1**2 + mc2**2 )
+                a0 = - (mc1**3 + mc2**3) + 6.0_realk * m1 * m2 * m3 * vol
+                po = a1 / 3.0_realk - a2**2 / 9.0_realk
+                qo = ( a1 * a2 - 3.0_realk * a0 ) / 6.0_realk - a2**3 / 27.0_realk
                 
-                theta = ACOS(qo / (-po)**1.5_realk) / 3.0_realk
+                theta = ACOS(qo / (-po*SQRT(-po))) / 3.0_realk
                 alphaStd = SQRT(-po) * ( SQRT(3.0_realk) * SIN(theta) - COS(theta) ) - a2 / 3.0_realk
             ELSE IF ( vol >= V3 .AND. mc3 <= mc1 + mc2 ) THEN
                 a2 = - 3.0_realk/2.0_realk * ( mc1 + mc2 + mc3 )
-                a1 = 3.0_realk/2.0_realk * ( mc1**2.0_realk + mc2**2.0_realk + mc3**2.0_realk )
-                a0 = - 1.0_realk/2.0_realk * ( mc1**3.0_realk + mc2**3.0_realk + mc3**3.0_realk ) + 3.0_realk * m1 * m2 * m3 * vol
-                po = a1 / 3.0_realk - a2**2.0_realk / 9.0_realk
-                qo = ( a1 * a2 - 3.0_realk * a0 ) / 6.0_realk - a2**3.0_realk / 27.0_realk
+                a1 = 3.0_realk/2.0_realk * ( mc1**2 + mc2**2 + mc3**2 )
+                a0 = - 1.0_realk/2.0_realk * ( mc1**3 + mc2**3 + mc3**3 ) + 3.0_realk * m1 * m2 * m3 * vol
+                po = a1 / 3.0_realk - a2**2 / 9.0_realk
+                qo = ( a1 * a2 - 3.0_realk * a0 ) / 6.0_realk - a2**3 / 27.0_realk
                 
-                theta = ACOS(qo / (-po)**1.5_realk) / 3.0_realk
+                theta = ACOS(qo / (-po*SQRT(-po))) / 3.0_realk
                 alphaStd = SQRT(-po) * ( SQRT(3.0_realk) * SIN(theta) - COS(theta) ) - a2 / 3.0_realk
             ELSE IF ( vol >= V3 .AND. mc3 > mc1 + mc2 ) THEN
                 alphaStd = m3 * vol / ( c1 * c2 ) + ( mc1 + mc2 ) / 2.0_realk
@@ -690,10 +688,10 @@
                     ENDIF
                 ! Calculate vol dependent on mc2 and mc3
                 ELSEIF ( alphaStd < mc2 ) THEN
-                    baseArea = 1.0_realk/2.0_realk * alphaStd**2.0_realk / ( m2 * m3 )
+                    baseArea = 1.0_realk/2.0_realk * alphaStd**2 / ( m2 * m3 )
                     vol = baseArea * c1
                 ELSE
-                    triangularArea = 1.0_realk/2.0_realk * c2**2.0_realk * m2 / m3
+                    triangularArea = 1.0_realk/2.0_realk * c2**2 * m2 / m3
                     chamferedRectangleArea = c2 * alphaStd / m3 - triangularArea
                     vol = chamferedRectangleArea * c1
                 ENDIF
@@ -713,16 +711,16 @@
                 ENDIF
             ! Calculate vol dependent on mc1, mc2 and mc3
             ELSEIF ( alphaStd < mc1 ) THEN
-                vol = alphaStd**3.0_realk / ( 6.0_realk * m1 * m2 * m3 )
+                vol = alphaStd**3 / ( 6.0_realk * m1 * m2 * m3 )
             ELSE IF ( alphaStd < mc2 ) THEN
                 vol = ( alphaStd * c1 * ( alphaStd - mc1 ) ) / ( 2.0_realk * m2 * m3 ) + V1
             ELSE IF ( alphaStd < MIN(mc1 + mc2, mc3) ) THEN
-                vol = ( alphaStd**2.0_realk * ( 3.0_realk * ( mc1 + mc2 ) - alphaStd ) + mc1**2.0_realk * ( mc1 - 3.0_realk * alphaStd ) + mc2**2.0_realk * ( mc2 - 3.0_realk * alphaStd ) ) / ( 6.0_realk * m1 * m2 * m3 )
+                vol = ( alphaStd**2 * ( 3.0_realk * ( mc1 + mc2 ) - alphaStd ) + mc1**2 * ( mc1 - 3.0_realk * alphaStd ) + mc2**2 * ( mc2 - 3.0_realk * alphaStd ) ) / ( 6.0_realk * m1 * m2 * m3 )
             ELSE IF ( alphaStd >= MIN(mc1 + mc2, mc3) .AND. mc3 <= mc1 + mc2 ) THEN
-                vol = ( alphaStd**2.0_realk * ( 3.0_realk * ( mc1 + mc2 + mc3 ) - 2.0_realk * alphaStd ) &
-                    + mc1**2.0_realk * ( mc1 - 3.0_realk * alphaStd ) &
-                    + mc2**2.0_realk * ( mc2 - 3.0_realk * alphaStd ) &
-                    + mc3**2.0_realk * ( mc3 - 3.0_realk * alphaStd ) ) / ( 6.0_realk * m1 * m2 * m3 )
+                vol = ( alphaStd**2 * ( 3.0_realk * ( mc1 + mc2 + mc3 ) - 2.0_realk * alphaStd ) &
+                    + mc1**2 * ( mc1 - 3.0_realk * alphaStd ) &
+                    + mc2**2 * ( mc2 - 3.0_realk * alphaStd ) &
+                    + mc3**2 * ( mc3 - 3.0_realk * alphaStd ) ) / ( 6.0_realk * m1 * m2 * m3 )
             ELSE IF ( alphaStd >= MIN(mc1 + mc2, mc3) .AND. mc3 > mc1 + mc2 ) THEN
                 vol = ( c1 * c2 * ( 2.0_realk * alphaStd - ( mc1 + mc2 ) ) ) / ( 2.0_realk * m3 )
             ENDIF

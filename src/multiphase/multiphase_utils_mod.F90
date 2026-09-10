@@ -66,7 +66,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE get_spatial_indices(kk, jj, ii, lOrq, io, jo, ko)
+    SUBROUTINE get_spatial_indices(lOrq, io, jo, ko)
     !----------------------------------------------------------------
     !   What it does:
     !   Depending on the direction (l) of component (q) the 
@@ -74,7 +74,7 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii, lOrq
+        INTEGER(intk), INTENT(in) :: lOrq
         INTEGER(intk), INTENT(out) :: io, jo, ko
 
         ! Local variables
