@@ -14,7 +14,7 @@ MODULE timeintegration_mod
     USE coriolisterm_mod, ONLY: coriolisterm
     USE multiphase_vof_transport_mod, ONLY : multiphase_solve
     USE multiphasecore_mod, ONLY: solve_multiphase, test_multiphase
-    USE multiphase_io_mod, ONLY: update_velocity, validate_velocity
+    USE multiphase_io_mod, ONLY: update_velocity
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -101,7 +101,6 @@ CONTAINS
             END IF
 
             CALL multiphase_solve(u, v, w, vff, p, dt*dtrki, itstep, uo, vo, wo)
-            ! CALL validate_velocity(u, v, w, itstep, dt)
 
             CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
             CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
