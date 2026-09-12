@@ -97,8 +97,11 @@ CONTAINS
         DO i = 2, ii-2
             DO j = 2, jj-2
                 DO k = 2, kk-2
+                    IF ( ABS(vel(k,j,i)) < tol ) THEN
+                        vffFlux1(k,j,i) = 0.0_realk
+                        CYCLE
+                    ENDIF
                     IF ( vel(k,j,i) > tol ) THEN
-
                         ! Compute face flux width and characteristic length
                         fluxWidth = abs( vel(k,j,i) ) * dt
                         dds = il * ddx(i) + jl * ddy(j) + kl * ddz(k)
@@ -125,7 +128,6 @@ CONTAINS
                             fluxedProp = vff(k,j,i)
                         END IF
                     ELSE IF ( vel(k,j,i) < -tol ) THEN
-
                         ! Compute face flux width and characteristic length
                         fluxWidth = abs( vel(k,j,i) ) * dt
                         dds = il * ddx(i+il) + jl * ddy(j+jl) + kl * ddz(k+kl)
@@ -148,8 +150,6 @@ CONTAINS
                         ELSE
                             fluxedProp = vff(k+kl,j+jl,i+il)
                         END IF
-                    ELSE
-                        fluxedProp = 0.0_realk
                     END IF
                     vffFlux1(k,j,i) = vel(k,j,i) * fluxedProp
                 END DO
@@ -965,7 +965,8 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    uo(k,j,i) = uo(k,j,i) - 1.0_realk / rhoe(k,j,i) * ( ( p(k,j,i+1) - p(k,j,i) ) * rdx(i) + gpx(k,j,i) )
+                    uo(k,j,i) = uo(k,j,i) - 1.0_realk/rhoe(k,j,i) * &
+                        ( ( p(k,j,i+1) - p(k,j,i) ) * rdx(i) + gpx(k,j,i) )
                 END DO
             END DO
         END DO
@@ -973,7 +974,8 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    vo(k,j,i) = vo(k,j,i) - 1.0_realk / rhon(k,j,i) * ( ( p(k,j+1,i) - p(k,j,i) ) * rdy(j) + gpy(k,j,i) )
+                    vo(k,j,i) = vo(k,j,i) - 1.0_realk/rhon(k,j,i) * &
+                        ( ( p(k,j+1,i) - p(k,j,i) ) * rdy(j) + gpy(k,j,i) )
                 END DO
             END DO
         END DO
@@ -981,7 +983,8 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    wo(k,j,i) = wo(k,j,i) - 1.0_realk / rhot(k,j,i) * ( ( p(k+1,j,i) - p(k,j,i) ) * rdz(k) + gpz(k,j,i) )
+                    wo(k,j,i) = wo(k,j,i) - 1.0_realk/rhot(k,j,i) * &
+                        ( ( p(k+1,j,i) - p(k,j,i) ) * rdz(k) + gpz(k,j,i) )
                 END DO
             END DO
         END DO

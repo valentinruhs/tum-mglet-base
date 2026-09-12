@@ -56,7 +56,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: grdMask(:,:,:)
         REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
-        REAL(realk), ALLOCATABLE :: xPl(:), yPl(:), zPl(:), psi(:,:,:)
+        REAL(realk), ALLOCATABLE :: xR(:), yR(:), zR(:), psi(:,:,:)
         REAL(realk) :: centx, centy, centz, rad, dh, x, y, z, inside, a, b, e, maxTrans, theta
         REAL(realk) :: randx(10), randy(10), randt(10)
         REAL(realk) :: vol
@@ -80,13 +80,13 @@ CONTAINS
             CALL ddx_f%get_ptr(ddx, igrid); CALL ddy_f%get_ptr(ddy, igrid); CALL ddz_f%get_ptr(ddz, igrid)
             CALL grdMask_f%get_ptr(grdMask, igrid)
 
-            ALLOCATE(xPl(ii))
-            ALLOCATE(yPl(jj))
-            ALLOCATE(zPl(kk))
+            ALLOCATE(xR(ii))
+            ALLOCATE(yR(jj))
+            ALLOCATE(zR(kk))
 
-            CALL get_top_right_corner(xPl, ddx, minx, ii)
-            CALL get_top_right_corner(yPl, ddy, miny, jj)
-            CALL get_top_right_corner(zPl, ddz, minz, kk)
+            CALL get_top_right_corner(xR, ddx, minx, ii)
+            CALL get_top_right_corner(yR, ddy, miny, jj)
+            CALL get_top_right_corner(zR, ddz, minz, kk)
 
             SELECT CASE( test_multiphase )
             CASE ( 'Sphere Translation' )
@@ -103,11 +103,11 @@ CONTAINS
                         DO k = 3, kk-2
                             inside = 0.0_realk
                             DO di = 0, iSub-1
-                                x = xPl(i) + (di + 0.5_realk)/iSub*ddx(i)
+                                x = xR(i) + (di + 0.5_realk)/iSub*ddx(i)
                                 DO dj = 0, jSub-1
-                                    y = yPl(j) + (dj + 0.5_realk)/jSub*ddy(j)
+                                    y = yR(j) + (dj + 0.5_realk)/jSub*ddy(j)
                                     DO dk = 0, kSub-1
-                                        z = zPl(k) + (dk + 0.5_realk)/kSub*ddz(k)
+                                        z = zR(k) + (dk + 0.5_realk)/kSub*ddz(k)
                                         IF ((x - centx)**2 + (y - centy)**2 + (z - centz)**2 <= rad**2) THEN
                                             inside = inside + 1.0_realk
                                         ENDIF
@@ -132,9 +132,9 @@ CONTAINS
                     DO j = 3, jj-2
                         inside = 0.0_realk
                         DO di = 0, iSub-1
-                            x = xPl(i) + (di + 0.5_realk)/iSub*ddx(i)
+                            x = xR(i) + (di + 0.5_realk)/iSub*ddx(i)
                             DO dj = 0, jSub-1
-                                y = yPl(j) + (dj + 0.5_realk)/jSub*ddy(j)
+                                y = yR(j) + (dj + 0.5_realk)/jSub*ddy(j)
                                 IF ((x - centx)**2 + (y - centy)**2 <= rad**2) THEN
                                     inside = inside + 1.0_realk
                                 ENDIF
@@ -149,8 +149,8 @@ CONTAINS
                     DO j = 1, jj
                         DO k = 1, kk
                             psi(k,j,i) = 1/pi * &
-                                SIN(pi*(xPl(i)+ddx(i)))**2 * &
-                                SIN(pi*(yPl(j)+ddy(j)))**2
+                                SIN(pi*(xR(i)+ddx(i)))**2 * &
+                                SIN(pi*(yR(j)+ddy(j)))**2
                         END DO
                     END DO 
                 END DO
@@ -178,9 +178,9 @@ CONTAINS
                     DO j = 3, jj-2
                         inside = 0.0_realk
                         DO di = 0, iSub-1
-                            x = xPl(i) + (di + 0.5_realk)/iSub*ddx(i)
+                            x = xR(i) + (di + 0.5_realk)/iSub*ddx(i)
                             DO dj = 0, jSub-1
-                                y = yPl(j) + (dj + 0.5_realk)/jSub*ddy(j)
+                                y = yR(j) + (dj + 0.5_realk)/jSub*ddy(j)
                                 IF ((x - centx)**2 + (y - centy)**2 <= rad**2) THEN
                                     inside = inside + 1.0_realk
                                 ENDIF
@@ -207,9 +207,9 @@ CONTAINS
                     DO j = 3, jj-2
                         inside = 0.0_realk
                         DO di = 0, iSub-1
-                            x = xPl(i) + (di + 0.5_realk)/iSub*ddx(i)
+                            x = xR(i) + (di + 0.5_realk)/iSub*ddx(i)
                             DO dj = 0, jSub-1
-                                y = yPl(j) + (dj + 0.5_realk)/jSub*ddy(j)
+                                y = yR(j) + (dj + 0.5_realk)/jSub*ddy(j)
                                 IF ((x - centx)**2 + (y - centy)**2 <= rad**2) THEN
                                     inside = inside + 1.0_realk
                                 ENDIF
@@ -243,7 +243,7 @@ CONTAINS
                 DO k = 3, kk-2
                     inside = 0.0_realk
                     DO dk = 0, kSub-1
-                        z = zPl(k) + (dk + 0.5_realk)/kSub*ddz(k)
+                        z = zR(k) + (dk + 0.5_realk)/kSub*ddz(k)
                         IF ( z <= - dh ) THEN
                             inside = inside + 1.0_realk
                         ENDIF
@@ -294,9 +294,9 @@ CONTAINS
                 ENDDO
             ENDDO
 
-            DEALLOCATE(xPl)
-            DEALLOCATE(yPl)
-            DEALLOCATE(zPl)
+            DEALLOCATE(xR)
+            DEALLOCATE(yR)
+            DEALLOCATE(zR)
         ENDDO
 
         CALL MPI_Allreduce(MPI_IN_PLACE, initVol, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
@@ -313,6 +313,15 @@ CONTAINS
         DO ilevel = minlevel, maxlevel
             CALL connect(ilevel, layers=2, s1=vff_f, corners=.TRUE.)
         ENDDO
+
+    CONTAINS
+
+        PURE REAL(realk) FUNCTION reichardt(yPl) RESULT(uPl)
+            REAL(realk), INTENT(in) :: yPl
+            REAL(realk), PARAMETER :: C=7.8_realk, kappa=0.41
+            uPl = (LOG(1.0_realk + kappa*yPl)/kappa +  & 
+                C*(1.0_realk - EXP(-yPl/11.0_realk) - yPl/11.0_realk*EXP(-yPl/3.0_realk)))
+        END FUNCTION reichardt
 
     END SUBROUTINE init_multiphase_io
 
@@ -354,7 +363,7 @@ CONTAINS
         INTEGER(intk) :: kk, jj, ii, k, j, i
         REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
         REAL(realk) :: magnitude, fac(6)
-        REAL(realk), ALLOCATABLE :: psi(:,:,:), xPl(:), yPl(:), zPl(:)
+        REAL(realk), ALLOCATABLE :: psi(:,:,:), xR(:), yR(:), zR(:)
 
         CALL get_field(dx_f, "DX")
         CALL get_field(dy_f, "DY")
@@ -383,13 +392,13 @@ CONTAINS
             CALL ddy_f%get_ptr(ddy, igrid)
             CALL ddz_f%get_ptr(ddz, igrid)
 
-            ALLOCATE(xPl(ii))
-            ALLOCATE(yPl(jj))
-            ALLOCATE(zPl(kk))
+            ALLOCATE(xR(ii))
+            ALLOCATE(yR(jj))
+            ALLOCATE(zR(kk))
 
-            CALL get_top_right_corner(xPl, ddx, minx, ii)
-            CALL get_top_right_corner(yPl, ddy, miny, jj)
-            CALL get_top_right_corner(zPl, ddz, minz, kk)
+            CALL get_top_right_corner(xR, ddx, minx, ii)
+            CALL get_top_right_corner(yR, ddy, miny, jj)
+            CALL get_top_right_corner(zR, ddz, minz, kk)
 
             SELECT CASE( test_multiphase )
             CASE ( 'Sphere Translation' )
@@ -417,8 +426,8 @@ CONTAINS
                     DO j = 1, jj
                         DO k = 1, kk
                             psi(k,j,i) = 1/pi * COS(pi*dt*itstep/2.0_realk) * &
-                                SIN(pi*(xPl(i)+ddx(i)))**2 * &
-                                SIN(pi*(yPl(j)+ddy(j)))**2
+                                SIN(pi*(xR(i)+ddx(i)))**2 * &
+                                SIN(pi*(yR(j)+ddy(j)))**2
                         END DO
                     END DO 
                 END DO
@@ -434,9 +443,9 @@ CONTAINS
                 DEALLOCATE(psi)
             END SELECT
 
-            DEALLOCATE(xPl)
-            DEALLOCATE(yPl)
-            DEALLOCATE(zPl)
+            DEALLOCATE(xR)
+            DEALLOCATE(yR)
+            DEALLOCATE(zR)
         END DO
 
     END SUBROUTINE
