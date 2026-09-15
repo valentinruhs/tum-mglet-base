@@ -21,7 +21,7 @@ MODULE multiphase_vof_transport_mod
     USE pointers_mod, ONLY: get_ip3
     USE multiphase_plic_mod, ONLY: comp_frac, iface_reconstruction, comp_stag_frac, track_iface, track_iface_vic
     USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, permutation_multiphase, omitAdve, omitDiff, omitExte, tol, checkContinuity, checkSolenoidality, checkBalance, fluxLimiter, fluxCentered
-    USE multiphase_material_mod, ONLY: comp_material_property_field, comp_property_face_value_cent, comp_property_face_value_stag
+    USE multiphase_material_mod, ONLY: comp_prop, comp_prop_arit_face, comp_property_face_value_stag
     USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
     USE parent_mod, ONLY: parent
@@ -629,7 +629,7 @@ CONTAINS
             DO q = 1, 3
                 CALL comp_stag_frac(kk, jj, ii, q, vff, vffStag(q)%arr(ip3), &
                     ddx, ddy, ddz, normx, normy, normz, alpha, isIface)
-                CALL comp_material_property_field(kk, jj, ii, vffStag(q)%arr(ip3), &
+                CALL comp_prop(kk, jj, ii, vffStag(q)%arr(ip3), &
                     dStag, rho1, rho2)
                 CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom(q)%arr(ip3))
                 CALL comp_cWy(kk, jj, ii, vffStag(q)%arr(ip3), cWyStag(q)%arr(ip3))
@@ -853,11 +853,10 @@ CONTAINS
 
         IF ( omitDiff ) RETURN
 
-        CALL comp_material_property_field(kk, jj, ii, vffp, g, gmol1, gmol2)
-        CALL comp_property_face_value_stag(kk, jj, ii, vffp, gmol1, gmol2, &
-            gxy, gxz, gyz, ddx, ddy, ddz)
-        CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', &
-            rhoe, rhon, rhot, ddx, ddy, ddz)
+        CALL comp_prop(kk, jj, ii, vffp, g, gmol1, gmol2)
+        CALL comp_prop_face_stag(kk, jj, ii, vffp, gxy, gxz, gyz, gmol1, gmol2, &
+            ddx, ddy, ddz, meanFlag='harm')
+        CALL comp_prop_face(kk, jj, ii, vff, rhoe, rhon, rhot, rho1, rho2, rdx, rdy, rdz)
 
         DO i = 3, ii-2
             DO j = 3, jj-2
@@ -944,8 +943,7 @@ CONTAINS
         REAL(realk) :: gpx(kk, jj, ii), gpy(kk, jj, ii), gpz(kk, jj, ii)
         INTEGER(intk) :: i, j, k
 
-        CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', &
-            rhoe, rhon, rhot, ddx, ddy, ddz)
+        CALL comp_prop_face(kk, jj, ii, vff, rhoe, rhon, rhot, rho1, rho2, rdx, rdy, rdz)
 
         CALL get_gradpxflag(gradpflag, igrid)
 
@@ -1176,7 +1174,7 @@ CONTAINS
         INTEGER(intk) :: k, j, i
 
         CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
-        CALL comp_material_property_field(kk, jj, ii, vffStag, dStag, rho1, rho2)
+        CALL comp_prop(kk, jj, ii, vffStag, dStag, rho1, rho2)
     
         DO i = 3, ii-2
             DO j = 3, jj-2

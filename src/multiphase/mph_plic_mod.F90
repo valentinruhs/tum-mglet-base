@@ -1,32 +1,31 @@
-    !====================================================================
-    !  Module: multiphase_plic_mod
-    !
-    !  Responsibilities:
-    !     - Tracks the cells containing an interfac
-    !     - Computes the interface normal vector within a cell
-    !     - Computes the distance of the interface alpha within a cell
-    !
-    !  Author:      Valentin Ruhs
-    !  Created:     2026-02
-    !  Last update: 2026-02
-    !
-    !====================================================================
+!====================================================================
+!  Module: mph_plic_mod
+!
+!   Responsibilities:
+!   - Provides routines related to piecewise linear interface 
+!     calculation
+!
+!   Author:      Valentin Ruhs
+!   e-Mail:      valentin.ruhs@gmx.de
+!   Created:     2026-02
+!   Last update: 2026-09
+!
+!====================================================================
 
-    MODULE multiphase_plic_mod
+    MODULE mph_plic_mod
 
     USE precision_mod, ONLY: intk, realk
-    USE multiphase_utils_mod, ONLY: get_spatial_indices
-    USE multiphasecore_mod, ONLY: tol
+    USE mph_utils_mod, ONLY: get_spatial_indices
+    USE mphcore_mod, ONLY: vofTol
         
     IMPLICIT NONE
     PRIVATE 
 
-    PUBLIC :: init_multiphase_plic, finish_multiphase_plic, iface_reconstruction, &
-            comp_frac, comp_stag_frac, track_iface, track_iface_vic
+    PUBLIC :: init_mph_plic, finish_mph_plic
 
     CONTAINS
 
-    SUBROUTINE init_multiphase_plic()
+    SUBROUTINE init_mph_plic()
 
         ! Subroutine arguments
         ! None
@@ -34,98 +33,93 @@
         ! Local variables
         ! None
 
-        continue
-    END SUBROUTINE init_multiphase_plic
+        CALL rec_ifc()
+
+    END SUBROUTINE init_mph_plic
 
     !================================================================
 
-    SUBROUTINE finish_multiphase_plic()
+    SUBROUTINE finish_mph_plic()
 
         ! Subroutine arguments
         ! None
 
         ! Local variables
         ! None
-        
-        continue
-    END SUBROUTINE finish_multiphase_plic
+
+        CONTINUE
+
+    END SUBROUTINE finish_mph_plic
 
     !================================================================
 
-    SUBROUTINE track_iface(isIface, kk, jj, ii, vff)
+    PURE SUBROUTINE trk_ifc(isIfc, kk, jj, ii, c)
     !----------------------------------------------------------------
     !   What it does:
-    !   Identifies which of the cells in the domain contains a volume
-    !   fraction of two fluids. These cells have to be taken into
-    !   account when reconstructing interfaces. Therefore the
-    !   variable containign this information is called isIface.
+    !   Track cells containing an interface.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        LOGICAL, INTENT(out) :: isIface(kk, jj, ii)
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        LOGICAL, INTENT(out) :: isIfc(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
 
-        isIface = .FALSE.
+        isIfc = .FALSE.
         DO i = 1, ii
             DO j = 1, jj
                 DO k = 1, kk
-                    IF ( vff(k,j,i) > tol .AND. vff(k,j,i) < 1.0_realk - tol ) THEN
-                        isIface(k,j,i) = .TRUE.
+                    IF ( c(k,j,i) > vofTol .AND. c(k,j,i) < 1.0_realk - vofTol ) THEN
+                        isIfc(k,j,i) = .TRUE.
                     ENDIF
                 ENDDO
             ENDDO
         ENDDO
 
-    END SUBROUTINE track_iface
+    END SUBROUTINE trk_ifc
 
     !================================================================
 
-    SUBROUTINE track_iface_vic(isIfaceVic, kk, jj, ii, isIface)
+    SUBROUTINE trk_ifc_vic(isifcVic, kk, jj, ii, isIfc)
     !----------------------------------------------------------------
     !   What it does:
-    !   Creates the isIfaceVic array, which stores TRUE
-    !   when a cell is considered "near" an interface cell. Since
-    !   indices with (.)-2 and (.)+2 are used in the momentum
-    !   advection a 5x5x5 volume is considered to be "near" to an 
-    !   interface cell. 
+    !   Track cells "near" interface containing cells. Since indices
+    !   with (.)-2 and (.)+2 are used in the momentum advection a
+    !   5x5x5 volume is considered to be "near" to an interface cell. 
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        LOGICAL, INTENT(out) :: isIfaceVic(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
+        LOGICAL, INTENT(out) :: isifcVic(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isIfc(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i, vic
 
         vic = 2
-        isIfaceVic = .FALSE.
+        isifcVic = .FALSE.
 
-        ! Find cells with interface
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    ! If there is an interface, set the 5x5x5 neighbouring cells to near interface
-                    IF ( isIface(k,j,i) ) THEN
-                        isIfaceVic(k-vic:k+vic,j-vic:j+vic,i-vic:i+vic) = .TRUE.
+                    IF ( isIfc(k,j,i) ) THEN
+                        isifcVic(k-vic:k+vic,j-vic:j+vic,i-vic:i+vic) = .TRUE.
                     ENDIF
                 ENDDO
             ENDDO
         ENDDO
 
-    END SUBROUTINE track_iface_vic
+    END SUBROUTINE trk_ifc_vic
 
     !================================================================
 
-    SUBROUTINE comp_norm_vec(normx, normy, normz, kk, jj, ii, vff, dx, dy, dz)
+    SUBROUTINE comp_norm_vec(normx, normy, normz, kk, jj, ii, c, dx, dy, dz)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the normal vector components normx, normy and normz
-    !   of the gradient of the volume fraction function vff. The 
+    !   of the gradient of the volume fraction function c. The 
     !   components are normalized by the length to get the unit
     !   normal components. The gradient in each cell is calculated
     !   by taking into account its eight surrounding cells weighted
@@ -138,7 +132,7 @@
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
 
         ! Local variables
@@ -148,7 +142,6 @@
         REAL(realk) :: length
         REAL(realk) :: sumx, sumy, sumz
 
-        ! Loop over cells
         DO i = 2, ii-1
             DO j = 2, jj-1
                 DO k = 2, kk-1
@@ -157,15 +150,14 @@
                     sumy = 0.0_realk
                     sumz = 0.0_realk
 
-                    ! Loop over stcl Stcl
                     DO d2 = -1, 1
                         DO d1 = -1, 1
                             sumx = sumx + stcl(d1, d2) * &
-                                ( vff(k+d1, j+d2, i+1) - vff(k+d1, j+d2, i-1) )
+                                ( c(k+d1, j+d2, i+1) - c(k+d1, j+d2, i-1) )
                             sumy = sumy + stcl(d1, d2) * &
-                                ( vff(k+d1, j+1, i+d2) - vff(k+d1, j-1, i+d2) )
+                                ( c(k+d1, j+1, i+d2) - c(k+d1, j-1, i+d2) )
                             sumz = sumz + stcl(d1, d2) * &
-                                ( vff(k+1, j+d1, i+d2) - vff(k-1, j+d1, i+d2) )
+                                ( c(k+1, j+d1, i+d2) - c(k-1, j+d1, i+d2) )
                         ENDDO
                     ENDDO
 
@@ -178,8 +170,8 @@
                                    normy(k,j,i)**2 + &
                                    normz(k,j,i)**2 )
 
-                    ! Normalize with direction from high vff to low vff
-                    IF ( length > tol ) THEN
+                    ! Normalize with direction from high c to low c
+                    IF ( length > vofTol ) THEN
                         normx(k,j,i) = - normx(k,j,i) / length
                         normy(k,j,i) = - normy(k,j,i) / length
                         normz(k,j,i) = - normz(k,j,i) / length
@@ -197,40 +189,83 @@
 
     !================================================================
 
-    SUBROUTINE iface_reconstruction(kk, jj, ii, vff, dx, dy, dz, ddx, ddy, ddz, normx, normy, normz, alpha)
+    SUBROUTINE rec_ifc()
     !----------------------------------------------------------------
     !   What it does:
-    !   The subroutine is just a wrapper for the subroutines, which
-    !   are used to reconstrunct the interface in cells.
+    !   Reconstruct interface on multi-grid level.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        ! None
+
+        ! Local variables
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL get_fieldptr(c, "C", igrid)
+            CALL get_fieldptr(dx, "DX", igrid)
+            CALL get_fieldptr(dy, "DY", igrid)
+            CALL get_fieldptr(dz, "DZ", igrid)
+            CALL get_fieldptr(ddx, "DDX", igrid)
+            CALL get_fieldptr(ddy, "DDY", igrid)
+            CALL get_fieldptr(ddz, "DDZ", igrid)
+            CALL get_fieldptr(normx, "NORMX", igrid)
+            CALL get_fieldptr(normy, "NORMY", igrid)
+            CALL get_fieldptr(normz, "NORMZ", igrid)
+            CALL get_fieldptr(alpha, "ALPHA", igrid)
+
+            CALL rec_ifc_grd(kk, jj, ii, c, dx, dy, dz, &
+                ddx, ddy, ddz, normx, normy, normz, alpha)
+
+        END DO
+
+    END SUBROUTINE rec_ifc
+
+    !================================================================
+
+    SUBROUTINE rec_ifc_grd(kk, jj, ii, c, dx, dy, dz, ddx, ddy, ddz, normx, normy, normz, alpha)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Reconstruct interface on grid level.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
 
         ! Local variables
-        LOGICAL :: isIface(kk, jj, ii)
+        LOGICAL :: isIfc(kk, jj, ii)
 
-        CALL track_iface(isIface, kk, jj, ii, vff)
-        CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, vff, dx, dy, dz)
-        CALL comp_alph(alpha, kk, jj, ii, vff, isIface, ddx, ddy, ddz, normx, normy, normz)
+        CALL trk_ifc(isIfc, kk, jj, ii, c)
+        CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, c, dx, dy, dz)
+        CALL comp_alpha(alpha, kk, jj, ii, c, isIfc, ddx, ddy, ddz, normx, normy, normz)
 
-    END SUBROUTINE iface_reconstruction
+    END SUBROUTINE rec_ifc_grd
 
     !================================================================
 
-    SUBROUTINE comp_alph(alpha, kk, jj, ii, vff, isIface, ddx, ddy, ddz, normx, normy, normz)
+    SUBROUTINE comp_alpha(alpha, kk, jj, ii, c, isIfc, ddx, ddy, ddz, normx, normy, normz)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine calculates the alpha value for PLIC. The 
     !   alpha value describes the distance of the interface in a cell
     !   from a defined reference (left bottom front corner).
     !   1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
-    !   2. Transform vff to a actual volume in bounds [0,0.5] * dV
+    !   2. Transform c to a actual volume in bounds [0,0.5] * dV
     !   3. Solve the standart case for alpha
     !   4. If necessary, transform alpha to its conjugate 
     !      alphaMax - alpha
@@ -241,8 +276,8 @@
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isIfc(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
 
@@ -259,7 +294,7 @@
                 DO k = 2, kk-1
 
                     ! Only calculate interface for intersected cells
-                    IF ( .NOT. isIface(k,j,i) ) THEN 
+                    IF ( .NOT. isIfc(k,j,i) ) THEN 
                         CYCLE
                     ENDIF
 
@@ -268,18 +303,18 @@
                     CALL get_order(m1, m2, m3, c1, c2, c3, &
                         normx(k,j,i), normy(k,j,i), normz(k,j,i), ddx(i), ddy(j), ddz(k))
 
-                    ! 2. Transform vff to a actual volume in bounds [0,0.5] * dV
+                    ! 2. Transform c to a actual volume in bounds [0,0.5] * dV
                     ! 3. Solve the standart cases for alpha
                     ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
                     !         Journal of Computational Physics, Bd. 164, Nr. 1, S. 228–237, Okt. 2000, doi: 10.1006/jcph.2000.6567.
                     ! To enhance performance consider inlining
-                    CALL comp_alph_std(m1, m2, m3, c1, c2, c3, alpha(k,j,i), &
-                        alphaMax(k,j,i), vff(k,j,i), ddx(i), ddy(j), ddz(k))
+                    CALL comp_alpha_std(m1, m2, m3, c1, c2, c3, alpha(k,j,i), &
+                        alphaMax(k,j,i), c(k,j,i), ddx(i), ddy(j), ddz(k))
 
                     ! 4. If necessary, transform alpha back to volume bounds [0,1] * dV
                     ! If the volume fraction function has a value above 0.5 the "inverse problem" is solved. Therefore, the result is no longer 
-                    ! alpha, but alphaMax - alpha. It can be seen as a rotation of the voxel. This is the inverse rotation (see comp_alph_std)
-                    IF ( vff(k,j,i) > 0.5_realk ) THEN
+                    ! alpha, but alphaMax - alpha. It can be seen as a rotation of the voxel. This is the inverse rotation (see comp_alpha_std)
+                    IF ( c(k,j,i) > 0.5_realk ) THEN
                         alpha(k,j,i) = alphaMax(k,j,i) - alpha(k,j,i)
                     ENDIF
 
@@ -302,15 +337,15 @@
             ENDDO
         ENDDO
 
-    END SUBROUTINE comp_alph
+    END SUBROUTINE comp_alpha
 
     !================================================================
 
-    SUBROUTINE comp_frac(cellProportion, alpha, ddx, ddy, ddz, normx, normy, normz)
+    SUBROUTINE comp_c(cellProportion, alpha, ddx, ddy, ddz, normx, normy, normz)
     !----------------------------------------------------------------
     !   What it does:
     !   This subroutine calculates the value of the volume fraction 
-    !   function vff in the voxel ddx*ddy*ddz, given alpha. 
+    !   function c in the voxel ddx*ddy*ddz, given alpha. 
     !   1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
     !   2. If necessary, transform alpha regarding to its negative
     !      normal vector components
@@ -349,13 +384,13 @@
 
         ! 3. If necessary, transform alpha to its conjugate alphaMax - alpha
         ! 4. Solve the standart case for vol
-        CALL comp_frac_std(m1, m2, m3, c1, c2, c3, alphaStd, cellProportion)
+        CALL comp_c_std(m1, m2, m3, c1, c2, c3, alphaStd, cellProportion)
 
-    END SUBROUTINE comp_frac
+    END SUBROUTINE comp_c
 
     !================================================================
 
-    SUBROUTINE comp_stag_frac(kk, jj, ii, q, vff, vffStag, ddx, ddy, ddz, normx, normy, normz, alpha, isIface)
+    SUBROUTINE comp_c_stag(kk, jj, ii, q, c, cStag, ddx, ddy, ddz, normx, normy, normz, alpha, isIfc)
     !----------------------------------------------------------------
     !   What it does:
     !   Compute the volume fraction field for the staggered cells
@@ -365,12 +400,12 @@
 
     ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii, q
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(out) :: vffStag(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(out) :: cStag(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isIfc(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -379,7 +414,7 @@
         REAL(realk) :: alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi, ddsMi, halfFractionMi
         REAL(realk) :: alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl, ddsPl, halfFractionPl
 
-        vffStag = 0.0_realk
+        cStag = 0.0_realk
 
         CALL get_spatial_indices(q, iq, jq, kq)
 
@@ -406,24 +441,24 @@
                     normzPl = normz(k+kq,j+jq,i+iq)
                     ddsPl = iq * ddxPl + jq * ddyPl + kq * ddzPl
 
-                    IF ( isIface(k,j,i) .AND. isIface(k+kq,j+jq,i+iq) ) THEN
-                        CALL comp_frac(halfFractionMi, alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
-                        CALL comp_frac(halfFractionPl, alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
-                        vffStag(k,j,i) = ( halfFractionMi * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
-                    ELSE IF ( isIface(k,j,i) .AND. .NOT. isIface(k+kq,j+jq,i+iq) ) THEN
-                        CALL comp_frac(halfFractionMi, alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
-                        vffStag(k,j,i) = ( halfFractionMi * ddsMi + vff(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
-                    ELSE IF ( .NOT. isIface(k,j,i) .AND. isIface(k+kq,j+jq,i+iq) ) THEN
-                        CALL comp_frac(halfFractionPl, alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
-                        vffStag(k,j,i) = ( vff(k,j,i) * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
+                    IF ( isIfc(k,j,i) .AND. isIfc(k+kq,j+jq,i+iq) ) THEN
+                        CALL comp_c(halfFractionMi, alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
+                        CALL comp_c(halfFractionPl, alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
+                        cStag(k,j,i) = ( halfFractionMi * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
+                    ELSE IF ( isIfc(k,j,i) .AND. .NOT. isIfc(k+kq,j+jq,i+iq) ) THEN
+                        CALL comp_c(halfFractionMi, alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
+                        cStag(k,j,i) = ( halfFractionMi * ddsMi + c(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
+                    ELSE IF ( .NOT. isIfc(k,j,i) .AND. isIfc(k+kq,j+jq,i+iq) ) THEN
+                        CALL comp_c(halfFractionPl, alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
+                        cStag(k,j,i) = ( c(k,j,i) * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE
-                        vffStag(k,j,i) = ( vff(k,j,i) * ddsMi + vff(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
+                        cStag(k,j,i) = ( c(k,j,i) * ddsMi + c(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
                     ENDIF
                 ENDDO
             ENDDO
         ENDDO
 
-    END SUBROUTINE comp_stag_frac
+    END SUBROUTINE comp_c_stag
 
     !================================================================
 
@@ -482,7 +517,7 @@
         ENDIF
 
         ! Assign new order to m1-m3 and c1-c3 respectively
-        ! The absolute value of norm(.) is a mirror transform (see comp_alph 5.).
+        ! The absolute value of norm(.) is a mirror transform (see comp_alpha 5.).
         SELECT CASE (i1)
         CASE (1); m1 = abs(normx); c1 = ddx
         CASE (2); m1 = abs(normy); c1 = ddy
@@ -505,10 +540,10 @@
 
     !================================================================
 
-    SUBROUTINE comp_alph_std(m1, m2, m3, c1, c2, c3, alphaStd, alphaMax, vff, ddx, ddy, ddz)
+    PURE SUBROUTINE comp_alpha_std(m1, m2, m3, c1, c2, c3, alphaStd, alphaMax, c, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
-    !   This is a pure subroutine to enhance the performance by 
+    !   This is a subroutine to enhance the performance by 
     !   inlining. It solves the cubic equation
     !
     !   vol = 1 / (6 * m1 * m2 * m3) * [alphaStd^3
@@ -527,7 +562,7 @@
         ! Subroutine arguments
         REAL(realk), INTENT(in) :: m1, m2, m3, c1, c2, c3
         REAL(realk), INTENT(out) :: alphaStd, alphaMax
-        REAL(realk), INTENT(in) :: vff
+        REAL(realk), INTENT(in) :: c
         REAL(realk), INTENT(in) :: ddx, ddy, ddz
         
         ! Local variables
@@ -539,9 +574,9 @@
         REAL(realk) :: qo, po
         REAL(realk) :: theta
 
-        ! Transform vff to a actual volume in bounds [0,0.5] * dV
-        ! Rotate voxel into standart configuration (see comp_alph 4.)
-        vol = MIN(vff, 1.0_realk - vff) * ddx * ddy * ddz
+        ! Transform c to a actual volume in bounds [0,0.5] * dV
+        ! Rotate voxel into standart configuration (see comp_alpha 4.)
+        vol = MIN(c, 1.0_realk - c) * ddx * ddy * ddz
         
         ! Solve the standart cases for alphaStd
         ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
@@ -550,8 +585,8 @@
         mc2 = m2*c2
         mc3 = m3*c3
         
-        IF ( mc1 < tol ) THEN
-            IF ( mc2 < tol ) THEN
+        IF ( mc1 < vofTol ) THEN
+            IF ( mc2 < vofTol ) THEN
                 ! One-dimensional case
                 alphaMax = mc3
                 alphaStd = vol / (c1*c2)
@@ -578,7 +613,7 @@
             alphaMax = mc1 + mc2 + mc3
 
             ! Define interval boundaries V1, V2, V3
-            V1 = mc1**2 * c1 / ( MAX(6.0_realk * m2 * m3, tol) )
+            V1 = mc1**2 * c1 / ( MAX(6.0_realk * m2 * m3, vofTol) )
             V2 = V1 + c1 * c2 * ( mc2 - mc1 ) / ( 2.0_realk * m3 )
             IF ( mc3 < mc1 + mc2 ) THEN
                 V3 = ( mc3**2 * ( 3.0_realk * ( mc1 + mc2 ) - mc3 ) + &
@@ -617,11 +652,11 @@
             ENDIF
         ENDIF
 
-    END SUBROUTINE comp_alph_std
+    END SUBROUTINE comp_alpha_std
 
     !================================================================
 
-    PURE SUBROUTINE comp_frac_std(m1, m2, m3, c1, c2, c3, alphaLoc, cellProportion)
+    PURE SUBROUTINE comp_c_std(m1, m2, m3, c1, c2, c3, alphaLoc, cellProportion)
     !----------------------------------------------------------------
     !   What it does:
     !   This is a pure subroutine to enhance the performance by 
@@ -660,8 +695,8 @@
         mc2 = m2*c2
         mc3 = m3*c3
 
-        IF ( mc1 < tol ) THEN
-            IF ( mc2 < tol ) THEN
+        IF ( mc1 < vofTol ) THEN
+            IF ( mc2 < vofTol ) THEN
                 ! One-dimensional case
                 alphaMax = mc3
                 alphaStd = MIN(alphaLoc, alphaMax - alphaLoc)
@@ -701,7 +736,7 @@
             alphaMax = mc1 + mc2 + mc3
             alphaStd = MIN(alphaLoc, alphaMax - alphaLoc)
 
-            V1 = mc1**2 * c1 / ( MAX(6.0_realk * m2 * m3, tol) )
+            V1 = mc1**2 * c1 / ( MAX(6.0_realk * m2 * m3, vofTol) )
 
             IF ( alphaStd <= 0.0_realk ) THEN
                 IF ( alphaLoc >= alphaMax ) THEN
@@ -732,6 +767,6 @@
             cellProportion = 1.0_realk - cellProportion
         ENDIF
 
-    END SUBROUTINE comp_frac_std
+    END SUBROUTINE comp_c_std
 
-    END MODULE multiphase_plic_mod
+    END MODULE mph_plic_mod

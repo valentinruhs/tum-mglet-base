@@ -7,7 +7,7 @@ MODULE pressuresolver_mod
     USE plog_mod
     USE multiphasecore_mod, ONLY: solve_multiphase, rho1, rho2
     USE multiphase_mod, ONLY: comp_matrix_coeff_multiphase
-    USE multiphase_material_mod, ONLY: comp_property_face_value_cent
+    USE multiphase_material_mod, ONLY: comp_prop_face
 
     IMPLICIT NONE (type, external)
     PRIVATE
@@ -1499,16 +1499,16 @@ CONTAINS
 
             IF ( solve_multiphase ) THEN
                 CALL mgpcorr_grid(kk, jj, ii, u%arr(ip3), v%arr(ip3), w%arr(ip3), &
-                    p%arr(ip3), dp%arr(ip3), ddx, ddy, ddz, rdx, rdy, rdz, fak, bp, vff_f%arr(ip3))
+                    p%arr(ip3), dp%arr(ip3), rdx, rdy, rdz, fak, bp, vff_f%arr(ip3))
             ELSE
                 CALL mgpcorr_grid(kk, jj, ii, u%arr(ip3), v%arr(ip3), w%arr(ip3), &
-                    p%arr(ip3), dp%arr(ip3), ddx, ddy, ddz, rdx, rdy, rdz, fak, bp)
+                    p%arr(ip3), dp%arr(ip3), rdx, rdy, rdz, fak, bp)
             ENDIF
         END DO
     END SUBROUTINE mgpcorr
 
 
-    SUBROUTINE mgpcorr_grid(kk, jj, ii, u, v, w, p, dp, ddx, ddy, ddz, rdx, rdy, rdz, &
+    SUBROUTINE mgpcorr_grid(kk, jj, ii, u, v, w, p, dp, rdx, rdy, rdz, &
             fak, bp, vff)
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
@@ -1518,7 +1518,6 @@ CONTAINS
         REAL(realk), INTENT(inout) :: p(kk, jj, ii)
         REAL(realk), INTENT(in) :: dp(kk, jj, ii)
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: fak
         REAL(realk), INTENT(in), OPTIONAL :: bp(kk, jj, ii)
         REAL(realk), INTENT(in), OPTIONAL :: vff(kk, jj, ii)
@@ -1570,8 +1569,7 @@ CONTAINS
             END DO
         ELSE
             IF ( PRESENT(vff) ) THEN
-                CALL comp_property_face_value_cent(kk, jj, ii, vff, rho1, rho2, 'ARI', &
-                    rhoe, rhon, rhot, ddx, ddy, ddz)
+                CALL comp_prop_face(kk, jj, ii, vff, rhoe, rhon, rhot, rho1, rho2, rdx, rdy, rdz)
 
                 DO i = 2, ii-1
                     DO j = 2, jj-1

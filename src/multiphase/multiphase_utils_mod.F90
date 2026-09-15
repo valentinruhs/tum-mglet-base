@@ -1,17 +1,18 @@
 
 !====================================================================
-!  Module: multiphase_utils_mod
+!  Module: mph_utils_mod
 !
-!  Responsibilities:
-!     - 
+!   Responsibilities:
+!   - 
 !
-!  Author:      Valentin Ruhs
-!  Created:     2026-02
-!  Last update: 2026-02
+!   Author:      Valentin Ruhs
+!   e-Mail:      valentin.ruhs@gmx.de
+!   Created:     2026-02
+!   Last update: 2026-09
 !
 !====================================================================
 
-MODULE multiphase_utils_mod
+MODULE mph_utils_mod
 
     USE MPI_f08
     USE grids_mod, ONLY: nmygrids, mygrids
@@ -20,49 +21,66 @@ MODULE multiphase_utils_mod
     USE grids_mod, ONLY: get_mgdims
     USE comms_mod, ONLY: myid
     USE precision_mod, ONLY: intk, realk, mglet_mpi_real
-    USE multiphasecore_mod, ONLY: tol
-    USE multiphase_io_mod, ONLY: initVol, initErr, trueVol
+    USE mphcore_mod, ONLY: divTol, volTol
+    USE mph_io_mod, ONLY: initVol, initErr, trueVol
 
     IMPLICIT NONE
     PRIVATE
 
-    REAL(realk), PROTECTED :: currErr = 0.0_realk
-    REAL(realk), PROTECTED :: relaErr = 0.0_realk
-
-    REAL(realk), PROTECTED :: cumFlux = 0.0_realk, cumComp = 0.0_realk
-    REAL(realk), PROTECTED :: cumClip = 0.0_realk, cumResi = 0.0_realk
-    REAL(realk), PROTECTED :: volRef  = 0.0_realk
-    INTEGER(intk), PROTECTED :: nBal  = 0
-
-    PUBLIC :: init_multiphase_utils, finish_multiphase_utils, &
-        get_spatial_indices, get_spatial_extents, get_condit_velocity, clip_vff, &
-        check_continuity, check_solenoidality, comp_vol_phase1, sanity_check
+    PUBLIC :: init_mph_utils, finish_mph_utils
 
 CONTAINS
 
-    SUBROUTINE init_multiphase_utils()
+    SUBROUTINE init_mph_utils()
 
         ! Subroutine arguments
         ! None
 
         ! Local variables
-        ! None
+        INTEGER(intk) :: n, igrid, igridf, ipar
+        INTEGER(intk) :: kk, jj, ii, kc0, jc0, ic0
+        REAL(realk), POINTER, CONTIGUOUS :: grdMask(:,:,:)
 
-        continue
-    END SUBROUTINE init_multiphase_utils
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+
+            CALL get_fieldptr(grdMask, "GRDMASK", igrid)
+            grdMask = 1.0_realk
+        END DO
+
+        DO igridf = 1, ngrid
+            ipar = iparent(igridf)
+
+            IF (ipar == 0) CYCLE
+            IF (idprocofgrd(ipar) /= myid) CYCLE
+
+            CALL get_fieldptr(grdMask, "GRDMASK", ipar)
+            CALL get_mgdims(kk, jj, ii, igridf)
+
+            ic0 = iposition(igridf)
+            jc0 = jposition(igridf)
+            kc0 = kposition(igridf)
+
+            grdMask(kc0:kc0+(kk-4)/2-1, &
+                    jc0:jc0+(jj-4)/2-1, &
+                    ic0:ic0+(ii-4)/2-1) = 0.0_realk
+        END DO
+
+    END SUBROUTINE init_mph_utils
 
     !================================================================
 
-    SUBROUTINE finish_multiphase_utils()
+    SUBROUTINE finish_mph_utils()
 
         ! Subroutine arguments
         ! None
 
         ! Local variables
         ! None
-        
-        continue
-    END SUBROUTINE finish_multiphase_utils
+
+        CONTINUE
+
+    END SUBROUTINE finish_mph_utils
 
     !================================================================
 
@@ -157,11 +175,11 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE clip_vff(kk, jj, ii, vff, ddx, ddy, ddz, volClipPhase1)
+    SUBROUTINE clip(kk, jj, ii, c, cClip)
     !----------------------------------------------------------------
     !   What it does:
-    !   Clips the volume fraction field to its boundaries [0, 1].
-    !    
+    !   Clips c to its boundaries [0, 1].
+    !
     !   Source:
     !   T. Arrufat et al., “A mass-momentum consistent, 
     !   Volume-of-Fluid method for incompressible flow on staggered 
@@ -171,102 +189,54 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
-        REAL(realk), INTENT(in), OPTIONAL :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(inout), OPTIONAL :: volClipPhase1
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(out) :: cClip(kk, jj, ii)
 
         ! Local variables
-        INTEGER(intk) :: k, j, i
-        REAL(realk) :: volBeforClip, volAfterClip, vol
+        ! None
 
-        volBeforClip = 0.0_realk
-        volAfterClip = 0.0_realk
+        cClip = MAX(MIN(c, 1.0_realk), 0.0_realk)
 
-        IF ( PRESENT(volClipPhase1) ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        vol = ddx(i) * ddy(j) * ddz(k)
-                        volBeforClip = volBeforClip + vff(k,j,i) * vol
-                    ENDDO
-                ENDDO
-            ENDDO
-        ENDIF
-
-        DO i = 1, ii
-            DO j = 1, jj
-                DO k = 1, kk
-                    IF ( vff(k,j,i) <= tol ) THEN
-                        vff(k,j,i) = 0.0_realk
-                    ELSE IF ( vff(k,j,i) >= ( 1.0_realk - tol ) ) THEN
-                        vff(k,j,i) = 1.0_realk
-                    ENDIF
-                ENDDO 
-            ENDDO
-        ENDDO
-
-        IF ( PRESENT(volClipPhase1) ) THEN
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        vol = ddx(i) * ddy(j) * ddz(k)
-                        volAfterClip = volAfterClip + vff(k,j,i) * vol
-                    ENDDO
-                ENDDO
-            ENDDO
-            volClipPhase1 = volClipPhase1 + ( volAfterClip - volBeforClip )
-        ENDIF
-
-    END SUBROUTINE clip_vff
+    END SUBROUTINE clip
 
     !================================================================
 
-    SUBROUTINE check_solenoidality(itstep, dt)
+    SUBROUTINE check_solenoidality(dt)
     !----------------------------------------------------------------
     !   What it does:
     !    
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: itstep
         REAL(realk), INTENT(in) :: dt
 
         ! Local variables
-        TYPE(field_t), POINTER :: u_f, v_f, w_f
-        TYPE(field_t), POINTER :: ddx_f, ddy_f, ddz_f
-        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: rddx(:), rddy(:), rddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:)
         INTEGER(intk) :: kk, jj, ii, k, j, i, n, igrid
         REAL(realk) :: div, divMax, divMaxGlob
 
-        div = 0.0_realk
         divMax = 0.0_realk
         divMaxGlob = 0.0_realk
 
-        CALL get_field(u_f, "U")
-        CALL get_field(v_f, "V")
-        CALL get_field(w_f, "W")
-        CALL get_field(ddx_f, "DDX")
-        CALL get_field(ddy_f, "DDY")
-        CALL get_field(ddz_f, "DDZ")
-
         DO n = 1, nmygrids
             igrid = mygrids(n)
+
             CALL get_mgdims(kk, jj, ii, igrid)
 
-            CALL u_f%get_ptr(u, igrid)
-            CALL v_f%get_ptr(v, igrid)
-            CALL w_f%get_ptr(w, igrid)
-            CALL ddx_f%get_ptr(ddx, igrid)
-            CALL ddy_f%get_ptr(ddy, igrid)
-            CALL ddz_f%get_ptr(ddz, igrid)
+            CALL get_fieldptr(u, "U", igrid)
+            CALL get_fieldptr(v, "V", igrid)
+            CALL get_fieldptr(w, "W", igrid)
+            CALL get_fieldptr(rddx, "RDDX", igrid)
+            CALL get_fieldptr(rddy, "RDDY", igrid)
+            CALL get_fieldptr(rddz, "RDDZ", igrid)
 
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        div = ( u(k,j,i) - u(k,j,i-1) ) / ddx(i) + &
-                              ( v(k,j,i) - v(k,j-1,i) ) / ddy(j) + &
-                              ( w(k,j,i) - w(k-1,j,i) ) / ddz(k)
+                        div = ( u(k,j,i) - u(k,j,i-1) )*rddx(i) + &
+                              ( v(k,j,i) - v(k,j-1,i) )*rddy(j) + &
+                              ( w(k,j,i) - w(k-1,j,i) )*rddz(k)
                         IF ( ABS(div) > divMax ) THEN
                             divMax = ABS(div)
                         ENDIF
@@ -277,7 +247,7 @@ CONTAINS
 
         CALL MPI_Allreduce(divMax, divMaxGlob, 1, mglet_mpi_real, MPI_MAX, MPI_COMM_WORLD)
 
-        IF ( divMaxGlob * dt >= tol ) THEN
+        IF ( divMaxGlob*dt >= divTol ) THEN
             IF ( myid == 0 ) THEN
                 WRITE(*,'(A,ES14.6,A,ES14.6)') "Solenoidality violated! max|div| = ", divMaxGlob, &
                     "  max|div|*dt = ", divMaxGlob*dt
@@ -288,49 +258,37 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE check_continuity(itstep)
+    SUBROUTINE check_continuity()
     !----------------------------------------------------------------
     !   What it does:
     !    
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: itstep
 
         ! Local variables
-        TYPE(field_t), POINTER :: vff_f
-        TYPE(field_t), POINTER :: ddx_f, ddy_f, ddz_f
-        TYPE(field_t), POINTER :: grdMask_f
-        REAL(realk), POINTER, CONTIGUOUS :: vff(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: grdMask(:,:,:)
         INTEGER(intk) :: kk, jj, ii, k, j, i, n, igrid
         REAL(realk) :: currVol, domaVol
 
-        currVol = 0.0_realk
-        domaVol = 0.0_realk
-
-        CALL get_field(vff_f, "VFF")
-        CALL get_field(ddx_f, "DDX")
-        CALL get_field(ddy_f, "DDY")
-        CALL get_field(ddz_f, "DDZ")
-        CALL get_field(grdMask_f, "GRDMASK")
-
         DO n = 1, nmygrids
             igrid = mygrids(n)
+
             CALL get_mgdims(kk, jj, ii, igrid)
 
-            CALL vff_f%get_ptr(vff, igrid)
-            CALL ddx_f%get_ptr(ddx, igrid)
-            CALL ddy_f%get_ptr(ddy, igrid)
-            CALL ddz_f%get_ptr(ddz, igrid)
-            CALL grdMask_f%get_ptr(grdMask, igrid)
+            CALL get_fieldptr(c, "C", igrid)
+            CALL get_fieldptr(ddx, "DDX", igrid)
+            CALL get_fieldptr(ddy, "DDY", igrid)
+            CALL get_fieldptr(ddz, "DDZ", igrid)
+            CALL get_fieldptr(ddz, "DDZ", igrid)
 
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3, kk-2
                         domaVol = domaVol + grdMask(k,j,i) * ddx(i) * ddy(j) * ddz(k)
-                        currVol = currVol + grdMask(k,j,i) * vff(k,j,i) * ddx(i) * ddy(j) * ddz(k)
+                        currVol = currVol + grdMask(k,j,i) * c(k,j,i) * ddx(i) * ddy(j) * ddz(k)
                     ENDDO
                 ENDDO
             ENDDO
@@ -350,7 +308,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_vol_phase1(kk, jj, ii, vff, ddx, ddy, ddz, volPhase1)
+    SUBROUTINE comp_vol_phase1(kk, jj, ii, c, ddx, ddy, ddz, volPhase1)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -358,7 +316,7 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(inout) :: volPhase1
 
@@ -368,7 +326,7 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    volPhase1 = volPhase1 + vff(k,j,i) * ddx(i) * ddy(j) * ddz(k)
+                    volPhase1 = volPhase1 + c(k,j,i) * ddx(i) * ddy(j) * ddz(k)
                 ENDDO
             ENDDO
         ENDDO
@@ -414,4 +372,92 @@ CONTAINS
 
     END SUBROUTINE sanity_check
 
-END MODULE multiphase_utils_mod
+    !================================================================
+
+    SUBROUTINE comp_matrix_coeff_mph()
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        ! None
+
+        ! Local variables
+        TYPE(field_t), POINTER :: c_f
+        INTEGER(intk) :: k, j, i
+        INTEGER(intk) :: kk, jj, ii
+        INTEGER(intk) :: n, igrid
+
+        REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: ae(:,:,:), aw(:,:,:), &
+                                            an(:,:,:), as(:,:,:), &
+                                            at(:,:,:), ab(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ap(:, :, :)
+        REAL(realk), POINTER, CONTIGUOUS :: c(:, :, :)
+        REAL(realk), ALLOCATABLE :: rhoe(:, :, :), rhon(:, :, :), rhot(:, :, :)
+
+        CALL get_field(c_f, "c")
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL get_fieldptr(dx, "DX", igrid)
+            CALL get_fieldptr(dy, "DY", igrid)
+            CALL get_fieldptr(dz, "DZ", igrid)
+
+            CALL get_fieldptr(rdx, "RDX", igrid)
+            CALL get_fieldptr(rdy, "RDY", igrid)
+            CALL get_fieldptr(rdz, "RDZ", igrid)
+
+            CALL get_fieldptr(aw, "GSAW", igrid)
+            CALL get_fieldptr(ae, "GSAE", igrid)
+            CALL get_fieldptr(as, "GSAS", igrid)
+            CALL get_fieldptr(an, "GSAN", igrid)
+            CALL get_fieldptr(ab, "GSAB", igrid)
+            CALL get_fieldptr(at, "GSAT", igrid)
+
+            CALL get_fieldptr(ap, "GSAP", igrid)
+
+            CALL c_f%get_ptr(c, igrid)
+
+            IF ( .NOT. ALLOCATED(rhoe)) ALLOCATE(rhoe(kk, jj, ii))
+            IF ( .NOT. ALLOCATED(rhon)) ALLOCATE(rhon(kk, jj, ii))
+            IF ( .NOT. ALLOCATED(rhot)) ALLOCATE(rhot(kk, jj, ii))
+
+            CALL comp_prop_face(kk, jj, ii, c, rhoe, rhon, rhot, rho1, rho2, rdx, rdy, rdz)
+
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        ae(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i)*rhoe(k,j,i))
+                        aw(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i-1)*rhoe(k,j,i-1))
+                        an(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j)*rhon(k,j,i))
+                        as(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j-1)*rhon(k,j-1,i))
+                        at(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k)*rhot(k,j,i))
+                        ab(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k-1)*rhot(k-1,j,i))
+                    ENDDO
+                ENDDO
+            ENDDO
+
+            DO i = 3, ii-2
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        ap(k, j, i) = -( ae(k,j,i) + aw(k,j,i) + an(k,j,i) &
+                                       + as(k,j,i) + at(k,j,i) + ab(k,j,i) )
+                    END DO
+                END DO
+            END DO
+
+            IF ( ALLOCATED(rhot)) DEALLOCATE(rhot)
+            IF ( ALLOCATED(rhon)) DEALLOCATE(rhon)
+            IF ( ALLOCATED(rhoe)) DEALLOCATE(rhoe)
+            
+        ENDDO
+
+    END SUBROUTINE comp_matrix_coeff_mph
+
+END MODULE mph_utils_mod
