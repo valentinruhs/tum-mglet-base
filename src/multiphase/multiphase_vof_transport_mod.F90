@@ -1,16 +1,17 @@
 !====================================================================
-!  Module: multiphase_vof_transport_mod
+!  Module: mph_vof_mod
 !
-!  Responsibilities:
-!     - Solves the incompressible volume fraction transport equation
+!   Responsibilities:
+!   - 
 !
-!  Author:      Valentin Ruhs
-!  Created:     2026-02
-!  Last update: 2026-02
+!   Author:      Valentin Ruhs
+!   e-Mail:      valentin.ruhs@gmx.de
+!   Created:     2026-02
+!   Last update: 2026-09
 !
 !====================================================================
 
-MODULE multiphase_vof_transport_mod
+MODULE mph_vof_mod
 
     USE MPI_f08
     USE precision_mod, ONLY: intk, realk, mglet_mpi_real
@@ -19,25 +20,25 @@ MODULE multiphase_vof_transport_mod
     USE fields_mod, ONLY: get_field
     USE grids_mod, ONLY: get_mgdims, get_mgbasb, get_gradpxflag
     USE pointers_mod, ONLY: get_ip3
-    USE multiphase_plic_mod, ONLY: comp_frac, iface_reconstruction, comp_stag_frac, track_iface, track_iface_vic
-    USE multiphasecore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, permutation_multiphase, omitAdve, omitDiff, omitExte, tol, checkContinuity, checkSolenoidality, checkBalance, fluxLimiter, fluxCentered
-    USE multiphase_material_mod, ONLY: comp_prop, comp_prop_arit_face, comp_property_face_value_stag
+    USE mph_plic_mod, ONLY: comp_frac, iface_reconstruction, comp_stag_frac, track_iface, track_iface_vic
+    USE mphcore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, permutation_mph, omitAdve, omitDiff, omitExte, tol, checkContinuity, checkSolenoidality, checkBalance, fluxLimiter, fluxCentered
+    USE mph_material_mod, ONLY: comp_prop, comp_prop_arit_face, comp_property_face_value_stag
     USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
     USE parent_mod, ONLY: parent
     USE ftoc_mod, ONLY: ftoc
     USE grids_mod, ONLY: minlevel, maxlevel
     USE err_mod, ONLY: errr, err_abort
-    USE multiphase_utils_mod, ONLY: get_spatial_indices, get_spatial_extents, get_condit_velocity, clip_vff, check_continuity, check_solenoidality, comp_vol_phase1, sanity_check
+    USE mph_utils_mod, ONLY: get_spatial_indices, get_spatial_extents, get_condit_velocity, clip_vff, check_continuity, check_solenoidality, comp_vol_phase1, sanity_check
 
-    IMPLICIT NONE
+    IMPLICIT NONE(type, external)
     PRIVATE
 
-    PUBLIC :: init_multiphase_vof_transport, finish_multiphase_vof_transport, multiphase_solve
+    PUBLIC :: init_mph_vof_transport, finish_mph_vof_transport, mph_solve
 
 CONTAINS
 
-    SUBROUTINE init_multiphase_vof_transport()
+    SUBROUTINE init_mph_vof_transport()
 
         ! Subroutine arguments
         ! None
@@ -45,21 +46,45 @@ CONTAINS
         ! Local variables
         ! None
 
-        continue
-    END SUBROUTINE init_multiphase_vof_transport
+        ! Initialize vof fields
+        ! Staggered volume fraction fields
+        CALL set_field("CS1" istag=1, buffers=.TRUE.)
+        CALL set_field("CS2" jstag=1, buffers=.TRUE.)
+        CALL set_field("CS3" kstag=1, buffers=.TRUE.)
+
+        ! Staggered density fields
+        CALL set_field("DS1" istag=1, buffers=.TRUE.)
+        CALL set_field("DS2" jstag=1, buffers=.TRUE.)
+        CALL set_field("DS3" kstag=1, buffers=.TRUE.)
+
+        ! Staggered momentum fields
+        CALL set_field("M1", istag=1, buffers=.TRUE.)
+        CALL set_field("M2", jstag=1, buffers=.TRUE.)
+        CALL set_field("M3", kstag=1, buffers=.TRUE.)
+
+        ! Main compression coefficient field
+        CALL set_field("CWY", buffers=.TRUE.)
+
+        ! Staggered compression coefficient fields
+        CALL set_field("CWY1", istag=1)
+        CALL set_field("CWY2", jstag=1)
+        CALL set_field("CWY3", kstag=1)
+
+    END SUBROUTINE init_mph_vof_transport
 
     !================================================================
 
-    SUBROUTINE finish_multiphase_vof_transport()
+    SUBROUTINE finish_mph_vof_transport()
 
         ! Subroutine arguments
         ! None
 
         ! Local variables
         ! None
-        
+
         continue
-    END SUBROUTINE finish_multiphase_vof_transport
+
+    END SUBROUTINE finish_mph_vof_transport
 
     !================================================================
 
@@ -103,7 +128,7 @@ CONTAINS
                         fluxWidth = abs( vel(k,j,i) ) * dt
                         dds = il * ddx(i) + jl * ddy(j) + kl * ddz(k)
                         IF ( fluxWidth > 0.5_realk*dds  ) THEN
-                            CALL err_abort(155, "fluxWidth > 0.5*cellWidth! Hint: reduce dt", __FILE__, __LINE__)
+                            CALL err_abort(vofErr, "fluxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
                         ENDIF
 
                         IF ( isIface(k,j,i) ) THEN
@@ -130,7 +155,7 @@ CONTAINS
                         fluxWidth = abs( vel(k,j,i) ) * dt
                         dds = il * ddx(i+il) + jl * ddy(j+jl) + kl * ddz(k+kl)
                         IF ( fluxWidth > 0.5_realk*dds  ) THEN
-                            CALL err_abort(155, "fluxWidth > 0.5*cellWidth! Hint: reduce dt", __FILE__, __LINE__)
+                            CALL err_abort(vofErr, "fluxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
                         ENDIF
 
                         IF ( isIface(k+kl,j+jl,i+il) ) THEN
@@ -212,7 +237,7 @@ CONTAINS
                         fluxWidth = ABS( advr(k,j,i) ) * dt
 
                         IF ( fluxWidth > 0.5_realk*ddsDon ) THEN
-                            CALL err_abort(155, "fluxWidth > 0.5*cellWidth! Hint: reduce dt", __FILE__, __LINE__)
+                            CALL err_abort(vofErr, "fluxWidth > 0.5*cellWidt.", __FILE__, __LINE__)
                         ENDIF
 
                         IF ( isIface(k+kl,j+jl,i+il) ) THEN
@@ -260,7 +285,7 @@ CONTAINS
                     ddslPl = il*ddx(iDonPl) + jl*ddy(jDonPl) + kl*ddz(kDonPl)
 
                     IF ( fluxWidth > 0.5_realk*ddslMi .OR. fluxWidth > 0.5_realk*ddslPl ) THEN
-                        CALL err_abort(155, "fluxWidth > 0.5*cellWidth! Hint: reduce dt", __FILE__, __LINE__)
+                        CALL err_abort(vofErr, "fluxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
                     ENDIF
 
                     ddsqMi = iq*ddx(iDonMi) + jq*ddy(jDonMi) + kq*ddz(kDonMi)
@@ -336,7 +361,7 @@ CONTAINS
     !   y -> x -> z or
     !   z -> y -> x.
     !
-    !   The permutation_multiphase variable controls which version 
+    !   The permutation_mph variable controls which version 
     !   is used.
     !
     !   Source:
@@ -359,7 +384,7 @@ CONTAINS
         INTEGER(intk) :: permutationIndex
 
         ! permutationIndex only changes in a new time-step
-        permutationIndex = mod(iteration-1, permutation_multiphase)
+        permutationIndex = mod(iteration-1, permutation_mph)
 
         ! Select permutation of split advection
         SELECT CASE (permutationIndex)
@@ -381,7 +406,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE multiphase_solve(u_f, v_f, w_f, vff_f, p_f, dt, &
+    SUBROUTINE mph_solve(u_f, v_f, w_f, vff_f, p_f, dt, &
         itstep, uo_f, vo_f, wo_f)
     !----------------------------------------------------------------
     !   What it does:
@@ -471,7 +496,7 @@ CONTAINS
             CALL exte_operator(kk, jj, ii, uo, vo, wo)
         END DO
 
-    END SUBROUTINE multiphase_solve
+    END SUBROUTINE mph_solve
 
     !================================================================
 
@@ -487,13 +512,13 @@ CONTAINS
     !   Type 1, truly time-persistant fields:
     !       - exist over multiple time-steps
     !       - previous time-steps status is important
-    !       - initialized in core/multiphasecore with set_field
+    !       - initialized in core/mphcore with set_field
     !       Examples: u, v, w, p, vff
     !   Type 2, falsely time-persistant fields:
     !       - exist over multiple time-steps
     !       - previous time-steps status is overwritten
     !       - final result is needed for post-processing
-    !       - initialized in core/multiphasecore with set_field
+    !       - initialized in core/mphcore with set_field
     !       Examples: normx, normy, normz and alpha
     !   Type 3, sweep-persistant fields:
     !       - exist over multiple sweeps
@@ -524,12 +549,9 @@ CONTAINS
 
         ! Local variables
         INTEGER(intk) :: q, l, advSeq(3), splitDir
-        TYPE(field_t), POINTER :: dx_f, dy_f, dz_f, ddx_f, ddy_f, ddz_f
-        TYPE(field_t), POINTER :: normx_f, normy_f, normz_f, alpha_f
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:), ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:), alpha(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:), vff(:,:,:)
-        TYPE(field_t) :: vffStag(3), mom(3), cWyStag(3), cWy
         CHARACTER(len=1), PARAMETER :: component(3) = ['X','Y','Z']
         INTEGER(intk) :: n, igrid, kk, jj, ii, ip3, ilevel
         REAL(realk), ALLOCATABLE :: dStag(:,:,:), advr(:,:,:), adve(:,:,:)
@@ -539,106 +561,19 @@ CONTAINS
 
         IF ( omitAdve ) RETURN
 
-        volPhase1r = 0.0_realk
-        volPhase1r1 = 0.0_realk
-        volFluxPhase1 = 0.0_realk
-        volCompPhase1 = 0.0_realk
-        volClipPhase1 = 0.0_realk
+        CALL comp_ifc() ! compute interface parameters
+        CALL comp_cWy() ! compute compression coefficient
 
-        ! Get missing truly time-persistant fields
-        CALL get_field(dx_f, "DX")
-        CALL get_field(dy_f, "DY")
-        CALL get_field(dz_f, "DZ")
-        CALL get_field(ddx_f, "DDX")
-        CALL get_field(ddy_f, "DDY")
-        CALL get_field(ddz_f, "DDZ")
-
-        ! Get falsely time-persistant fields
-        CALL get_field(normx_f, "NORMX")
-        CALL get_field(normy_f, "NORMY")
-        CALL get_field(normz_f, "NORMZ")
-        CALL get_field(alpha_f, "ALPHA")
-
-        ! Initialize sweep persistant fields
         DO q = 1, 3
-            CALL vffStag(q)%init("VFFSTAG"//component(q))
-            CALL vffStag(q)%init_buffers()
-            CALL mom(q)%init("MOM"//component(q))
-            CALL mom(q)%init_buffers()
-            CALL cWyStag(q)%init("CWYSTAG"//component(q))
+            CALL comp_c_stag(q)   ! compute staggered volume fraction
+            CALL comp_d_stag(q)   ! compute staggered density
+            CALL comp_m_stag(q)   ! compute staggered momentum
+            CALL comp_cWy_stag(q) ! compute staggered compression coefficient
+
+
+            CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom(q)%arr(ip3))
+            CALL comp_cWy(kk, jj, ii, vffStag(q)%arr(ip3), cWyStag(q)%arr(ip3))
         END DO
-        CALL cWy%init("CWY")
-
-        DO n = 1, nmygrids
-            igrid = mygrids(n)
-            CALL get_mgdims(kk, jj, ii, igrid)
-            CALL get_ip3(ip3, igrid)
-
-            ! Get pointers to truly time-persistant fields
-            CALL vff_f%get_ptr(vff, igrid)
-            CALL dx_f%get_ptr(dx, igrid)
-            CALL dy_f%get_ptr(dy, igrid)
-            CALL dz_f%get_ptr(dz, igrid)
-            CALL ddx_f%get_ptr(ddx, igrid)
-            CALL ddy_f%get_ptr(ddy, igrid)
-            CALL ddz_f%get_ptr(ddz, igrid)
-
-            ! Get pointers to falsely time-persistant fields
-            CALL normx_f%get_ptr(normx, igrid)
-            CALL normy_f%get_ptr(normy, igrid)
-            CALL normz_f%get_ptr(normz, igrid)
-            CALL alpha_f%get_ptr(alpha, igrid)
-
-            ! Interface reconstruction and Weymouth-Yue-Coefficient on all grids
-            CALL iface_reconstruction(kk, jj, ii, vff, dx, dy, dz, &
-                ddx, ddy, ddz, normx, normy, normz, alpha)
-            CALL comp_cWy(kk, jj, ii, vff, cWy%arr(ip3))
-
-            ! Compute Volume of Phase 1 at rk-step r
-            CALL comp_vol_phase1(kk, jj, ii, vff, ddx, ddy, ddz, volPhase1r)
-        ENDDO
-
-        CALL MPI_Allreduce(MPI_IN_PLACE, volPhase1r, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
-
-        DO n = 1, nmygrids
-            igrid = mygrids(n)
-            CALL get_mgdims(kk, jj, ii, igrid)
-            CALL get_ip3(ip3, igrid)
-
-            ! Get pointers to truly time-persistant fields
-            CALL u_f%get_ptr(u, igrid)
-            CALL v_f%get_ptr(v, igrid)
-            CALL w_f%get_ptr(w, igrid)
-            CALL vff_f%get_ptr(vff, igrid)
-            CALL ddx_f%get_ptr(ddx, igrid)
-            CALL ddy_f%get_ptr(ddy, igrid)
-            CALL ddz_f%get_ptr(ddz, igrid)
-
-            ! Get pointers to falsely time-persistant fields
-            CALL normx_f%get_ptr(normx, igrid)
-            CALL normy_f%get_ptr(normy, igrid)
-            CALL normz_f%get_ptr(normz, igrid)
-            CALL alpha_f%get_ptr(alpha, igrid)
-
-            ! Allocate sweep-temporary fields
-            ALLOCATE(dStag(kk, jj, ii))
-            ALLOCATE(isIface(kk, jj, ii))
-
-            CALL track_iface(isIface, kk, jj, ii, vff)
-
-            DO q = 1, 3
-                CALL comp_stag_frac(kk, jj, ii, q, vff, vffStag(q)%arr(ip3), &
-                    ddx, ddy, ddz, normx, normy, normz, alpha, isIface)
-                CALL comp_prop(kk, jj, ii, vffStag(q)%arr(ip3), &
-                    dStag, rho1, rho2)
-                CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom(q)%arr(ip3))
-                CALL comp_cWy(kk, jj, ii, vffStag(q)%arr(ip3), cWyStag(q)%arr(ip3))
-            END DO
-
-            ! Deallocate sweep-temporary fields
-            DEALLOCATE(isIface)
-            DEALLOCATE(dStag)
-        ENDDO
 
         ! Fine to coarse within the domain (ftoc)
         DO ilevel = maxlevel, minlevel, -1
@@ -1124,34 +1059,65 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom)
+    SUBROUTINE comp_m_stag(q)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Compute the volume fraction field for the staggered cells
+    !   depending on q. The staggered cells are either moved by
+    !   1/2 ddx, 1/2 ddy or 1/2 ddz.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: q
+
+        ! Local variables
+        CHARACTER(len=3) :: dFldName, mFileName
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: dSq(:,:,:), mSq(:,:,:)
+
+        dFldName = "DS"//q
+        mFldName = "MS"//q
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL get_fieldptr(dSq, dFldName, igrid)
+            CALL get_fieldptr(u, "U", igrid)
+            CALL get_fieldptr(v, "V", igrid)
+            CALL get_fieldptr(w, "W", igrid)
+            CALL get_fieldptr(mSq, mFldName, igrid)
+
+            CALL comp_m_stag_grd(kk, jj, ii, q, dSq, u, v, w, mSq)
+        END DO
+
+    END SUBROUTINE comp_m_stag
+
+    !================================================================
+
+    SUBROUTINE comp_m_stag_grd(kk, jj, ii, q, dSq, u, v, w, mSq)
     !----------------------------------------------------------------
     !   What it does:
     !    
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        INTEGER(intk), INTENT(in) :: q
-        REAL(realk), INTENT(in) :: dStag(kk, jj, ii)
+        INTEGER(intk), INTENT(in) :: kk, jj, ii, q
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-        REAL(realk), INTENT(out) :: mom(kk,jj,ii)
+        REAL(realk), INTENT(in) :: dSq(kk, jj, ii)
+        REAL(realk), INTENT(out) :: mSq(kk,jj,ii)
 
         ! Local variables
-        INTEGER(intk) :: i, j, k
         REAL(realk) :: vel(kk, jj, ii)
 
-        CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
+        CALL sel_velocity(kk, jj, ii, q, u, v, w, vel)
 
-        DO i = 2, ii-2
-            DO j = 2, jj-2
-                DO k = 2, kk-2
-                    mom(k,j,i) = vel(k,j,i) * dStag(k,j,i)
-                END DO
-            END DO
-        END DO
+        mSq = vel*dSq
 
-    END SUBROUTINE comp_momentum
+    END SUBROUTINE comp_m_stag_grd
 
     !================================================================
 
@@ -1196,7 +1162,37 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_cWy(kk, jj, ii, vff, cWy)
+    SUBROUTINE comp_cWy()
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Comput nondirectional compression coefficient c on multi-grid
+    !   level.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        ! None
+
+        ! Local variables
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:), cWy(:,:,:)
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL get_fieldptr(c, "C", igrid)
+            CALL get_fieldptr(cWy, "CWY", igrid)
+
+            CALL comp_cWy_grd(kk, jj, ii, c, cWy)
+        END DO
+
+    END SUBROUTINE comp_cWy
+
+    !================================================================
+
+    SUBROUTINE comp_cWy_grd(kk, jj, ii, vff, cWy)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the nondirectional compression coefficient c for 
@@ -1235,7 +1231,7 @@ CONTAINS
             END DO
         END DO
 
-    END SUBROUTINE comp_cWy
+    END SUBROUTINE comp_cWy_grd
 
     !================================================================
 
@@ -1264,7 +1260,7 @@ CONTAINS
         ELSEIF ( fluxLimiter == 'ENO' ) THEN
             CALL comp_adve_eno(kk, jj, ii, q, l, u, v, w, advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
         ELSE
-            CALL err_abort(155, "Unknown flux limiter!", __FILE__, __LINE__)
+            CALL err_abort(vofErr, "Unknown flux limiter!", __FILE__, __LINE__)
         ENDIF
 
     END SUBROUTINE comp_adve
@@ -1417,7 +1413,7 @@ CONTAINS
     !   
     !   Sources: 
     !   G. Tryggvason, R. Scardovelli, and S. Zaleski, Direct
-    !   Numerical Simulations of Gas–Liquid Multiphase Flows,
+    !   Numerical Simulations of Gas–Liquid mph Flows,
     !   1st ed. Cambridge University Press, 2011.
     !   doi: 10.1017/CBO9780511975264.
     !
@@ -1557,4 +1553,4 @@ CONTAINS
 
     END SUBROUTINE comp_advr_linear_interpolation
 
-END MODULE multiphase_vof_transport_mod
+END MODULE mph_vof_mod

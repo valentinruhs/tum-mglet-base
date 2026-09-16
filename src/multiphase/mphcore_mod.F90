@@ -60,8 +60,9 @@ CONTAINS
         CHARACTER(len=*), PARAMETER :: descD = "density fld."
         CHARACTER(len=*), PARAMETER :: descC = "vol. frac. fld."
         CHARACTER(len=*), PARAMETER :: descCp = "prev. vol. frac. fld."
-        CHARACTER(len=*), PARAMETER :: descNorm = "iface. norm. vec."
-        CHARACTER(len=*), PARAMETER :: descAlpha = "iface. plane const."
+        CHARACTER(len=*), PARAMETER :: descNorm = "ifc. norm. vec."
+        CHARACTER(len=*), PARAMETER :: descAlpha = "ifc. plane const."
+        CHARACTER(len=*), PARAMETER :: descIsIfc = "cell with ifc."
         CHARACTER(len=*), PARAMETER :: descGrdmask = "uncov. cells"
 
         hasMph = .FALSE.
@@ -118,12 +119,12 @@ CONTAINS
             dread=.FALSE., required=.TRUE., dwrite=.FALSE., buffers=.TRUE.)
         CALL set_field("WP", description=descVel, kstag=1, &
             dread=.FALSE., required=.TRUE., dwrite=.FALSE., buffers=.TRUE.)
-        CALL set_field("D", description=descD, &
-            dread=.FALSE., required=.TRUE., dwrite=.FALSE., buffers=.TRUE.)
 
         CALL set_field("C", description=descC, &
             dread=.TRUE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
         CALL set_field("CP", description=descCp, &
+            dread=.FALSE., required=.TRUE., dwrite=.FALSE., buffers=.TRUE.)
+        CALL set_field("D", description=descD, &
             dread=.FALSE., required=.TRUE., dwrite=.FALSE., buffers=.TRUE.)
         CALL set_field("NORMX", description=descNorm, &
             dread=.FALSE., required=.FALSE., dwrite=.TRUE., buffers=.TRUE.)
@@ -132,6 +133,8 @@ CONTAINS
         CALL set_field("NORMZ", description=descNorm, &
             dread=.FALSE., required=.FALSE., dwrite=.TRUE., buffers=.TRUE.)
         CALL set_field("ALPHA", description=descAlpha, &
+            dread=.FALSE., required=.FALSE., dwrite=.TRUE., buffers=.TRUE.)
+        CALL set_field("ISIFC", description=descIsIfc, &
             dread=.FALSE., required=.FALSE., dwrite=.TRUE., buffers=.TRUE.)
 
         CALL set_field("GRDMASK", description=descGrdmask, &

@@ -18,7 +18,7 @@
     USE mph_utils_mod, ONLY: get_spatial_indices
     USE mphcore_mod, ONLY: vofTol
         
-    IMPLICIT NONE
+    IMPLICIT NONE(type, external)
     PRIVATE 
 
     PUBLIC :: init_mph_plic, finish_mph_plic
@@ -33,7 +33,7 @@
         ! Local variables
         ! None
 
-        CALL rec_ifc()
+        CALL comp_ifc()
 
     END SUBROUTINE init_mph_plic
 
@@ -189,7 +189,7 @@
 
     !================================================================
 
-    SUBROUTINE rec_ifc()
+    SUBROUTINE comp_ifc()
     !----------------------------------------------------------------
     !   What it does:
     !   Reconstruct interface on multi-grid level.
@@ -206,6 +206,7 @@
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
+        LOGICAL, POINTER, CONTIGUOUS :: isIfc(:,:,:)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -223,17 +224,17 @@
             CALL get_fieldptr(normy, "NORMY", igrid)
             CALL get_fieldptr(normz, "NORMZ", igrid)
             CALL get_fieldptr(alpha, "ALPHA", igrid)
+            CALL get_fieldptr(isIfc, "ISIFC", igrid)
 
-            CALL rec_ifc_grd(kk, jj, ii, c, dx, dy, dz, &
-                ddx, ddy, ddz, normx, normy, normz, alpha)
-
+            CALL comp_ifc_grd(kk, jj, ii, c, dx, dy, dz, &
+                ddx, ddy, ddz, normx, normy, normz, alpha, isIfc)
         END DO
 
-    END SUBROUTINE rec_ifc
+    END SUBROUTINE comp_ifc
 
     !================================================================
 
-    SUBROUTINE rec_ifc_grd(kk, jj, ii, c, dx, dy, dz, ddx, ddy, ddz, normx, normy, normz, alpha)
+    SUBROUTINE comp_ifc_grd(kk, jj, ii, c, dx, dy, dz, ddx, ddy, ddz, normx, normy, normz, alpha, isIfc)
     !----------------------------------------------------------------
     !   What it does:
     !   Reconstruct interface on grid level.
@@ -246,15 +247,16 @@
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
+        LOGICAL, INTENT(out) :: isIfc(kk, jj, ii)
 
         ! Local variables
-        LOGICAL :: isIfc(kk, jj, ii)
+        ! None
 
         CALL trk_ifc(isIfc, kk, jj, ii, c)
         CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, c, dx, dy, dz)
         CALL comp_alpha(alpha, kk, jj, ii, c, isIfc, ddx, ddy, ddz, normx, normy, normz)
 
-    END SUBROUTINE rec_ifc_grd
+    END SUBROUTINE comp_ifc_grd
 
     !================================================================
 
@@ -390,7 +392,7 @@
 
     !================================================================
 
-    SUBROUTINE comp_c_stag(kk, jj, ii, q, c, cStag, ddx, ddy, ddz, normx, normy, normz, alpha, isIfc)
+    SUBROUTINE comp_c_stag(q)
     !----------------------------------------------------------------
     !   What it does:
     !   Compute the volume fraction field for the staggered cells
@@ -398,10 +400,58 @@
     !   1/2 ddx, 1/2 ddy or 1/2 ddz.
     !----------------------------------------------------------------
 
-    ! Subroutine arguments
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: q
+
+        ! Local variables
+        CHARACTER(len=3) :: cFldName
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:), cSq(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
+        LOGICAL, POINTER, CONTIGUOUS :: isIfc(:,:,:)
+
+        cFldName = "CS"//q
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL get_fieldptr(c, "C", igrid)
+            CALL get_fieldptr(cSq, cFldName, igrid)
+            CALL get_fieldptr(ddx, "DDX", igrid)
+            CALL get_fieldptr(ddy, "DDY", igrid)
+            CALL get_fieldptr(ddz, "DDZ", igrid)
+            CALL get_fieldptr(normx, "NORMX", igrid)
+            CALL get_fieldptr(normy, "NORMY", igrid)
+            CALL get_fieldptr(normz, "NORMZ", igrid)
+            CALL get_fieldptr(alpha, "ALPHA", igrid)
+            CALL get_fieldptr(isIfc, "ISIFC", igrid)
+
+            CALL comp_c_stag_grd(kk, jj, ii, q, c, cSq, &
+                ddx, ddy, ddz, normx, normy, normz, alpha, isIfc)
+        END DO
+
+    END SUBROUTINE comp_c_stag
+
+    !================================================================
+
+    SUBROUTINE comp_c_stag_grd(kk, jj, ii, q, c, cSq, &
+        ddx, ddy, ddz, normx, normy, normz, alpha, isIfc)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Compute the volume fraction field for the staggered cells
+    !   depending on q. The staggered cells are either moved by
+    !   1/2 ddx, 1/2 ddy or 1/2 ddz.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii, q
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
-        REAL(realk), INTENT(out) :: cStag(kk, jj, ii)
+        REAL(realk), INTENT(out) :: cSq(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
@@ -414,7 +464,7 @@
         REAL(realk) :: alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi, ddsMi, halfFractionMi
         REAL(realk) :: alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl, ddsPl, halfFractionPl
 
-        cStag = 0.0_realk
+        cSq = 0.0_realk
 
         CALL get_spatial_indices(q, iq, jq, kq)
 
@@ -444,21 +494,21 @@
                     IF ( isIfc(k,j,i) .AND. isIfc(k+kq,j+jq,i+iq) ) THEN
                         CALL comp_c(halfFractionMi, alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
                         CALL comp_c(halfFractionPl, alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
-                        cStag(k,j,i) = ( halfFractionMi * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
+                        cSq(k,j,i) = ( halfFractionMi * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE IF ( isIfc(k,j,i) .AND. .NOT. isIfc(k+kq,j+jq,i+iq) ) THEN
                         CALL comp_c(halfFractionMi, alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
-                        cStag(k,j,i) = ( halfFractionMi * ddsMi + c(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
+                        cSq(k,j,i) = ( halfFractionMi * ddsMi + c(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE IF ( .NOT. isIfc(k,j,i) .AND. isIfc(k+kq,j+jq,i+iq) ) THEN
                         CALL comp_c(halfFractionPl, alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
-                        cStag(k,j,i) = ( c(k,j,i) * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
+                        cSq(k,j,i) = ( c(k,j,i) * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE
-                        cStag(k,j,i) = ( c(k,j,i) * ddsMi + c(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
+                        cSq(k,j,i) = ( c(k,j,i) * ddsMi + c(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
                     ENDIF
                 ENDDO
             ENDDO
         ENDDO
 
-    END SUBROUTINE comp_c_stag
+    END SUBROUTINE comp_c_stag_grd
 
     !================================================================
 

@@ -17,12 +17,11 @@ MODULE mph_props_mod
     USE mphcore_mod, ONLY: gmol1, gmol2, rho1, rho2
     USE mph_utils_mod, ONLY: clip
     USE precision_mod, ONLY: intk, realk
-    USE grids_mod, ONLY: nmygrids, mygrids
+    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims
     USE fields_mod, ONLY: get_fieldptr
-    USE grids_mod, ONLY: get_mgdims
     USE err_mod, ONLY: err_abort
 
-    IMPLICIT NONE
+    IMPLICIT NONE(type, external)
     PRIVATE
 
     PUBLIC :: init_mph_props, finish_mph_props, comp_prop, &
@@ -36,11 +35,18 @@ CONTAINS
         ! None
 
         ! Local variables
+        CHARACTER(len=*), PARAMETER :: descDBa = "density back"
+        CHARACTER(len=*), PARAMETER :: descDLe = "density left"
+        CHARACTER(len=*), PARAMETER :: descDTo = "density top"
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
         REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: d(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: g(:,:,:)
+
+        CALL set_field("DBA", description=descDBa)
+        CALL set_field("DLE", description=descDLe)
+        CALL set_field("DTO", description=descDTo)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -91,15 +97,17 @@ CONTAINS
         ! Local variables
         ! None
 
-        IF ( .NOT. PRESENT(meanFlag) ) THEN
-            comp_prop_arit(kk, jj, ii, c, propFld, prop1, prop2)
-            RETURN
-        END IF
-
-        IF ( meanFlag == 'arit' ) THEN
-            comp_prop_arit(kk, jj, ii, c, propFld, prop1, prop2)
-        ELSE IF ( meanFlag == 'harm' ) THEN
-            comp_prop_harm(kk, jj, ii, c, propFld, prop1, prop2)
+        IF ( PRESENT(meanFlag) ) THEN
+            SELECT CASE ( meanFlag )
+            CASE ( 'arit' )
+                CALL comp_prop_arit(kk, jj, ii, c, propFld, prop1, prop2)
+            CASE ( 'harm' )
+                CALL comp_prop_harm(kk, jj, ii, c, propFld, prop1, prop2)
+            CASE DEFAULT
+                CALL err_abort(propsErr, "unknown meanFlag.", __FILE__, __LINE__)
+            END SELECT
+        ELSE
+            CALL comp_prop_arit(kk, jj, ii, c, propFld, prop1, prop2)
         END IF
 
     END SUBROUTINE comp_prop
@@ -120,11 +128,11 @@ CONTAINS
         REAL(realk), INTENT(in) :: prop1, prop2
 
         ! Local variables
-        REAL(realk) :: cClip(kk, jj, ii)
+        ! None
 
-        CALL clip(kk, jj, ii, c, cClip)
+        CALL clip(kk, jj, ii, c)
 
-        propFld = cClip*( prop1 - prop2 ) + prop2
+        propFld = c*( prop1 - prop2 ) + prop2
 
         IF ( MAXVAL(propFld) > MAX(prop1, prop2) .OR. &
              MINVAL(propFld) < MIN(prop1, prop2) ) THEN
@@ -149,15 +157,14 @@ CONTAINS
         REAL(realk), INTENT(in) :: prop1, prop2
 
         ! Local variables
-        REAL(realk) :: cClip(kk, jj, ii)
         REAL(realk) :: invProp1, invProp2
 
-        CALL clip(kk, jj, ii, c, cClip)
+        invProp1 = 1.0_realk/prop1
+        invProp2 = 1.0_realk/prop2
 
-        invProp1 = 1.0_realk/( prop1 + 1.0E-16_realk )
-        invProp2 = 1.0_realk/( prop2 + 1.0E-16_realk )
+        CALL clip(kk, jj, ii, c)
 
-        propFld = 1.0_realk/( cClip*( invProp1 - invProp2 ) + invProp2 )
+        propFld = 1.0_realk/( c*( invProp1 - invProp2 ) + invProp2 )
 
         IF ( MAXVAL(propFld) > MAX(prop1, prop2) .OR. &
              MINVAL(propFld) < MIN(prop1, prop2) ) THEN
@@ -168,62 +175,78 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_prop_face(kk, jj, ii, propFld, pe, pn, pt, prop1, prop2, rdx, rdy, rdz, meanFlag)
+    SUBROUTINE comp_prop_face(kk, jj, ii, c, pBa, pLe, pTo, prop1, prop2, ddx, ddy, ddz, meanFlag)
     !----------------------------------------------------------------
     !   What it does:
-    !   Compute property face values depending on a property field
-    !   using one of two means.
+    !   Compute property face values depending on c using one of two 
+    !   means.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: propFld(kk, jj, ii)
-        REAL(realk), INTENT(out) :: pe(kk, jj, ii), pn(kk, jj, ii), pt(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(out) :: pBa(kk, jj, ii), pLe(kk, jj, ii), pTo(kk, jj, ii)
         REAL(realk), INTENT(in) :: prop1, prop2
-        REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         CHARACTER(len=4), INTENT(in), OPTIONAL :: meanFlag
 
         ! Local variables
         ! None
 
-        IF ( .NOT. PRESENT(meanFlag) ) THEN
-            CALL comp_prop_arit_face(kk, jj, ii, propFld, pe, pn, pt, prop1, prop2, rdx, rdy, rdz)
-            RETURN
-        END IF
-
-        IF ( meanFlag == 'arit' ) THEN
-            CALL comp_prop_arit_face(kk, jj, ii, propFld, pe, pn, pt, prop1, prop2, rdx, rdy, rdz)
-        ELSE IF ( meanFlag == 'harm' ) THEN
-            CALL comp_prop_harm_face(kk, jj, ii, propFld, pe, pn, pt, prop1, prop2, rdx, rdy, rdz)
+        IF ( PRESENT(meanFlag) ) THEN
+            SELECT CASE ( meanFlag )
+            CASE ( 'arit' )
+                CALL comp_prop_arit_face(kk, jj, ii, c, pBa, pLe, pTo, prop1, prop2, ddx, ddy, ddz)
+            CASE ( 'harm' )
+                CALL comp_prop_harm_face(kk, jj, ii, c, pBa, pLe, pTo, prop1, prop2, ddx, ddy, ddz)
+            CASE DEFAULT
+                CALL err_abort(propsErr, "unknown meanFlag.", __FILE__, __LINE__)
+            END SELECT
+        ELSE
+            CALL comp_prop_arit_face(kk, jj, ii, c, pBa, pLe, pTo, prop1, prop2, ddx, ddy, ddz)
         END IF
 
     END SUBROUTINE comp_prop_face
 
     !================================================================
 
-    SUBROUTINE comp_prop_arit_face(kk, jj, ii, propFld, pe, pn, pt, prop1, prop2, rdx, rdy, rdz)
+    SUBROUTINE comp_prop_arit_face(kk, jj, ii, c, pBa, pLe, pTo, prop1, prop2, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
-    !   Compute property face values depending on a property field
-    !   using the arithmetic mean.
+    !   Compute property face values depending on c using the 
+    !   arithmetic mean.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: propFld(kk, jj, ii)
-        REAL(realk), INTENT(out) :: pe(kk, jj, ii), pn(kk, jj, ii), pt(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(out) :: pBa(kk, jj, ii), pLe(kk, jj, ii), pTo(kk, jj, ii)
         REAL(realk), INTENT(in) :: prop1, prop2
-        REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
+        REAL(realk) :: w(2), phi
+
+        CALL clip(kk, jj, ii, c)
 
         DO i = 2, ii-2
             DO j = 2, jj-2
                 DO k = 2, kk-2
-                    pe(k,j,i) = (propFld(k,j,i)*rdx(i) + propFld(k,j,i+1)*rdx(i+1))/(rdx(i) + rdx(i+1))
-                    pn(k,j,i) = (propFld(k,j,i)*rdy(j) + propFld(k,j+1,i)*rdy(j+1))/(rdy(j) + rdy(j+1))
-                    pt(k,j,i) = (propFld(k,j,i)*rdz(k) + propFld(k+1,j,i)*rdz(k+1))/(rdz(k) + rdz(k+1))
+                    w(1) = ddx(i)
+                    w(2) = ddx(i+1)
+                    phi = MIN(MAX((c(k,j,i)*w(1) + c(k,j,i+1)*w(2))/SUM(w), 0.0_realk), 1.0_realk)
+                    pBa(k,j,i) = phi*( prop1 - prop2 ) + prop2
+
+                    w(1) = ddy(j)
+                    w(2) = ddy(j+1)
+                    phi = MIN(MAX((c(k,j,i)*w(1) + c(k,j+1,i)*w(2))/SUM(w), 0.0_realk), 1.0_realk)
+                    pLe(k,j,i) = phi*( prop1 - prop2 ) + prop2
+
+                    w(1) = ddz(k)
+                    w(2) = ddz(k+1)
+                    phi = MIN(MAX((c(k,j,i)*w(1) + c(k+1,j,i)*w(2))/SUM(w), 0.0_realk), 1.0_realk)
+                    pTo(k,j,i) = phi*( prop1 - prop2 ) + prop2
                 ENDDO
             ENDDO
         ENDDO
@@ -232,32 +255,50 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_prop_harm_face(kk, jj, ii, propFld, pe, pn, pt, prop1, prop2, rdx, rdy, rdz)
+    SUBROUTINE comp_prop_harm_face(kk, jj, ii, c, pBa, pLe, pTo, prop1, prop2, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
-    !   Compute property face values depending on a property field
-    !   using the harmonic mean.
+    !   Compute property face values depending on c using the 
+    !   harmonic mean.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: propFld(kk, jj, ii)
-        REAL(realk), INTENT(out) :: pe(kk, jj, ii), pn(kk, jj, ii), pt(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(out) :: pBa(kk, jj, ii), pLe(kk, jj, ii), pTo(kk, jj, ii)
         REAL(realk), INTENT(in) :: prop1, prop2
-        REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
-        REAL(realk) :: invPropFld(kk, jj, ii)
+        REAL(realk) :: w(2), phi
+        REAL(realk) :: invProp1, invProp2
 
-        invPropFld = 1.0_realk/( propFld + 1.0E-16_realk )
+        invProp1 = 1.0_realk/prop1
+        invProp2 = 1.0_realk/prop2
+
+        CALL clip(kk, jj, ii, c)
 
         DO i = 2, ii-2
             DO j = 2, jj-2
                 DO k = 2, kk-2
-                    pe(k,j,i) = (rdx(i) + rdx(i+1))/(invPropFld(k,j,i)*rdx(i) + invPropFld(k,j,i+1)*rdx(i+1))
-                    pn(k,j,i) = (rdy(j) + rdy(j+1))/(invPropFld(k,j,i)*rdy(j) + invPropFld(k,j+1,i)*rdy(j+1))
-                    pt(k,j,i) = (rdz(k) + rdz(k+1))/(invPropFld(k,j,i)*rdz(k) + invPropFld(k+1,j,i)*rdz(k+1))
+                    w(1) = ddx(i)
+                    w(2) = ddx(i+1)
+                    phi = MIN(MAX(2.0_realk*(c(k,j,i)*w(1) + c(k,j,i+1)*w(2))/SUM(w) - &
+                                  0.5_realk, 0.0_realk), 1.0_realk)
+                    pBa(k,j,i) = 1.0_realk/( phi*( invProp1 - invProp2 ) + invProp2 )
+
+                    w(1) = ddy(j)
+                    w(2) = ddy(j+1)
+                    phi = MIN(MAX(2.0_realk*(c(k,j,i)*w(1) + c(k,j+1,i)*w(2))/SUM(w) - &
+                                  0.5_realk, 0.0_realk), 1.0_realk)
+                    pLe(k,j,i) = 1.0_realk/( phi*( invProp1 - invProp2 ) + invProp2 )
+
+                    w(1) = ddz(k)
+                    w(2) = ddz(k+1)
+                    phi = MIN(MAX(2.0_realk*(c(k,j,i)*w(1) + c(k+1,j,i)*w(2))/SUM(w) - &
+                                  0.5_realk, 0.0_realk), 1.0_realk)
+                    pTo(k,j,i) = 1.0_realk/( phi*( invProp1 - invProp2 ) + invProp2 )
                 ENDDO
             ENDDO
         ENDDO
@@ -269,21 +310,6 @@ CONTAINS
     SUBROUTINE comp_prop_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz, meanFlag)
     !----------------------------------------------------------------
     !   What it does:
-    !   Compute the "matrix" of a property on the staggered cells
-    !   faces. Each cell has 6 faces, hence there are 18 values to 
-    !   compute. Since (k,j,i)+ = (k+kq,j+jq,i+iq)- this reduces to
-    !   9 values. 
-    !
-    !   Of these 9, 6 are the same:
-    !   xStagN = yStagE, xStagW = yStagS,
-    !   xStagT = zStagE, xStagW = zStagB,
-    !   yStagT = zStagN, yStagS = zStagB.
-    !
-    !   Additionally, the diagonal values are trivial, since they
-    !   are centered on the pressure grid.
-    !
-    !   -> 3 different values to compute!
-    !
     !   Compute property face values on the staggered grid depending 
     !   on c using one of two means.
     !----------------------------------------------------------------
@@ -299,15 +325,17 @@ CONTAINS
         ! Local variables
         ! None
 
-        IF ( .NOT. PRESENT(meanFlag) ) THEN
-            comp_prop_arit_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz)
-            RETURN
-        END IF
-
-        IF ( meanFlag == 'arit' ) THEN
-            comp_prop_arit_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz)
-        ELSE IF ( meanFlag == 'harm' ) THEN
-            comp_prop_harm_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz)
+        IF ( PRESENT(meanFlag) ) THEN
+            SELECT CASE ( meanFlag )
+            CASE ( 'arit' )
+                CALL comp_prop_arit_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz)
+            CASE ( 'harm' )
+                CALL comp_prop_harm_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz)
+            CASE DEFAULT
+                CALL err_abort(propsErr, "unknown meanFlag.", __FILE__, __LINE__)
+            END SELECT
+        ELSE
+            CALL comp_prop_arit_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz)
         END IF
 
     ENDSUBROUTINE comp_prop_face_stag
@@ -332,6 +360,8 @@ CONTAINS
         INTEGER(intk) :: k, j, i
         REAL(realk) :: w(4), phi
 
+        CALL clip(kk, jj, ii, c)
+
         DO i = 2, ii-2
             DO j = 2, jj-2
                 DO k = 2, kk-2
@@ -339,27 +369,24 @@ CONTAINS
                     w(2) = ddx(i+1)*ddy(j)
                     w(3) = ddx(i)*ddy(j+1)
                     w(4) = ddx(i+1)*ddy(j+1)
-                    phi = MIN(MAX(2.0_realk*(c(k,j,i)*w(1) + c(k,j,i+1)*w(2) + &
-                                                    c(k,j+1,i)*w(3) + c(k,j+1,i+1)*w(4))/SUM(w) - &
-                                                    0.5_realk, 0.0_realk), 1.0_realk)
+                    phi = MIN(MAX((c(k,j,i)*w(1) + c(k,j,i+1)*w(2) + &
+                                   c(k,j+1,i)*w(3) + c(k,j+1,i+1)*w(4))/SUM(w), 0.0_realk), 1.0_realk)
                     pxy(k,j,i) = phi*( prop1 - prop2 ) + prop2
 
                     w(1) = ddx(i)*ddz(k)
                     w(2) = ddx(i+1)*ddz(k)
                     w(3) = ddx(i)*ddz(k+1)
                     w(4) = ddx(i+1)*ddz(k+1)
-                    phi = MIN(MAX(2.0_realk*(c(k,j,i)*w(1) + c(k,j,i+1)*w(2) + &
-                                                    c(k+1,j,i)*w(3) + c(k+1,j,i+1)*w(4))/SUM(w) - &
-                                                    0.5_realk, 0.0_realk), 1.0_realk)
+                    phi = MIN(MAX((c(k,j,i)*w(1) + c(k,j,i+1)*w(2) + &
+                                   c(k+1,j,i)*w(3) + c(k+1,j,i+1)*w(4))/SUM(w), 0.0_realk), 1.0_realk)
                     pxz(k,j,i) = phi*( prop1 - prop2 ) + prop2
 
                     w(1) = ddy(j)*ddz(k)
                     w(2) = ddy(j+1)*ddz(k)
                     w(3) = ddy(j)*ddz(k+1)
                     w(4) = ddy(j+1)*ddz(k+1)
-                    phi = MIN(MAX(2.0_realk*(c(k,j,i)*w(1) + c(k,j+1,i)*w(2) + &
-                                                    c(k+1,j,i)*w(3) + c(k+1,j+1,i)*w(4))/SUM(w) - &
-                                                    0.5_realk, 0.0_realk), 1.0_realk)
+                    phi = MIN(MAX((c(k,j,i)*w(1) + c(k,j+1,i)*w(2) + &
+                                   c(k+1,j,i)*w(3) + c(k+1,j+1,i)*w(4))/SUM(w), 0.0_realk), 1.0_realk)
                     pyz(k,j,i) = phi*( prop1 - prop2 ) + prop2
                 ENDDO
             ENDDO
@@ -388,8 +415,10 @@ CONTAINS
         REAL(realk) :: w(4), phi
         REAL(realk) :: invProp1, invProp2
 
-        invProp1 = 1.0_realk/( prop1 + 1.0E-16_realk )
-        invProp2 = 1.0_realk/( prop2 + 1.0E-16_realk )
+        invProp1 = 1.0_realk/prop1
+        invProp2 = 1.0_realk/prop2
+
+        CALL clip(kk, jj, ii, c)
 
         DO i = 2, ii-2
             DO j = 2, jj-2
@@ -425,5 +454,47 @@ CONTAINS
         ENDDO
 
     ENDSUBROUTINE comp_prop_harm_face_stag
+
+    !================================================================
+
+    SUBROUTINE comp_d_stag(q)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Compute the volume fraction field for the staggered cells
+    !   depending on q. The staggered cells are either moved by
+    !   1/2 ddx, 1/2 ddy or 1/2 ddz.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: q
+
+        ! Local variables
+        CHARACTER(len=3) :: cFldName, dFldName
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk), POINTER, CONTIGUOUS :: cSq(:,:,:), dSq(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
+        LOGICAL, POINTER, CONTIGUOUS :: isIfc(:,:,:)
+
+        cFldName = "CS"//q
+        dFldName = "DS"//q
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL get_fieldptr(cSq, cFldName, igrid)
+            CALL get_fieldptr(dSq, dFldName, igrid)
+            CALL get_fieldptr(ddx, "DDX", igrid)
+            CALL get_fieldptr(ddy, "DDY", igrid)
+            CALL get_fieldptr(ddz, "DDZ", igrid)
+
+            CALL comp_prop(kk, jj, ii, cSq, dSq, prop1, prop2, meanFlag='arit')
+        END DO
+
+    END SUBROUTINE comp_d_stag
 
 END MODULE mph_props_mod
