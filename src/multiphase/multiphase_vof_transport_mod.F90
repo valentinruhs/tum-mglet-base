@@ -21,7 +21,7 @@ MODULE mph_vof_mod
     USE grids_mod, ONLY: get_mgdims, get_mgbasb, get_gradpxflag
     USE pointers_mod, ONLY: get_ip3
     USE mph_plic_mod, ONLY: comp_frac, iface_reconstruction, comp_stag_frac, track_iface, track_iface_vic
-    USE mphcore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, permutation_mph, omitAdve, omitDiff, omitExte, tol, checkContinuity, checkSolenoidality, checkBalance, fluxLimiter, fluxCentered
+    USE mphcore_mod, ONLY: gmol1, gmol2, rho1, rho2, grav, permutation_mph, omitAdve, omitDiff, omitExte, tol, checkContinuity, checkSolenoidality, checkBalance, flxLimiter, flxCentered
     USE mph_material_mod, ONLY: comp_prop, comp_prop_arit_face, comp_property_face_value_stag
     USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
@@ -66,9 +66,9 @@ CONTAINS
         CALL set_field("CWY", buffers=.TRUE.)
 
         ! Staggered compression coefficient fields
-        CALL set_field("CWY1", istag=1)
-        CALL set_field("CWY2", jstag=1)
-        CALL set_field("CWY3", kstag=1)
+        CALL set_field("CWYS1", istag=1)
+        CALL set_field("CWYS2", jstag=1)
+        CALL set_field("CWYS3", kstag=1)
 
     END SUBROUTINE init_mph_vof_transport
 
@@ -88,11 +88,11 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_flux_cent(kk, jj, ii, l, vff, vel, vffFlux1, &
-        ddx, ddy, ddz, normx, normy, normz, alpha, isIface, dt)
+    SUBROUTINE comp_flx(kk, jj, ii, l, vff, vel, vffFlx1, &
+        ddx, ddy, ddz, normx, normy, normz, alpha, isIfc, dt)
     !----------------------------------------------------------------
     !   What it does:
-    !   Computes the volume fraction fluxes depending on the current
+    !   Computes the volume fraction flxes depending on the current
     !   split direction. It is distinguished between several cases 
     !   depending on the velocity direction and volume fraction 
     !   field.
@@ -103,11 +103,11 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: l
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: vel(kk, jj, ii)
-        REAL(realk), INTENT(out) :: vffFlux1(kk, jj, ii)
+        REAL(realk), INTENT(out) :: vffFlx1(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isIfc(kk, jj, ii)
         REAL(realk), INTENT(in) :: dt
 
         ! Local variables
@@ -115,7 +115,7 @@ CONTAINS
         INTEGER(intk) :: kl, jl, il
         REAL(realk) :: dds, norms
         REAL(realk) :: dimx, dimy, dimz
-        REAL(realk) :: fluxedProp, fluxWidth, fluxAlpha
+        REAL(realk) :: flxedProp, flxWidth, flxAlpha
 
         CALL get_spatial_indices(l, il, jl, kl)
 
@@ -124,73 +124,73 @@ CONTAINS
                 DO k = 2, kk-2
                     IF ( vel(k,j,i) > tol ) THEN
 
-                        ! Compute face flux width and characteristic length
-                        fluxWidth = abs( vel(k,j,i) ) * dt
+                        ! Compute face flx width and characteristic length
+                        flxWidth = abs( vel(k,j,i) ) * dt
                         dds = il * ddx(i) + jl * ddy(j) + kl * ddz(k)
-                        IF ( fluxWidth > 0.5_realk*dds  ) THEN
-                            CALL err_abort(vofErr, "fluxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
+                        IF ( flxWidth > 0.5_realk*dds  ) THEN
+                            CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
                         ENDIF
 
-                        IF ( isIface(k,j,i) ) THEN
+                        IF ( isIfc(k,j,i) ) THEN
                             ! Compute norm
                             norms = il * normx(k,j,i) + jl * normy(k,j,i) + kl * normz(k,j,i)
 
                             ! Compute proper alpha
-                            fluxAlpha = alpha(k,j,i) - norms * ( dds - fluxWidth )
+                            flxAlpha = alpha(k,j,i) - norms * ( dds - flxWidth )
 
-                            ! Compute dimensions of fluxed cuboid
-                            dimx = il*fluxWidth + (1-il)*ddx(i)
-                            dimy = jl*fluxWidth + (1-jl)*ddy(j)
-                            dimz = kl*fluxWidth + (1-kl)*ddz(k)
+                            ! Compute dimensions of flxed cuboid
+                            dimx = il*flxWidth + (1-il)*ddx(i)
+                            dimy = jl*flxWidth + (1-jl)*ddy(j)
+                            dimz = kl*flxWidth + (1-kl)*ddz(k)
 
-                            ! Compute vff in fluxed cuboid
-                            CALL comp_frac(fluxedProp, fluxAlpha, dimx, dimy, dimz, &
+                            ! Compute vff in flxed cuboid
+                            CALL comp_frac(flxedProp, flxAlpha, dimx, dimy, dimz, &
                                 normx(k,j,i), normy(k,j,i), normz(k,j,i))
                         ELSE
-                            fluxedProp = vff(k,j,i)
+                            flxedProp = vff(k,j,i)
                         END IF
                     ELSE IF ( vel(k,j,i) < -tol ) THEN
 
-                        ! Compute face flux width and characteristic length
-                        fluxWidth = abs( vel(k,j,i) ) * dt
+                        ! Compute face flx width and characteristic length
+                        flxWidth = abs( vel(k,j,i) ) * dt
                         dds = il * ddx(i+il) + jl * ddy(j+jl) + kl * ddz(k+kl)
-                        IF ( fluxWidth > 0.5_realk*dds  ) THEN
-                            CALL err_abort(vofErr, "fluxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
+                        IF ( flxWidth > 0.5_realk*dds  ) THEN
+                            CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
                         ENDIF
 
-                        IF ( isIface(k+kl,j+jl,i+il) ) THEN
+                        IF ( isIfc(k+kl,j+jl,i+il) ) THEN
                             ! Compute proper alpha
-                            fluxAlpha = alpha(k+kl,j+jl,i+il)
+                            flxAlpha = alpha(k+kl,j+jl,i+il)
 
-                            ! Compute dimensions of fluxed cuboid
-                            dimx = il*fluxWidth + (1-il)*ddx(i+il)
-                            dimy = jl*fluxWidth + (1-jl)*ddy(j+jl)
-                            dimz = kl*fluxWidth + (1-kl)*ddz(k+kl)
+                            ! Compute dimensions of flxed cuboid
+                            dimx = il*flxWidth + (1-il)*ddx(i+il)
+                            dimy = jl*flxWidth + (1-jl)*ddy(j+jl)
+                            dimz = kl*flxWidth + (1-kl)*ddz(k+kl)
 
-                            ! Compute vff in fluxed cuboid
-                            CALL comp_frac(fluxedProp, fluxAlpha, dimx, dimy, dimz, &
+                            ! Compute vff in flxed cuboid
+                            CALL comp_frac(flxedProp, flxAlpha, dimx, dimy, dimz, &
                                 normx(k+kl,j+jl,i+il), normy(k+kl,j+jl,i+il), normz(k+kl,j+jl,i+il))
                         ELSE
-                            fluxedProp = vff(k+kl,j+jl,i+il)
+                            flxedProp = vff(k+kl,j+jl,i+il)
                         END IF
                     ELSE
-                        fluxedProp = 0.0_realk
+                        flxedProp = 0.0_realk
                     END IF
-                    vffFlux1(k,j,i) = vel(k,j,i) * fluxedProp
+                    vffFlx1(k,j,i) = vel(k,j,i) * flxedProp
                 END DO
             END DO
         END DO
 
-    END SUBROUTINE comp_flux_cent
+    END SUBROUTINE comp_flx
 
     !================================================================
 
-    SUBROUTINE comp_flux_stag(kk, jj, ii, q, l, vff, advr, &
-        vffFlux1, vffFlux2, ddx, ddy, ddz, &
-        normx, normy, normz, alpha, isIface, dt)
+    SUBROUTINE comp_flx_stag(kk, jj, ii, q, l, vff, advr, &
+        vffFlx1, vffFlx2, ddx, ddy, ddz, &
+        normx, normy, normz, alpha, isIfc, dt)
     !----------------------------------------------------------------
     !   What it does:
-    !   Computes the volume fraction fluxes depending on the current
+    !   Computes the volume fraction flxes depending on the current
     !   split direction. It is distinguished between several cases 
     !   depending on the velocity direction and volume fraction 
     !   field.
@@ -200,20 +200,20 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii, q, l
         REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: advr(kk, jj, ii)
-        REAL(realk), INTENT(out) :: vffFlux1(kk, jj, ii), vffFlux2(kk, jj, ii)
+        REAL(realk), INTENT(out) :: vffFlx1(kk, jj, ii), vffFlx2(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isIface(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isIfc(kk, jj, ii)
         REAL(realk), INTENT(in) :: dt
 
         ! Local variables
         INTEGER(intk) :: k, j, i, kl, jl, il, kq, jq, iq
         INTEGER(intk) :: kDonMi, jDonMi, iDonMi, kDonPl, jDonPl, iDonPl
-        REAL(realk) :: ddsDon, normDon, fluxWidth, fluxAlpha, fluxDimx, fluxDimy, fluxDimz, fluxedProp
+        REAL(realk) :: ddsDon, normDon, flxWidth, flxAlpha, flxDimx, flxDimy, flxDimz, flxedProp
         REAL(realk) :: farEnd, ddslMi, ddslPl, ddsqMi, ddsqPl
-        REAL(realk) :: normlMi, normlPl, normqMi, normqPl, fluxAlphaMi, fluxAlphaPl
-        REAL(realk) :: fluxDimxMi, fluxDimyMi, fluxDimzMi, fluxDimxPl, fluxDimyPl, fluxDimzPl, fracMi, fracPl
+        REAL(realk) :: normlMi, normlPl, normqMi, normqPl, flxAlphaMi, flxAlphaPl
+        REAL(realk) :: flxDimxMi, flxDimyMi, flxDimzMi, flxDimxPl, flxDimyPl, flxDimzPl, fracMi, fracPl
 
 
         CALL get_spatial_indices(l, il, jl, kl)
@@ -224,8 +224,8 @@ CONTAINS
                 DO j = 2, jj-2
                     DO k = 2, kk-2
                         IF ( ABS(advr(k,j,i)) < tol ) THEN
-                            vffFlux1(k,j,i) = 0.0_realk
-                            vffFlux2(k,j,i) = 0.0_realk
+                            vffFlx1(k,j,i) = 0.0_realk
+                            vffFlx2(k,j,i) = 0.0_realk
                             CYCLE
                         ENDIF
 
@@ -234,28 +234,28 @@ CONTAINS
                                 + jl*normy(k+kl,j+jl,i+il) &
                                 + kl*normz(k+kl,j+jl,i+il)
 
-                        fluxWidth = ABS( advr(k,j,i) ) * dt
+                        flxWidth = ABS( advr(k,j,i) ) * dt
 
-                        IF ( fluxWidth > 0.5_realk*ddsDon ) THEN
-                            CALL err_abort(vofErr, "fluxWidth > 0.5*cellWidt.", __FILE__, __LINE__)
+                        IF ( flxWidth > 0.5_realk*ddsDon ) THEN
+                            CALL err_abort(vofErr, "flxWidth > 0.5*cellWidt.", __FILE__, __LINE__)
                         ENDIF
 
-                        IF ( isIface(k+kl,j+jl,i+il) ) THEN
-                            fluxAlpha = alpha(k+kl,j+jl,i+il) - normDon * &
+                        IF ( isIfc(k+kl,j+jl,i+il) ) THEN
+                            flxAlpha = alpha(k+kl,j+jl,i+il) - normDon * &
                                 ( 0.5_realk*ddsDon &
-                                - MERGE(fluxWidth, 0.0_realk, advr(k,j,i) > 0.0_realk) )
-                            fluxDimx = il*fluxWidth + (1-il)*ddx(i)
-                            fluxDimy = jl*fluxWidth + (1-jl)*ddy(j)
-                            fluxDimz = kl*fluxWidth + (1-kl)*ddz(k)
-                            CALL comp_frac(fluxedProp, fluxAlpha, fluxDimx, fluxDimy, fluxDimz, &
+                                - MERGE(flxWidth, 0.0_realk, advr(k,j,i) > 0.0_realk) )
+                            flxDimx = il*flxWidth + (1-il)*ddx(i)
+                            flxDimy = jl*flxWidth + (1-jl)*ddy(j)
+                            flxDimz = kl*flxWidth + (1-kl)*ddz(k)
+                            CALL comp_frac(flxedProp, flxAlpha, flxDimx, flxDimy, flxDimz, &
                                 normx(k+kl,j+jl,i+il), normy(k+kl,j+jl,i+il), &
                                 normz(k+kl,j+jl,i+il))
                         ELSE
-                            fluxedProp = vff(k+kl,j+jl,i+il)
+                            flxedProp = vff(k+kl,j+jl,i+il)
                         ENDIF
 
-                        vffFlux1(k,j,i) = advr(k,j,i) * fluxedProp
-                        vffFlux2(k,j,i) = advr(k,j,i) * ( 1.0_realk - fluxedProp )
+                        vffFlx1(k,j,i) = advr(k,j,i) * flxedProp
+                        vffFlx2(k,j,i) = advr(k,j,i) * ( 1.0_realk - flxedProp )
                     END DO
                 END DO
             END DO
@@ -265,8 +265,8 @@ CONTAINS
                     DO k = 2, kk-2
 
                     IF ( ABS(advr(k,j,i)) < tol ) THEN
-                        vffFlux1(k,j,i) = 0.0_realk
-                        vffFlux2(k,j,i) = 0.0_realk
+                        vffFlx1(k,j,i) = 0.0_realk
+                        vffFlx2(k,j,i) = 0.0_realk
                         CYCLE
                     ENDIF
 
@@ -279,13 +279,13 @@ CONTAINS
 
                     iDonPl = iDonMi+iq ; jDonPl = jDonMi+jq ; kDonPl = kDonMi+kq
 
-                    fluxWidth = ABS( advr(k,j,i) ) * dt
+                    flxWidth = ABS( advr(k,j,i) ) * dt
 
                     ddslMi = il*ddx(iDonMi) + jl*ddy(jDonMi) + kl*ddz(kDonMi)
                     ddslPl = il*ddx(iDonPl) + jl*ddy(jDonPl) + kl*ddz(kDonPl)
 
-                    IF ( fluxWidth > 0.5_realk*ddslMi .OR. fluxWidth > 0.5_realk*ddslPl ) THEN
-                        CALL err_abort(vofErr, "fluxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
+                    IF ( flxWidth > 0.5_realk*ddslMi .OR. flxWidth > 0.5_realk*ddslPl ) THEN
+                        CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
                     ENDIF
 
                     ddsqMi = iq*ddx(iDonMi) + jq*ddy(jDonMi) + kq*ddz(kDonMi)
@@ -296,51 +296,51 @@ CONTAINS
                     normqMi = iq*normx(kDonMi,jDonMi,iDonMi) + jq*normy(kDonMi,jDonMi,iDonMi) + kq*normz(kDonMi,jDonMi,iDonMi)
                     normqPl = iq*normx(kDonPl,jDonPl,iDonPl) + jq*normy(kDonPl,jDonPl,iDonPl) + kq*normz(kDonPl,jDonPl,iDonPl)
 
-                    IF ( isIface(kDonMi,jDonMi,iDonMi) ) THEN
-                        fluxAlphaMi = alpha(kDonMi,jDonMi,iDonMi) &
-                                    - normlMi * farEnd * ( ddslMi - fluxWidth ) &
+                    IF ( isIfc(kDonMi,jDonMi,iDonMi) ) THEN
+                        flxAlphaMi = alpha(kDonMi,jDonMi,iDonMi) &
+                                    - normlMi * farEnd * ( ddslMi - flxWidth ) &
                                     - normqMi * 0.5_realk * ddsqMi
 
-                        fluxDimxMi = il*fluxWidth + iq*ddx(iDonMi)/2.0_realk + (1-il-iq)*ddx(iDonMi)
-                        fluxDimyMi = jl*fluxWidth + jq*ddy(jDonMi)/2.0_realk + (1-jl-jq)*ddy(jDonMi)
-                        fluxDimzMi = kl*fluxWidth + kq*ddz(kDonMi)/2.0_realk + (1-kl-kq)*ddz(kDonMi)
+                        flxDimxMi = il*flxWidth + iq*ddx(iDonMi)/2.0_realk + (1-il-iq)*ddx(iDonMi)
+                        flxDimyMi = jl*flxWidth + jq*ddy(jDonMi)/2.0_realk + (1-jl-jq)*ddy(jDonMi)
+                        flxDimzMi = kl*flxWidth + kq*ddz(kDonMi)/2.0_realk + (1-kl-kq)*ddz(kDonMi)
 
-                        CALL comp_frac(fracMi, fluxAlphaMi, fluxDimxMi, fluxDimyMi, fluxDimzMi, &
+                        CALL comp_frac(fracMi, flxAlphaMi, flxDimxMi, flxDimyMi, flxDimzMi, &
                             normx(kDonMi,jDonMi,iDonMi), normy(kDonMi,jDonMi,iDonMi), normz(kDonMi,jDonMi,iDonMi))
                     ELSE
                         fracMi = vff(kDonMi,jDonMi,iDonMi)
                     ENDIF
 
-                    IF ( isIface(kDonPl,jDonPl,iDonPl) ) THEN
-                        fluxAlphaPl = alpha(kDonPl,jDonPl,iDonPl) &
-                                    - normlPl * farEnd * ( ddslPl - fluxWidth )
+                    IF ( isIfc(kDonPl,jDonPl,iDonPl) ) THEN
+                        flxAlphaPl = alpha(kDonPl,jDonPl,iDonPl) &
+                                    - normlPl * farEnd * ( ddslPl - flxWidth )
 
-                        fluxDimxPl = il*fluxWidth + iq*ddx(iDonPl)/2.0_realk + (1-il-iq)*ddx(iDonPl)
-                        fluxDimyPl = jl*fluxWidth + jq*ddy(jDonPl)/2.0_realk + (1-jl-jq)*ddy(jDonPl)
-                        fluxDimzPl = kl*fluxWidth + kq*ddz(kDonPl)/2.0_realk + (1-kl-kq)*ddz(kDonPl)
+                        flxDimxPl = il*flxWidth + iq*ddx(iDonPl)/2.0_realk + (1-il-iq)*ddx(iDonPl)
+                        flxDimyPl = jl*flxWidth + jq*ddy(jDonPl)/2.0_realk + (1-jl-jq)*ddy(jDonPl)
+                        flxDimzPl = kl*flxWidth + kq*ddz(kDonPl)/2.0_realk + (1-kl-kq)*ddz(kDonPl)
 
-                        CALL comp_frac(fracPl, fluxAlphaPl, fluxDimxPl, fluxDimyPl, fluxDimzPl, &
+                        CALL comp_frac(fracPl, flxAlphaPl, flxDimxPl, flxDimyPl, flxDimzPl, &
                             normx(kDonPl,jDonPl,iDonPl), normy(kDonPl,jDonPl,iDonPl), &
                             normz(kDonPl,jDonPl,iDonPl))
                     ELSE
                         fracPl = vff(kDonPl,jDonPl,iDonPl)
                     ENDIF
 
-                    fluxedProp = ( fracMi*ddsqMi + fracPl*ddsqPl ) / ( ddsqMi + ddsqPl )
+                    flxedProp = ( fracMi*ddsqMi + fracPl*ddsqPl ) / ( ddsqMi + ddsqPl )
 
-                    vffFlux1(k,j,i) = advr(k,j,i) * fluxedProp
-                    vffFlux2(k,j,i) = advr(k,j,i) * ( 1.0_realk - fluxedProp )
+                    vffFlx1(k,j,i) = advr(k,j,i) * flxedProp
+                    vffFlx2(k,j,i) = advr(k,j,i) * ( 1.0_realk - flxedProp )
 
                     END DO
                 END DO
             END DO
         ENDIF
 
-    END SUBROUTINE comp_flux_stag
+    END SUBROUTINE comp_flx_stag
 
     !================================================================
 
-    PURE SUBROUTINE def_advection_sequence(iteration, advSeq)
+    PURE SUBROUTINE def_adv_seq(iteration, advSeq)
     !----------------------------------------------------------------
     !   What it does:
     !   Defines the sequence, in which the volume fraction vff and
@@ -402,7 +402,7 @@ CONTAINS
                 advSeq = [2, 1, 3]
         END SELECT
 
-    END SUBROUTINE def_advection_sequence
+    END SUBROUTINE def_adv_seq
 
     !================================================================
 
@@ -529,7 +529,7 @@ CONTAINS
     !       - exist only during one sweep
     !       - previous sweeps status is overwritten
     !       - initialized for each grid
-    !       Examples: dStag, vffFlux1, vffFlux1Stag, ...
+    !       Examples: dStag, vffFlx1, vffFlx1Stag, ...
     !
     !   The reason for this "clumsy" approach is, the connection of
     !   multiple grids. MGELT only uses two hollow cells at the grids
@@ -552,12 +552,11 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:), ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:), alpha(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:), vff(:,:,:)
-        CHARACTER(len=1), PARAMETER :: component(3) = ['X','Y','Z']
         INTEGER(intk) :: n, igrid, kk, jj, ii, ip3, ilevel
         REAL(realk), ALLOCATABLE :: dStag(:,:,:), advr(:,:,:), adve(:,:,:)
-        REAL(realk), ALLOCATABLE :: vffFlux1Stag(:,:,:), vffFlux2Stag(:,:,:), vel(:,:,:), vffFlux1(:,:,:)
-        LOGICAL, ALLOCATABLE :: isIface(:,:,:)
-        REAL(realk) :: volPhase1r, volPhase1r1, volFluxPhase1, volCompPhase1, volClipPhase1
+        REAL(realk), ALLOCATABLE :: vffFlx1Stag(:,:,:), vffFlx2Stag(:,:,:), vel(:,:,:), vffFlx1(:,:,:)
+        LOGICAL, ALLOCATABLE :: isIfc(:,:,:)
+        REAL(realk) :: volPhase1r, volPhase1r1, volFlxPhase1, volCompPhase1, volClipPhase1
 
         IF ( omitAdve ) RETURN
 
@@ -569,10 +568,6 @@ CONTAINS
             CALL comp_d_stag(q)   ! compute staggered density
             CALL comp_m_stag(q)   ! compute staggered momentum
             CALL comp_cWy_stag(q) ! compute staggered compression coefficient
-
-
-            CALL comp_momentum(kk, jj, ii, q, dStag, u, v, w, mom(q)%arr(ip3))
-            CALL comp_cWy(kk, jj, ii, vffStag(q)%arr(ip3), cWyStag(q)%arr(ip3))
         END DO
 
         ! Fine to coarse within the domain (ftoc)
@@ -597,71 +592,63 @@ CONTAINS
             CALL connect(ilevel, 2, v1=mom(1), v2=mom(2), v3=mom(3), corners=.TRUE.)
         END DO
 
-        CALL def_advection_sequence(itstep, advSeq)
+        CALL def_adv_seq(itstep, advSeq)
 
-        DO splitDir = 1, 3
-            l = advSeq(splitDir)
+        DO dirLoop = 1, 3
+            l = advSeq(dirLoop)
             DO n = 1, nmygrids
                 igrid = mygrids(n)
+
                 CALL get_mgdims(kk, jj, ii, igrid)
-                CALL get_ip3(ip3, igrid)
 
-                ! Get pointers to truly time-persistant fields
-                CALL u_f%get_ptr(u, igrid)
-                CALL v_f%get_ptr(v, igrid)
-                CALL w_f%get_ptr(w, igrid)
-                CALL vff_f%get_ptr(vff, igrid)
-                CALL dx_f%get_ptr(dx, igrid)
-                CALL dy_f%get_ptr(dy, igrid)
-                CALL dz_f%get_ptr(dz, igrid)
-                CALL ddx_f%get_ptr(ddx, igrid)
-                CALL ddy_f%get_ptr(ddy, igrid)
-                CALL ddz_f%get_ptr(ddz, igrid)
+                CALL get_fieldptr(u, "U", igrid)
+                CALL get_fieldptr(v, "V", igrid)
+                CALL get_fieldptr(w, "W", igrid)
+                CALL get_fieldptr(dx, "DX", igrid)
+                CALL get_fieldptr(dy, "DY", igrid)
+                CALL get_fieldptr(dz, "DZ", igrid)
+                CALL get_fieldptr(ddx, "DDX", igrid)
+                CALL get_fieldptr(ddy, "DDY", igrid)
+                CALL get_fieldptr(ddz, "DDZ", igrid)
+                CALL get_fieldptr(c, "C", igrid)
+                CALL get_fieldptr(normx, "NORMX", igrid)
+                CALL get_fieldptr(normy, "NORMY", igrid)
+                CALL get_fieldptr(normz, "NORMZ", igrid)
+                CALL get_fieldptr(alpha, "ALPHA", igrid)
+                CALL get_fieldptr(isIfc, "ISIFC", igrid)
 
-                ! Get pointers to falsely time-persistant fields
-                CALL normx_f%get_ptr(normx, igrid)
-                CALL normy_f%get_ptr(normy, igrid)
-                CALL normz_f%get_ptr(normz, igrid)
-                CALL alpha_f%get_ptr(alpha, igrid)
-
-                ! Allocate sweep-temporary fields
-                ALLOCATE(advr(kk, jj, ii))
-                ALLOCATE(adve(kk, jj, ii))
-                ALLOCATE(vffFlux1Stag(kk, jj, ii))
-                ALLOCATE(vffFlux2Stag(kk, jj, ii))
-                ALLOCATE(isIface(kk, jj, ii))
-                ALLOCATE(vel(kk, jj, ii))
-                ALLOCATE(vffFlux1(kk, jj, ii))
-
-                CALL track_iface(isIface, kk, jj, ii, vff)
+                IF ( .NOT. ALLOCATED(advr) ) ALLOCATE(advr(kk, jj, ii))
+                IF ( .NOT. ALLOCATED(adve) ) ALLOCATE(adve(kk, jj, ii))
+                IF ( .NOT. ALLOCATED(isIfc) ) ALLOCATE(isIfc(kk, jj, ii))
+                IF ( .NOT. ALLOCATED(isIfcVic) ) ALLOCATE(isIfcVic(kk, jj, ii))
+                IF ( .NOT. ALLOCATED(cFlx1) ) ALLOCATE(cFlx1(kk, jj, ii))
+                IF ( .NOT. ALLOCATED(cFlx2) ) ALLOCATE(cFlx2(kk, jj, ii))
 
                 DO q = 1, 3
-                    CALL comp_advr_linear_interpolation(kk, jj, ii, q, l, u, v, w, &
-                        advr, ddx, ddy, ddz)
-                    CALL comp_adve(kk, jj, ii, q, l, vffStag(q)%arr(ip3), u, v, w, &
-                        advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
-                    CALL comp_flux_stag(kk, jj, ii, q, l, vff, advr, vffFlux1Stag, vffFlux2Stag, &
-                        ddx, ddy, ddz, normx, normy, normz, alpha, isIface, dt)
-                    CALL adv_mom(kk, jj, ii, q, l, vffStag(q)%arr(ip3), cWyStag(q)%arr(ip3), u, v, w, &
-                        advr, adve, mom(q)%arr(ip3), vffFlux1Stag, vffFlux2Stag, dx, dy, dz, ddx, ddy, ddz, dt)
-                    CALL adv_vof(kk, jj, ii, q, l, vffStag(q)%arr(ip3), cWyStag(q)%arr(ip3), &
-                        advr, vffFlux1Stag, dx, dy, dz, ddx, ddy, ddz, dt)
+                    cFldName = "CS"//q
+                    cWyFldName = "CWYS"//q
+                    mFldName = "MS"//q
+
+                    CALL get_fieldptr(cSq, cFldName, igrid)
+                    CALL get_fieldptr(cWySq, cWyFldName, igrid)
+                    CALL get_fieldptr(mSq, mFldName, igrid)
+
+                    CALL trk_ifc(kk, jj, ii, cSq, isIfc)
+                    CALL trk_ifc_vic(kk, jj, ii, isIfc, isIfcVic)
+
+                    CALL comp_advr(kk, jj, ii, q, l, u, v, w, advr, ddx, ddy, ddz)
+                    CALL comp_adve(kk, jj, ii, q, l, u, v, w, advr, adve, isIfcVic, dx, dy, dz, ddx, ddy, ddz, dt)
+                    CALL comp_flx_stag(kk, jj, ii, q, l, c, advr, cFlx1, cFlx2, ddx, ddy, ddz, normx, normy, normz, alpha, isIfc, dt)
+                    CALL adv_mom(kk, jj, ii, q, l, cSq, cWySq, u, v, w, advr, adve, mSq, cFlx1, cFlx2, dx, dy, dz, ddx, ddy, ddz, dt)
+                    CALL adv_vof(kk, jj, ii, q, l, cSq, cWySq, advr, cFlx1, dx, dy, dz, ddx, ddy, ddz, dt)
                 END DO
 
                 CALL get_condit_velocity(kk, jj, ii, l, u, v, w, vel)
-                CALL comp_flux_cent(kk, jj, ii, l, vff, vel, vffFlux1, &
-                    ddx, ddy, ddz, normx, normy, normz, alpha, isIface, dt)
-                CALL adv_vof(kk, jj, ii, 0, l, vff, cWy%arr(ip3), vel, vffFlux1, &
-                    dx, dy, dz, ddx, ddy, ddz, dt, volFluxPhase1, volCompPhase1)
+                CALL comp_flx(kk, jj, ii, l, vff, vel, vffFlx1, &
+                    ddx, ddy, ddz, normx, normy, normz, alpha, isIfc, dt)
+                CALL adv_vof(kk, jj, ii, 0, l, vff, cWy%arr(ip3), vel, vffFlx1, &
+                    dx, dy, dz, ddx, ddy, ddz, dt, volFlxPhase1, volCompPhase1)
 
-                ! Deallocate sweep-temporary fields
-                DEALLOCATE(vffFlux1)
-                DEALLOCATE(vel)
-                DEALLOCATE(isIface)
-                DEALLOCATE(vffFlux2Stag)
-                DEALLOCATE(vffFlux1Stag)
-                DEALLOCATE(adve)
-                DEALLOCATE(advr)
             ENDDO
 
             ! Fine to coarse within the domain (ftoc)
@@ -686,54 +673,8 @@ CONTAINS
                 CALL connect(ilevel, 2, v1=mom(1), v2=mom(2), v3=mom(3), corners=.TRUE.)
             END DO
 
-            DO n = 1, nmygrids
-                igrid = mygrids(n)
-                CALL get_mgdims(kk, jj, ii, igrid)
-
-                ! Get pointers to truly time-persistant fields
-                CALL vff_f%get_ptr(vff, igrid)
-                CALL dx_f%get_ptr(dx, igrid)
-                CALL dy_f%get_ptr(dy, igrid)
-                CALL dz_f%get_ptr(dz, igrid)
-                CALL ddx_f%get_ptr(ddx, igrid)
-                CALL ddy_f%get_ptr(ddy, igrid)
-                CALL ddz_f%get_ptr(ddz, igrid)
-
-                ! Get pointers to falsely time-persistant fields
-                CALL normx_f%get_ptr(normx, igrid)
-                CALL normy_f%get_ptr(normy, igrid)
-                CALL normz_f%get_ptr(normz, igrid)
-                CALL alpha_f%get_ptr(alpha, igrid)
-
-                ! Interface reconstruction
-                CALL iface_reconstruction(kk, jj, ii, vff, dx, dy, dz, ddx, ddy, ddz, normx, normy, normz, alpha)
-            ENDDO
+            CALL comp_ifc() ! compute interface parameters
         END DO
-
-        CALL MPI_Allreduce(MPI_IN_PLACE, volFluxPhase1, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
-        CALL MPI_Allreduce(MPI_IN_PLACE, volCompPhase1, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
-
-        DO n = 1, nmygrids
-            igrid = mygrids(n)
-            CALL get_mgdims(kk, jj, ii, igrid)
-
-            ! Get pointers to truly time-persistant fields
-            CALL vff_f%get_ptr(vff, igrid)
-            CALL ddx_f%get_ptr(ddx, igrid)
-            CALL ddy_f%get_ptr(ddy, igrid)
-            CALL ddz_f%get_ptr(ddz, igrid)
-
-            ! Clip vff at rk-step r+1
-            CALL clip_vff(kk, jj, ii, vff, ddx, ddy, ddz, volClipPhase1)
-
-            ! Compute Volume of Phase 1 at rk-step r+1
-            CALL comp_vol_phase1(kk, jj, ii, vff, ddx, ddy, ddz, volPhase1r1)
-        ENDDO
-
-        CALL MPI_Allreduce(MPI_IN_PLACE, volClipPhase1, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
-        CALL MPI_Allreduce(MPI_IN_PLACE, volPhase1r1, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
-
-        IF ( checkBalance ) CALL sanity_check(volPhase1r, volPhase1r1, volFluxPhase1, volCompPhase1, volClipPhase1)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -952,8 +893,8 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE adv_vof(kk, jj, ii, q, l, vff, cWy, vel, vffFlux1, &
-        dx, dy, dz, ddx, ddy, ddz, dt, volFluxPhase1, volCompPhase1)
+    SUBROUTINE adv_vof(kk, jj, ii, q, l, vff, cWy, vel, vffFlx1, &
+        dx, dy, dz, ddx, ddy, ddz, dt, volFlxPhase1, volCompPhase1)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -964,11 +905,11 @@ CONTAINS
         REAL(realk), INTENT(inout) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: cWy(kk, jj, ii)
         REAL(realk), INTENT(in) :: vel(kk,jj,ii)
-        REAL(realk), INTENT(in) :: vffFlux1(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vffFlx1(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dt
-        REAL(realk), INTENT(inout), OPTIONAL :: volFluxPhase1, volCompPhase1
+        REAL(realk), INTENT(inout), OPTIONAL :: volFlxPhase1, volCompPhase1
 
         ! Local variables
         INTEGER(intk) :: i, j, k
@@ -985,14 +926,14 @@ CONTAINS
                     dsCV = il * dsx(i) + jl * dsy(j) + kl * dsz(k)
                     div(k,j,i) = ( vel(k,j,i) - vel(k-kl,j-jl,i-il) ) / dsCV
 
-                    IF ( PRESENT(volFluxPhase1) .AND. PRESENT(volCompPhase1) ) THEN
+                    IF ( PRESENT(volFlxPhase1) .AND. PRESENT(volCompPhase1) ) THEN
                         dV   = ddx(i)*ddy(j)*ddz(k)
-                        volFluxPhase1 = volFluxPhase1 - dt/dsCV * ( vffFlux1(k,j,i) - vffFlux1(k-kl,j-jl,i-il) ) * dV
+                        volFlxPhase1 = volFlxPhase1 - dt/dsCV * ( vffFlx1(k,j,i) - vffFlx1(k-kl,j-jl,i-il) ) * dV
                         volCompPhase1 = volCompPhase1 + dt * cWy(k,j,i) * div(k,j,i) * dV
                     ENDIF
 
                     vff(k,j,i) = vff(k,j,i) &
-                        - dt/dsCV * ( vffFlux1(k,j,i) - vffFlux1(k-kl,j-jl,i-il) ) &
+                        - dt/dsCV * ( vffFlx1(k,j,i) - vffFlx1(k-kl,j-jl,i-il) ) &
                         + dt * cWy(k,j,i) * div(k,j,i)
                 END DO
             END DO
@@ -1003,7 +944,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE adv_mom(kk, jj, ii, q, l, vff, cWy, u, v, w, &
-        advr, adve, mom, vffFlux1, vffFlux2, dx, dy, dz, &
+        advr, adve, mom, vffFlx1, vffFlx2, dx, dy, dz, &
         ddx, ddy, ddz, dt)
     !----------------------------------------------------------------
     !   What it does:
@@ -1016,7 +957,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: u(kk,jj,ii), v(kk,jj,ii), w(kk,jj,ii)
         REAL(realk), INTENT(in) :: advr(kk,jj,ii), adve(kk,jj,ii)
         REAL(realk), INTENT(inout) :: mom(kk, jj, ii)
-        REAL(realk), INTENT(in) :: vffFlux1(kk, jj, ii), vffFlux2(kk, jj, ii)
+        REAL(realk), INTENT(in) :: vffFlx1(kk, jj, ii), vffFlx2(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dt
@@ -1026,7 +967,7 @@ CONTAINS
         INTEGER(intk) :: il, jl, kl
         REAL(realk) :: dsx(ii), dsy(jj), dsz(kk), dsCV
         REAL(realk) :: vel(kk,jj,ii)
-        REAL(realk) :: momFlux(kk, jj, ii)
+        REAL(realk) :: momFlx(kk, jj, ii)
         REAL(realk) :: div, com
 
         CALL get_spatial_indices(l, il, jl, kl)
@@ -1036,7 +977,7 @@ CONTAINS
         DO i = 2, ii-2
             DO j = 2, jj-2
                 DO k = 2, kk-2
-                    momFlux(k,j,i) = adve(k,j,i) * ( rho1 * vffFlux1(k,j,i) + rho2 * vffFlux2(k,j,i) )
+                    momFlx(k,j,i) = adve(k,j,i) * ( rho1 * vffFlx1(k,j,i) + rho2 * vffFlx2(k,j,i) )
                 END DO
             END DO 
         END DO
@@ -1049,7 +990,7 @@ CONTAINS
                     com = ( rho1 * cWy(k,j,i) + rho2 * ( 1.0_realk - cWy(k,j,i) ) ) * div
 
                     mom(k,j,i) = mom(k,j,i) &
-                        - dt/dsCV * ( momFlux(k,j,i) - momFlux(k-kl,j-jl,i-il) ) &
+                        - dt/dsCV * ( momFlx(k,j,i) - momFlx(k-kl,j-jl,i-il) ) &
                         + dt * vel(k,j,i) * com
                 END DO
             END DO
@@ -1165,8 +1106,8 @@ CONTAINS
     SUBROUTINE comp_cWy()
     !----------------------------------------------------------------
     !   What it does:
-    !   Comput nondirectional compression coefficient c on multi-grid
-    !   level.
+    !   Comput nondirectional compression coefficient cWy on 
+    !   multi-grid level.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1192,6 +1133,40 @@ CONTAINS
 
     !================================================================
 
+    SUBROUTINE comp_cWy_stag(q)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Comput nondirectional compression coefficient cWy on 
+    !   multi-grid level.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: q
+
+        ! Local variables
+        CHARACTER(len=3) :: cFldName, cWyFldName
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk), POINTER, CONTIGUOUS :: cSq(:,:,:), cWySq(:,:,:)
+
+        cFldName = "CS"//q
+        cWyFldName = "CWYS"//q
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL get_fieldptr(cSq, cFldName, igrid)
+            CALL get_fieldptr(cWySq, cWyFldName, igrid)
+
+            CALL comp_cWy_grd(kk, jj, ii, cSq, cWySq)
+        END DO
+
+    END SUBROUTINE comp_cWy_stag
+
+    !================================================================
+
     SUBROUTINE comp_cWy_grd(kk, jj, ii, vff, cWy)
     !----------------------------------------------------------------
     !   What it does:
@@ -1203,7 +1178,7 @@ CONTAINS
     !   Volume-of-Fluid method for incompressible flow on staggered 
     !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
     !   doi: 10.1016/j.compfluid.2020.104785.
-    !   
+    !
     !   G. D. Weymouth and D. K.-P. Yue, “Conservative 
     !   Volume-of-Fluid method for free-surface simulations on 
     !   Cartesian-grids,” Journal of Computational Physics, vol. 229,
@@ -1235,8 +1210,8 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_adve(kk, jj, ii, q, l, vff, u, v, w, &
-        advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
+    SUBROUTINE comp_adve(kk, jj, ii, q, l, u, v, w, advr, adve, &
+        isIfcVic, dx, dy, dz, ddx, ddy, ddz, dt)
     !----------------------------------------------------------------
     !   What it does:
     !   Selects interpolation scheme.
@@ -1244,10 +1219,10 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii, q, l
-        REAL(realk), INTENT(in) :: vff(kk, jj, ii)
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: advr(kk, jj, ii)
         REAL(realk), INTENT(out) :: adve(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isIfcVic(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dt
@@ -1255,20 +1230,22 @@ CONTAINS
         ! Local variables
         ! None
 
-        IF ( fluxLimiter == 'QUICK' ) THEN
-            CALL comp_adve_quick(kk, jj, ii, q, l, vff, u, v, w, advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
-        ELSEIF ( fluxLimiter == 'ENO' ) THEN
-            CALL comp_adve_eno(kk, jj, ii, q, l, u, v, w, advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
+        IF ( flxLimiter == 'QUICK' ) THEN
+            CALL comp_adve_quick(kk, jj, ii, q, l, u, v, w, advr, &
+                adve, isIfcVic, dx, dy, dz, ddx, ddy, ddz, dt)
+        ELSEIF ( flxLimiter == 'ENO' ) THEN
+            CALL comp_adve_eno(kk, jj, ii, q, l, u, v, w, advr, &
+                adve, dx, dy, dz, ddx, ddy, ddz, dt)
         ELSE
-            CALL err_abort(vofErr, "Unknown flux limiter!", __FILE__, __LINE__)
+            CALL err_abort(vofErr, "Unknown interpolation.", __FILE__, __LINE__)
         ENDIF
 
     END SUBROUTINE comp_adve
 
     !================================================================
 
-    SUBROUTINE comp_adve_quick(kk, jj, ii, q, l, vff, u, v, w, &
-        advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
+    SUBROUTINE comp_adve_quick(kk, jj, ii, q, l, u, v, w, &
+        advr, adve, isIfcVic, dx, dy, dz, ddx, ddy, ddz, dt)
     !----------------------------------------------------------------
     !   What it does:
     !   QUICK interpolation to compute the advected veloctiy
@@ -1302,10 +1279,10 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii, q, l
-        REAL(realk), INTENT(in) :: vff(kk,jj,ii)
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: advr(kk, jj, ii)
         REAL(realk), INTENT(out) :: adve(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isIfcVic(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dt
@@ -1314,7 +1291,6 @@ CONTAINS
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kl, jl, il
         REAL(realk) :: vel(kk,jj,ii)
-        LOGICAL :: isIface(kk, jj, ii), isIfaceVic(kk, jj, ii)
         REAL(realk) :: dnx(ii), dny(jj), dnz(kk)
         REAL(realk) :: dcx(ii), dcy(jj), dcz(kk)
         REAL(realk) :: signInd(2), iFacInd(2)
@@ -1324,8 +1300,6 @@ CONTAINS
 
         CALL get_spatial_indices(l, il, jl, kl)
         CALL get_condit_velocity(kk, jj, ii, q, u, v, w, vel)
-        CALL track_iface(isIface, kk, jj, ii, vff)
-        CALL track_iface_vic(isIfaceVic, kk, jj, ii, isIface)
 
         IF ( q == l ) THEN
             dnx(1:ii-1) = ddx(2:ii) ; dnx(ii) = 0.0_realk
@@ -1342,7 +1316,7 @@ CONTAINS
                 DO k = 2, kk-2
                     signInd(1) = MERGE(1.0_realk, 0.0_realk, advr(k,j,i) >= 0.0_realk)
                     signInd(2) = 1.0_realk - signInd(1)
-                    iFacInd(1) = MERGE(1.0_realk, 0.0_realk, isIfaceVic(k,j,i))
+                    iFacInd(1) = MERGE(1.0_realk, 0.0_realk, isIfcVic(k,j,i))
                     iFacInd(2) = 1.0_realk - iFacInd(1)
 
                     dnslL = il*dnx(i-il) + jl*dny(j-jl) + kl*dnz(k-kl)
@@ -1352,7 +1326,7 @@ CONTAINS
                     dcslMi = 0.5_realk * (il*dcx(i) + jl*dcy(j) + kl*dcz(k))
                     dcslPl  = dnslC - dcslMi
 
-                    IF ( fluxCentered ) THEN
+                    IF ( flxCentered ) THEN
                         dcslMi = dcslMi - ABS(advr(k,j,i))*dt/2.0_realk
                         dcslPl = dcslPl - ABS(advr(k,j,i))*dt/2.0_realk
                     ENDIF
@@ -1417,7 +1391,7 @@ CONTAINS
     !   1st ed. Cambridge University Press, 2011.
     !   doi: 10.1017/CBO9780511975264.
     !
-    !   P. K. Sweby, “High Resolution Schemes Using Flux Limiters
+    !   P. K. Sweby, “High Resolution Schemes Using Flx Limiters
     !   for Hyperbolic Conservation Laws,” SIAM J. Numer. Anal.,
     !   vol. 21, no. 5, pp. 995–1011, Oct. 1984,
     !   doi: 10.1137/0721062.
@@ -1479,7 +1453,7 @@ CONTAINS
                     dcslMi = 0.5_realk * (il*dcx(i) + jl*dcy(j) + kl*dcz(k))
                     dcslPl = dnslCe - dcslMi
 
-                    IF ( fluxCentered ) THEN
+                    IF ( flxCentered ) THEN
                         dcslMi = dcslMi - ABS(advr(k,j,i))*dt/2.0_realk
                         dcslPl = dcslPl - ABS(advr(k,j,i))*dt/2.0_realk
                     ENDIF
@@ -1501,7 +1475,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_advr_linear_interpolation(kk, jj, ii, q, l, &
+    SUBROUTINE comp_advr(kk, jj, ii, q, l, &
         u, v, w, advr, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
@@ -1551,6 +1525,6 @@ CONTAINS
             ENDDO
         ENDIF
 
-    END SUBROUTINE comp_advr_linear_interpolation
+    END SUBROUTINE comp_advr
 
 END MODULE mph_vof_mod

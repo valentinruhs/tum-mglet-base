@@ -12,7 +12,7 @@
 !
 !====================================================================
 
-    MODULE mph_plic_mod
+MODULE mph_plic_mod
 
     USE precision_mod, ONLY: intk, realk
     USE mph_utils_mod, ONLY: get_spatial_indices
@@ -23,7 +23,7 @@
 
     PUBLIC :: init_mph_plic, finish_mph_plic
 
-    CONTAINS
+CONTAINS
 
     SUBROUTINE init_mph_plic()
 
@@ -53,7 +53,7 @@
 
     !================================================================
 
-    PURE SUBROUTINE trk_ifc(isIfc, kk, jj, ii, c)
+    SUBROUTINE trk_ifc(kk, jj, ii, c, isIfc)
     !----------------------------------------------------------------
     !   What it does:
     !   Track cells containing an interface.
@@ -61,8 +61,8 @@
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        LOGICAL, INTENT(out) :: isIfc(kk, jj, ii)
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        LOGICAL, INTENT(out) :: isIfc(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -82,7 +82,7 @@
 
     !================================================================
 
-    SUBROUTINE trk_ifc_vic(isifcVic, kk, jj, ii, isIfc)
+    SUBROUTINE trk_ifc_vic(kk, jj, ii, isIfc, isIfcVic)
     !----------------------------------------------------------------
     !   What it does:
     !   Track cells "near" interface containing cells. Since indices
@@ -92,20 +92,20 @@
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        LOGICAL, INTENT(out) :: isifcVic(kk, jj, ii)
         LOGICAL, INTENT(in) :: isIfc(kk, jj, ii)
+        LOGICAL, INTENT(out) :: isIfcVic(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i, vic
 
         vic = 2
-        isifcVic = .FALSE.
+        isIfcVic = .FALSE.
 
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
                     IF ( isIfc(k,j,i) ) THEN
-                        isifcVic(k-vic:k+vic,j-vic:j+vic,i-vic:i+vic) = .TRUE.
+                        isIfcVic(k-vic:k+vic,j-vic:j+vic,i-vic:i+vic) = .TRUE.
                     ENDIF
                 ENDDO
             ENDDO
@@ -252,7 +252,7 @@
         ! Local variables
         ! None
 
-        CALL trk_ifc(isIfc, kk, jj, ii, c)
+        CALL trk_ifc(kk, jj, ii, c, isIfc)
         CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, c, dx, dy, dz)
         CALL comp_alpha(alpha, kk, jj, ii, c, isIfc, ddx, ddy, ddz, normx, normy, normz)
 
@@ -819,4 +819,4 @@
 
     END SUBROUTINE comp_c_std
 
-    END MODULE mph_plic_mod
+END MODULE mph_plic_mod

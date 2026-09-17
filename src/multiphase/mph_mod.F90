@@ -20,6 +20,7 @@ MODULE mph_mod
     USE mph_plic_mod, ONLY: init_mph_plic, finish_mph_plic
     USE mph_props_mod, ONLY: init_mph_props, finish_mph_props
     USE mph_utils_mod, ONLY: init_mph_utils, finish_mph_utils
+    USE mph_test_mod, ONLY: init_mph_test, finish_mph_test
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -39,6 +40,7 @@ CONTAINS
         CALL init_mphcore()
         IF ( .NOT. hasMph ) RETURN
 
+        CALL init_mph_test()
         CALL init_mph_props()
         CALL init_mph_plic()
         CALL init_mph_vof()
@@ -62,6 +64,7 @@ CONTAINS
         CALL finish_mph_vof()
         CALL finish_mph_plic()
         CALL finish_mph_props()
+        CALL finish_mph_test()
 
     END SUBROUTINE finish_mph
 

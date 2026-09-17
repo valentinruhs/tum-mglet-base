@@ -40,7 +40,7 @@ MODULE mphcore_mod
     REAL(realk), PROTECTED :: grav(3)
 
     ! Error codes
-    INTEGER(intk), PROTECTED :: propsErr, vofErr, plicErr
+    INTEGER(intk), PROTECTED :: propsErr, vofErr, plicErr, mphInitErr
 
     PUBLIC :: init_mphcore, finish_mphcore, hasMph, &
         mphTst, skpAdv, skpDif, skpExt, splPer, vofTol, divTol, &
@@ -79,7 +79,7 @@ CONTAINS
         CALL fort7%get(mphConf, "/multiphase")
 
         ! Read steering input
-        CALL mphConf%get_value("/test", mphTst, 'none')
+        CALL mphConf%get_value("/test", mphTst, "None")
         CALL mphConf%get_value("/skipAdvection", skpAdv, .FALSE.)
         CALL mphConf%get_value("/skipDiffusion", skpDif, .FALSE.)
         CALL mphConf%get_value("/skipExternal", skpExt, .FALSE.)
@@ -87,7 +87,7 @@ CONTAINS
         CALL mphConf%get_value("/vofTolerance", vofTol, 1.0E-12_realk)
         CALL mphConf%get_value("/divTolerance", divTol, 1.0E-8_realk)
         CALL mphConf%get_value("/volTolerance", voltol, 1.0E-8_realk)
-        CALL mphConf%get_value("/advectionScheme", advScm, 'QUICK')
+        CALL mphConf%get_value("/advectionScheme", advScm, "QUICK")
         CALL mphConf%get_value("/donatingCentered", donCen, .FALSE.)
         CALL mphConf%get_value("/vofCheck", vofChk, .FALSE.)
         CALL mphConf%get_value("/volCheck", volChk, .FALSE.)
@@ -141,9 +141,10 @@ CONTAINS
             dread=.FALSE., required=.FALSE., dwrite=.FALSE., buffers=.TRUE.)
 
         ! Set multi-phase error codes
-        propsErr = 124
-        vofErr = 125
-        plicErr = 126
+        mphInitErr = 124
+        propsErr = 125
+        vofErr = 126
+        plicErr = 127
 
     END SUBROUTINE init_mphcore
 
