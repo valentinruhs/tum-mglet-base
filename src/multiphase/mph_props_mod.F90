@@ -478,8 +478,8 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
         LOGICAL, POINTER, CONTIGUOUS :: isIfc(:,:,:)
 
-        cFldName = "CS"//q
-        dFldName = "DS"//q
+        cFldName = "CS"//itoc(q)
+        dFldName = "DS"//itoc(q)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)

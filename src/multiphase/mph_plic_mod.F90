@@ -53,7 +53,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE trk_ifc(kk, jj, ii, c, isIfc)
+    SUBROUTINE trk_ifc_grd(kk, jj, ii, c, isIfc, isIfcVic)
     !----------------------------------------------------------------
     !   What it does:
     !   Track cells containing an interface.
@@ -63,9 +63,10 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
         LOGICAL, INTENT(out) :: isIfc(kk, jj, ii)
+        LOGICAL, INTENT(out), OPTIONAL :: isIfcVic(kk, jj, ii)
 
         ! Local variables
-        INTEGER(intk) :: k, j, i
+        INTEGER(intk) :: k, j, i, vic
 
         isIfc = .FALSE.
         DO i = 1, ii
@@ -78,29 +79,10 @@ CONTAINS
             ENDDO
         ENDDO
 
-    END SUBROUTINE trk_ifc
-
-    !================================================================
-
-    SUBROUTINE trk_ifc_vic(kk, jj, ii, isIfc, isIfcVic)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   Track cells "near" interface containing cells. Since indices
-    !   with (.)-2 and (.)+2 are used in the momentum advection a
-    !   5x5x5 volume is considered to be "near" to an interface cell. 
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        LOGICAL, INTENT(in) :: isIfc(kk, jj, ii)
-        LOGICAL, INTENT(out) :: isIfcVic(kk, jj, ii)
-
-        ! Local variables
-        INTEGER(intk) :: k, j, i, vic
+        IF ( .NOT. PRESENT(isIfcVic) ) RETURN
 
         vic = 2
         isIfcVic = .FALSE.
-
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
@@ -111,7 +93,42 @@ CONTAINS
             ENDDO
         ENDDO
 
-    END SUBROUTINE trk_ifc_vic
+    END SUBROUTINE trk_ifc_grd
+
+    !================================================================
+
+    SUBROUTINE comp_isIfc(q)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: q
+
+        ! Local variables
+        CHARACTER(len=3) :: cFldName
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk), POINTER, CONTIGUOUS :: cSq(:,:,:)
+        LOGICAL, POINTER, CONTIGUOUS :: isIfcS(:,:,:)
+        LOGICAL, POINTER, CONTIGUOUS :: isIfcVicS(:,:,:)
+
+        cFldName = "CS"//itoc(q)
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL get_fieldptr(cSq, cFldName, igrid)
+            CALL get_fieldptr(isIfcS, "ISIFCS", igrid)
+            CALL get_fieldptr(isIfcVicS, "ISIFCVICS", igrid)
+
+            CALL trk_ifc_grd(kk, jj, ii, cSq, isIfcS, isIfcVicS)
+        END DO
+
+    END SUBROUTINE comp_isIfc
 
     !================================================================
 
@@ -252,7 +269,7 @@ CONTAINS
         ! Local variables
         ! None
 
-        CALL trk_ifc(kk, jj, ii, c, isIfc)
+        CALL trk_ifc_grd(kk, jj, ii, c, isIfc)
         CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, c, dx, dy, dz)
         CALL comp_alpha(alpha, kk, jj, ii, c, isIfc, ddx, ddy, ddz, normx, normy, normz)
 
@@ -413,7 +430,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
         LOGICAL, POINTER, CONTIGUOUS :: isIfc(:,:,:)
 
-        cFldName = "CS"//q
+        cFldName = "CS"//itoc(q)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)

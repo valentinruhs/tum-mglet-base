@@ -287,4 +287,12 @@ CONTAINS
 
     END SUBROUTINE comp_mat_coeff_mph
 
+    !================================================================
+
+    FUNCTION itoc(i) RESULT(c)
+        INTEGER(intk), INTENT(in) :: i
+        CHARACTER(len=1) :: c
+        WRITE(c, '(I0)') i
+    END FUNCTION itoc
+
 END MODULE mph_utils_mod

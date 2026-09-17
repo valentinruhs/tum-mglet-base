@@ -63,6 +63,7 @@ CONTAINS
         CHARACTER(len=*), PARAMETER :: descNorm = "ifc. norm. vec."
         CHARACTER(len=*), PARAMETER :: descAlpha = "ifc. plane const."
         CHARACTER(len=*), PARAMETER :: descIsIfc = "cell with ifc."
+        CHARACTER(len=*), PARAMETER :: descIsIfcVic = "cell in vic. of ifc."
         CHARACTER(len=*), PARAMETER :: descGrdmask = "uncov. cells"
 
         hasMph = .FALSE.
@@ -135,6 +136,8 @@ CONTAINS
         CALL set_field("ALPHA", description=descAlpha, &
             dread=.FALSE., required=.FALSE., dwrite=.TRUE., buffers=.TRUE.)
         CALL set_field("ISIFC", description=descIsIfc, &
+            dread=.FALSE., required=.FALSE., dwrite=.TRUE., buffers=.TRUE.)
+        CALL set_field("ISIFCVIC", description=descIsIfcVic, &
             dread=.FALSE., required=.FALSE., dwrite=.TRUE., buffers=.TRUE.)
 
         CALL set_field("GRDMASK", description=descGrdmask, &

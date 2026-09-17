@@ -20,8 +20,9 @@ MODULE mph_test_mod
     IMPLICIT NONE(type, external)
     PRIVATE
 
-    INTEGER(intk), PARAMETER :: shpCircle = 1, shpZalesak = 2, &
-        hpEllipse = 3, shpPlane = 4
+    INTEGER(intk), PARAMETER :: tstCylTra=1, tstZalDis=2, tstRKoVor=3, tstUCylAd=4, tstACylAd=5, tstEllRec=6, tstOpCFl=7
+    INTEGER(intk), PARAMETER :: shpCircle=1, shpZalesak=2, shpEllipse=3, shpPlane=4
+    LOGICAL, PROTECTED :: frcVelFld
 
     PUBLIC :: init_mph_test, finish_mph_test
 
@@ -40,53 +41,68 @@ CONTAINS
         ! None
 
         ! Local variables
-        INTEGER(intk) :: shp
+        INTEGER(intk) :: tst, shp
         REAL(realk) :: xc, yc, zc, ra, slotDx, slotDy, rb, theta, lvl
 
         SELECT CASE ( mphTst )
         CASE ( "Cylinder Translation" )
+            tst = tstCylTra
             shp = shpCircle
             xc = 0.5_realk
             yc = 0.5_realk
             ra = 0.15_realk
+            frcVelFld = .TRUE.
         CASE ( "Zalesak Disk" )
+            tst = tstZalDis
             shp = shpZalesak
             xc = 0.5_realk
             yc = 0.5_realk
             ra = 0.15_realk
             slotDx = 0.05_realk
             slotDy = 0.25_realk
+            frcVelFld = .TRUE.
         CASE ( "Rider-Kothe Vortex" )
+            tst = tstRKoVor
             shp = shpCircle
             xc = 0.5_realk
             yc = 0.75_realk
             ra = 0.15_realk
+            frcVelFld = .TRUE.
         CASE ( "Uniform Cylinder Advection" )
+            tst = tstUCylAd
             shp = shpCircle
             xc = 0.2_realk
             yc = 0.2_realk
             ra = 0.1_realk
+            frcVelFld = .FALSE.
         CASE ( "Abrupt Cylinder Advection" )
+            tst = tstACylAd
             shp = shpCircle
             xc = 0.2_realk
             yc = 0.2_realk
             ra = 0.1_realk
+            frcVelFld = .FALSE.
         CASE ( "Ellipse Reconstruction" )
+            tst = tstEllRec
             shp = shpEllipse
             xc = 0.5_realk
             yc = 0.5_realk
             ra = 0.3464_realk
             rb = 0.1414_realk
             theta = pi
+            frcVelFld = .TRUE.
         CASE ( "Open Channel Flow" )
+            tst = tstOpCFl
             shp = shpPlane
             lvl = 0.0_realk
+            frcVelFld = .FALSE.
         CASE DEFAULT
             CALL err_abort(mphInitErr, "unknown test case.", __FILE__, __LINE__)
         END SELECT
 
         CALL fill_c_dom(dist_func)
         CALL fill_c_bou(shp)
+        CALL init_vel(tst)
 
     CONTAINS
 
@@ -225,6 +241,39 @@ CONTAINS
         CONTINUE
 
     END SUBROUTINE fill_c_bou
+
+    !================================================================
+
+    SUBROUTINE init_vel(tst)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: tst
+
+        ! Local variabels
+        ! None
+
+        SELECT CASE ( tst )
+        CASE ( tstCylTra )
+
+        CASE ( tstZalDis )
+
+        CASE ( tstRKoVor )
+
+        CASE ( tstUCylAd )
+
+        CASE ( tstACylAd )
+
+        CASE ( tstEllRec )
+
+        CASE ( tstOpCFl )
+
+        END SELECT
+
+    END SUBROUTINE init_vel
 
     !================================================================
 
