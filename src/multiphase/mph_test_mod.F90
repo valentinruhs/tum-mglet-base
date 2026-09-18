@@ -244,39 +244,6 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE init_vel(tst)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: tst
-
-        ! Local variabels
-        ! None
-
-        SELECT CASE ( tst )
-        CASE ( tstCylTra )
-
-        CASE ( tstZalDis )
-
-        CASE ( tstRKoVor )
-
-        CASE ( tstUCylAd )
-
-        CASE ( tstACylAd )
-
-        CASE ( tstEllRec )
-
-        CASE ( tstOpCFl )
-
-        END SELECT
-
-    END SUBROUTINE init_vel
-
-    !================================================================
-
     PURE FUNCTION dist_func_circle(x, y, xc, yc, r) RESULT(phi)
         REAL(realk), INTENT(in) :: x, y, xc, yc, r
         REAL(realk) :: phi

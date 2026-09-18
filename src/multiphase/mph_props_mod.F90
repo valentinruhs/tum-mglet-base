@@ -14,18 +14,18 @@
 
 MODULE mph_props_mod
 
-    USE mphcore_mod, ONLY: gmol1, gmol2, rho1, rho2
-    USE mph_utils_mod, ONLY: clip
+    USE mphcore_mod, ONLY: gmol1, gmol2, rho1, rho2, propsErr
+    USE mph_utils_mod, ONLY: clp, int2char
     USE precision_mod, ONLY: intk, realk
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims
-    USE fields_mod, ONLY: get_fieldptr
+    USE fields_mod, ONLY: get_fieldptr, set_field
     USE err_mod, ONLY: err_abort
 
     IMPLICIT NONE(type, external)
     PRIVATE
 
     PUBLIC :: init_mph_props, finish_mph_props, comp_prop, &
-        comp_prop_face, comp_prop_face_stag
+        comp_prop_face, comp_prop_face_stag, comp_d_stag, comp_props
 
 CONTAINS
 
@@ -38,6 +38,9 @@ CONTAINS
         CHARACTER(len=*), PARAMETER :: descDBa = "density back"
         CHARACTER(len=*), PARAMETER :: descDLe = "density left"
         CHARACTER(len=*), PARAMETER :: descDTo = "density top"
+        CHARACTER(len=*), PARAMETER :: descGUv = "visc. coupling u/v"
+        CHARACTER(len=*), PARAMETER :: descGUw = "visc. coupling u/w"
+        CHARACTER(len=*), PARAMETER :: descGVw = "visc. coupling w/v"
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
         REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:)
@@ -47,6 +50,9 @@ CONTAINS
         CALL set_field("DBA", description=descDBa)
         CALL set_field("DLE", description=descDLe)
         CALL set_field("DTO", description=descDTo)
+        CALL set_field("GUV", description=descGUv)
+        CALL set_field("GUW", description=descGUw)
+        CALL set_field("GVW", description=descGVw)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -57,8 +63,8 @@ CONTAINS
             CALL get_fieldptr(d, "D", igrid)
             CALL get_fieldptr(g, "G", igrid)
 
-            CALL comp_prop(kk, jj, ii, c, d, rho1, rho2, meanFlag='arit')
-            CALL comp_prop(kk, jj, ii, c, g, gmol1, gmol2, meanFlag='harm')
+            CALL comp_prop(kk, jj, ii, c, d, rho1, rho2, meanFlag="arit")
+            CALL comp_prop(kk, jj, ii, c, g, gmol1, gmol2, meanFlag="harm")
 
         END DO
 
@@ -99,9 +105,9 @@ CONTAINS
 
         IF ( PRESENT(meanFlag) ) THEN
             SELECT CASE ( meanFlag )
-            CASE ( 'arit' )
+            CASE ( "arit" )
                 CALL comp_prop_arit(kk, jj, ii, c, propFld, prop1, prop2)
-            CASE ( 'harm' )
+            CASE ( "harm" )
                 CALL comp_prop_harm(kk, jj, ii, c, propFld, prop1, prop2)
             CASE DEFAULT
                 CALL err_abort(propsErr, "unknown meanFlag.", __FILE__, __LINE__)
@@ -130,9 +136,7 @@ CONTAINS
         ! Local variables
         ! None
 
-        CALL clip(kk, jj, ii, c)
-
-        propFld = c*( prop1 - prop2 ) + prop2
+        propFld = clp(c)*( prop1 - prop2 ) + prop2
 
         IF ( MAXVAL(propFld) > MAX(prop1, prop2) .OR. &
              MINVAL(propFld) < MIN(prop1, prop2) ) THEN
@@ -162,9 +166,7 @@ CONTAINS
         invProp1 = 1.0_realk/prop1
         invProp2 = 1.0_realk/prop2
 
-        CALL clip(kk, jj, ii, c)
-
-        propFld = 1.0_realk/( c*( invProp1 - invProp2 ) + invProp2 )
+        propFld = 1.0_realk/( clp(c)*( invProp1 - invProp2 ) + invProp2 )
 
         IF ( MAXVAL(propFld) > MAX(prop1, prop2) .OR. &
              MINVAL(propFld) < MIN(prop1, prop2) ) THEN
@@ -195,9 +197,9 @@ CONTAINS
 
         IF ( PRESENT(meanFlag) ) THEN
             SELECT CASE ( meanFlag )
-            CASE ( 'arit' )
+            CASE ( "arit" )
                 CALL comp_prop_arit_face(kk, jj, ii, c, pBa, pLe, pTo, prop1, prop2, ddx, ddy, ddz)
-            CASE ( 'harm' )
+            CASE ( "harm" )
                 CALL comp_prop_harm_face(kk, jj, ii, c, pBa, pLe, pTo, prop1, prop2, ddx, ddy, ddz)
             CASE DEFAULT
                 CALL err_abort(propsErr, "unknown meanFlag.", __FILE__, __LINE__)
@@ -215,6 +217,12 @@ CONTAINS
     !   What it does:
     !   Compute property face values depending on c using the 
     !   arithmetic mean.
+    !
+    !   Source:
+    !   G. Tryggvason, R. Scardovelli, und S. Zaleski, &
+    !   Direct Numerical Simulations of Gas–Liquid Multiphase &
+    !   Flows, 1. Aufl. Cambridge University Press, 2011. &
+    !   doi: 10.1017/CBO9780511975264.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -227,8 +235,6 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         REAL(realk) :: w(2), phi
-
-        CALL clip(kk, jj, ii, c)
 
         DO i = 2, ii-2
             DO j = 2, jj-2
@@ -251,7 +257,7 @@ CONTAINS
             ENDDO
         ENDDO
 
-    ENDSUBROUTINE comp_prop_arit_face
+    END SUBROUTINE comp_prop_arit_face
 
     !================================================================
 
@@ -259,7 +265,14 @@ CONTAINS
     !----------------------------------------------------------------
     !   What it does:
     !   Compute property face values depending on c using the 
-    !   harmonic mean.
+    !   harmonic mean. Care, only valid for 
+    !   equidistant grids.
+    !
+    !   Source:
+    !   G. Tryggvason, R. Scardovelli, und S. Zaleski, &
+    !   Direct Numerical Simulations of Gas–Liquid Multiphase &
+    !   Flows, 1. Aufl. Cambridge University Press, 2011. &
+    !   doi: 10.1017/CBO9780511975264.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -276,8 +289,6 @@ CONTAINS
 
         invProp1 = 1.0_realk/prop1
         invProp2 = 1.0_realk/prop2
-
-        CALL clip(kk, jj, ii, c)
 
         DO i = 2, ii-2
             DO j = 2, jj-2
@@ -303,7 +314,7 @@ CONTAINS
             ENDDO
         ENDDO
 
-    ENDSUBROUTINE comp_prop_harm_face
+    END SUBROUTINE comp_prop_harm_face
 
     !================================================================
 
@@ -327,9 +338,9 @@ CONTAINS
 
         IF ( PRESENT(meanFlag) ) THEN
             SELECT CASE ( meanFlag )
-            CASE ( 'arit' )
+            CASE ( "arit" )
                 CALL comp_prop_arit_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz)
-            CASE ( 'harm' )
+            CASE ( "harm" )
                 CALL comp_prop_harm_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz)
             CASE DEFAULT
                 CALL err_abort(propsErr, "unknown meanFlag.", __FILE__, __LINE__)
@@ -338,7 +349,7 @@ CONTAINS
             CALL comp_prop_arit_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz)
         END IF
 
-    ENDSUBROUTINE comp_prop_face_stag
+    END SUBROUTINE comp_prop_face_stag
 
     !================================================================
 
@@ -347,6 +358,12 @@ CONTAINS
     !   What it does:
     !   Compute property face values on the staggered grid depending 
     !   on c using the arithmetic mean.
+    !
+    !   Source:
+    !   G. Tryggvason, R. Scardovelli, und S. Zaleski, &
+    !   Direct Numerical Simulations of Gas–Liquid Multiphase &
+    !   Flows, 1. Aufl. Cambridge University Press, 2011. &
+    !   doi: 10.1017/CBO9780511975264.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -359,8 +376,6 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         REAL(realk) :: w(4), phi
-
-        CALL clip(kk, jj, ii, c)
 
         DO i = 2, ii-2
             DO j = 2, jj-2
@@ -392,7 +407,7 @@ CONTAINS
             ENDDO
         ENDDO
 
-    ENDSUBROUTINE comp_prop_arit_face_stag
+    END SUBROUTINE comp_prop_arit_face_stag
 
     !================================================================
 
@@ -400,7 +415,14 @@ CONTAINS
     !----------------------------------------------------------------
     !   What it does:
     !   Compute property face values on the staggered grid depending 
-    !   on c using the harmonic mean.
+    !   on c using the harmonic mean. Care, only valid for 
+    !   equidistant grids.
+    !
+    !   Source:
+    !   G. Tryggvason, R. Scardovelli, und S. Zaleski, &
+    !   Direct Numerical Simulations of Gas–Liquid Multiphase &
+    !   Flows, 1. Aufl. Cambridge University Press, 2011. &
+    !   doi: 10.1017/CBO9780511975264.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -417,8 +439,6 @@ CONTAINS
 
         invProp1 = 1.0_realk/prop1
         invProp2 = 1.0_realk/prop2
-
-        CALL clip(kk, jj, ii, c)
 
         DO i = 2, ii-2
             DO j = 2, jj-2
@@ -453,16 +473,14 @@ CONTAINS
             ENDDO
         ENDDO
 
-    ENDSUBROUTINE comp_prop_harm_face_stag
+    END SUBROUTINE comp_prop_harm_face_stag
 
     !================================================================
 
     SUBROUTINE comp_d_stag(q)
     !----------------------------------------------------------------
     !   What it does:
-    !   Compute the volume fraction field for the staggered cells
-    !   depending on q. The staggered cells are either moved by
-    !   1/2 ddx, 1/2 ddy or 1/2 ddz.
+    !   
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -473,28 +491,63 @@ CONTAINS
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
         REAL(realk), POINTER, CONTIGUOUS :: cSq(:,:,:), dSq(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
-        REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
-        LOGICAL, POINTER, CONTIGUOUS :: isIfc(:,:,:)
 
-        cFldName = "CS"//itoc(q)
-        dFldName = "DS"//itoc(q)
+        cFldName = "CS"//int2char(q)
+        dFldName = "DS"//int2char(q)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
-
             CALL get_mgdims(kk, jj, ii, igrid)
-
             CALL get_fieldptr(cSq, cFldName, igrid)
             CALL get_fieldptr(dSq, dFldName, igrid)
+
+            CALL comp_prop(kk, jj, ii, cSq, dSq, rho1, rho2, meanFlag="arit")
+        END DO
+
+    END SUBROUTINE comp_d_stag
+
+    !================================================================
+
+    SUBROUTINE comp_props()
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Compute all nescessary properies 
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        ! None
+
+        ! Local variables
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk), POINTER, CONTIGUOUS :: cp(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: g(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: gUv(:,:,:), gUw(:,:,:), gVw(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: dBa(:,:,:), dLe(:,:,:), dTo(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+            CALL get_mgdims(kk, jj, ii, igrid)
+            CALL get_fieldptr(cp, "CP", igrid)
+            CALL get_fieldptr(g, "G", igrid)
+            CALL get_fieldptr(gUv, "GUV", igrid)
+            CALL get_fieldptr(gUw, "GUW", igrid)
+            CALL get_fieldptr(gVw, "GVW", igrid)
+            CALL get_fieldptr(dBa, "DBA", igrid)
+            CALL get_fieldptr(dLe, "DLE", igrid)
+            CALL get_fieldptr(dTo, "DTO", igrid)
             CALL get_fieldptr(ddx, "DDX", igrid)
             CALL get_fieldptr(ddy, "DDY", igrid)
             CALL get_fieldptr(ddz, "DDZ", igrid)
 
-            CALL comp_prop(kk, jj, ii, cSq, dSq, prop1, prop2, meanFlag='arit')
+            CALL comp_prop(kk, jj, ii, cp, g, gmol1, gmol2, meanFlag="harm")
+            CALL comp_prop_face_stag(kk, jj, ii, cp, gUv, gUw, gVw, &
+                gmol1, gmol2, ddx, ddy, ddz, meanFlag="harm")
+            CALL comp_prop_face(kk, jj, ii, cp, dBa, dLe, dTo, &
+                rho1, rho2, ddx, ddy, ddz, meanFlag="arit")
         END DO
 
-    END SUBROUTINE comp_d_stag
+    END SUBROUTINE comp_props
 
 END MODULE mph_props_mod

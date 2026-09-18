@@ -10,18 +10,28 @@
 !   Created:     2026-02
 !   Last update: 2026-09
 !
+!   Source:
+!   R. Scardovelli und S. Zaleski, „Analytical Relations 
+!   Connecting Linear Interfaces and Volume Fractions in 
+!   Rectangular Grids“, Journal of Computational Physics, 
+!   Bd. 164, Nr. 1, S. 228–237, Okt. 2000, 
+!   doi: 10.1006/jcph.2000.6567.
+!
 !====================================================================
 
 MODULE mph_plic_mod
 
     USE precision_mod, ONLY: intk, realk
-    USE mph_utils_mod, ONLY: get_spatial_indices
+    USE mph_utils_mod, ONLY: sel_ind, int2char
+    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims
     USE mphcore_mod, ONLY: vofTol
+    USE fields_mod, ONLY: set_field, get_fieldptr
         
     IMPLICIT NONE(type, external)
     PRIVATE 
 
-    PUBLIC :: init_mph_plic, finish_mph_plic
+    PUBLIC :: init_mph_plic, finish_mph_plic, &
+        comp_ifc, comp_c_stag, comp_isIfc_stag, comp_c_loc
 
 CONTAINS
 
@@ -33,7 +43,33 @@ CONTAINS
         ! Local variables
         ! None
 
-        CALL comp_ifc()
+        CHARACTER(len=*), PARAMETER :: descNorm = "ifc. norm. vec."
+        CHARACTER(len=*), PARAMETER :: descAlpha = "ifc. plane const."
+        CHARACTER(len=*), PARAMETER :: descIsIfc = "cell with ifc."
+        CHARACTER(len=*), PARAMETER :: descIsIfcVic = "cell in vic. of ifc."
+
+        CALL set_field("NORMX", description=descNorm, &
+            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
+        CALL set_field("NORMY", description=descNorm, &
+            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
+        CALL set_field("NORMZ", description=descNorm, &
+            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
+        CALL set_field("ALPHA", description=descAlpha, &
+            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
+        CALL set_field("ISIFC", description=descIsIfc, &
+            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
+        CALL set_field("ISIFCS1", description=descIsIfc, &
+            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
+        CALL set_field("ISIFCS2", description=descIsIfc, &
+            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
+        CALL set_field("ISIFCS3", description=descIsIfc, &
+            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
+        CALL set_field("ISIFCVICS1", description=descIsIfcVic, &
+            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
+        CALL set_field("ISIFCVICS2", description=descIsIfcVic, &
+            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
+        CALL set_field("ISIFCVICS3", description=descIsIfcVic, &
+            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
 
     END SUBROUTINE init_mph_plic
 
@@ -53,10 +89,48 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE trk_ifc_grd(kk, jj, ii, c, isIfc, isIfcVic)
+    SUBROUTINE comp_isIfc_stag(q)
     !----------------------------------------------------------------
     !   What it does:
-    !   Track cells containing an interface.
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: q
+
+        ! Local variables
+        CHARACTER(len=3) :: cFldName, isIfcFldName, isIfcVicFldName
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk), POINTER, CONTIGUOUS :: cSq(:,:,:)
+        LOGICAL, POINTER, CONTIGUOUS :: isIfcSq(:,:,:)
+        LOGICAL, POINTER, CONTIGUOUS :: isIfcVicSq(:,:,:)
+
+        cFldName = "CS"//int2char(q)
+        isIfcFldName = "ISIFCS"//int2char(q)
+        isIfcVicFldName = "ISIFCVICS"//int2char(q)
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL get_fieldptr(cSq, cFldName, igrid)
+            CALL get_fieldptr(isIfcSq, isIfcFldName, igrid)
+            CALL get_fieldptr(isIfcVicSq, isIfcVicFldName, igrid)
+
+            CALL comp_isIfc_grd(kk, jj, ii, cSq, isIfcSq, isIfcVicSq)
+        END DO
+
+    END SUBROUTINE comp_isIfc_stag
+
+    !================================================================
+
+    SUBROUTINE comp_isIfc_grd(kk, jj, ii, c, isIfc, isIfcVic)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Track cells containing an interface or in vicinity of an
+    !   interface.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -93,42 +167,7 @@ CONTAINS
             ENDDO
         ENDDO
 
-    END SUBROUTINE trk_ifc_grd
-
-    !================================================================
-
-    SUBROUTINE comp_isIfc(q)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: q
-
-        ! Local variables
-        CHARACTER(len=3) :: cFldName
-        INTEGER(intk) :: n, igrid
-        INTEGER(intk) :: kk, jj, ii
-        REAL(realk), POINTER, CONTIGUOUS :: cSq(:,:,:)
-        LOGICAL, POINTER, CONTIGUOUS :: isIfcS(:,:,:)
-        LOGICAL, POINTER, CONTIGUOUS :: isIfcVicS(:,:,:)
-
-        cFldName = "CS"//itoc(q)
-
-        DO n = 1, nmygrids
-            igrid = mygrids(n)
-
-            CALL get_mgdims(kk, jj, ii, igrid)
-
-            CALL get_fieldptr(cSq, cFldName, igrid)
-            CALL get_fieldptr(isIfcS, "ISIFCS", igrid)
-            CALL get_fieldptr(isIfcVicS, "ISIFCVICS", igrid)
-
-            CALL trk_ifc_grd(kk, jj, ii, cSq, isIfcS, isIfcVicS)
-        END DO
-
-    END SUBROUTINE comp_isIfc
+    END SUBROUTINE comp_isIfc_grd
 
     !================================================================
 
@@ -269,7 +308,7 @@ CONTAINS
         ! Local variables
         ! None
 
-        CALL trk_ifc_grd(kk, jj, ii, c, isIfc)
+        CALL comp_isIfc_grd(kk, jj, ii, c, isIfc)
         CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, c, dx, dy, dz)
         CALL comp_alpha(alpha, kk, jj, ii, c, isIfc, ddx, ddy, ddz, normx, normy, normz)
 
@@ -277,135 +316,28 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_alpha(alpha, kk, jj, ii, c, isIfc, ddx, ddy, ddz, normx, normy, normz)
+    SUBROUTINE comp_c_loc(cLoc, alpha, ddx, ddy, ddz, normx, normy, normz)
     !----------------------------------------------------------------
     !   What it does:
-    !   This subroutine calculates the alpha value for PLIC. The 
-    !   alpha value describes the distance of the interface in a cell
-    !   from a defined reference (left bottom front corner).
-    !   1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
-    !   2. Transform c to a actual volume in bounds [0,0.5] * dV
-    !   3. Solve the standart case for alpha
-    !   4. If necessary, transform alpha to its conjugate 
-    !      alphaMax - alpha
-    !   5. If necessary, transform alpha regarding to its negative
-    !      normal vector components
+    !   Compute volume fraction given the interface parameters of a
+    !   cell.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
-        REAL(realk), INTENT(in) :: c(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isIfc(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
-
-        ! Local variables
-        INTEGER(intk) :: k, j, i
-        REAL(realk) :: m1, m2, m3, c1, c2, c3
-        REAL(realk) :: alphaMax(kk, jj, ii)
-
-        alpha = 0.0_realk
-
-        ! Loop over cells
-        DO i = 2, ii-1
-            DO j = 2, jj-1
-                DO k = 2, kk-1
-
-                    ! Only calculate interface for intersected cells
-                    IF ( .NOT. isIfc(k,j,i) ) THEN 
-                        CYCLE
-                    ENDIF
-
-                    ! 1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
-                    ! To enhance performance consider inlining
-                    CALL get_order(m1, m2, m3, c1, c2, c3, &
-                        normx(k,j,i), normy(k,j,i), normz(k,j,i), ddx(i), ddy(j), ddz(k))
-
-                    ! 2. Transform c to a actual volume in bounds [0,0.5] * dV
-                    ! 3. Solve the standart cases for alpha
-                    ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
-                    !         Journal of Computational Physics, Bd. 164, Nr. 1, S. 228–237, Okt. 2000, doi: 10.1006/jcph.2000.6567.
-                    ! To enhance performance consider inlining
-                    CALL comp_alpha_std(m1, m2, m3, c1, c2, c3, alpha(k,j,i), &
-                        alphaMax(k,j,i), c(k,j,i), ddx(i), ddy(j), ddz(k))
-
-                    ! 4. If necessary, transform alpha back to volume bounds [0,1] * dV
-                    ! If the volume fraction function has a value above 0.5 the "inverse problem" is solved. Therefore, the result is no longer 
-                    ! alpha, but alphaMax - alpha. It can be seen as a rotation of the voxel. This is the inverse rotation (see comp_alpha_std)
-                    IF ( c(k,j,i) > 0.5_realk ) THEN
-                        alpha(k,j,i) = alphaMax(k,j,i) - alpha(k,j,i)
-                    ENDIF
-
-                    ! 5. If necessary, transform alpha regarding to its negative normal vector components
-                    ! If one of the normal vector components is negative, a mirrored case is solved. Therefore, the solution
-                    ! has to be transformed back (see get_order)
-                    IF ( normx(k,j,i) < 0.0_realk ) THEN
-                        alpha(k,j,i) = alpha(k,j,i) + ddx(i)*normx(k,j,i)
-                    ENDIF
-
-                    IF ( normy(k,j,i) < 0.0_realk ) THEN
-                        alpha(k,j,i) = alpha(k,j,i) + ddy(j)*normy(k,j,i)
-                    ENDIF
-
-                    IF ( normz(k,j,i) < 0.0_realk ) THEN
-                        alpha(k,j,i) = alpha(k,j,i) + ddz(k)*normz(k,j,i)
-                    ENDIF
-
-                ENDDO
-            ENDDO
-        ENDDO
-
-    END SUBROUTINE comp_alpha
-
-    !================================================================
-
-    SUBROUTINE comp_c(cellProportion, alpha, ddx, ddy, ddz, normx, normy, normz)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   This subroutine calculates the value of the volume fraction 
-    !   function c in the voxel ddx*ddy*ddz, given alpha. 
-    !   1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
-    !   2. If necessary, transform alpha regarding to its negative
-    !      normal vector components
-    !   3. If necessary, transform alpha to its conjugate 
-    !      alphaMax - alpha 
-    !   4. Solve the standart case for vol
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        REAL(realk), INTENT(out) :: cellProportion
+        REAL(realk), INTENT(out) :: cLoc
         REAL(realk), INTENT(in) :: alpha
         REAL(realk), INTENT(in) :: ddx, ddy, ddz
         REAL(realk), INTENT(in) :: normx, normy, normz
 
-        ! Input variables
+        ! Local variables
         REAL(realk) :: m1, m2, m3, c1, c2, c3
         REAL(realk) :: alphaStd
 
-        ! 1. Assign norm(.) to m1, m2 and m3 and c1-c3 respectively
-        ! To enhance performance consider inlining
         CALL get_order(m1, m2, m3, c1, c2, c3, normx, normy, normz, ddx, ddy, ddz)
+        alphaStd = alpha - mirror_shift(normx, normy, normz, ddx, ddy, ddz)
+        CALL comp_c_std(m1, m2, m3, c1, c2, c3, alphaStd, cLoc)
 
-        ! 2. If necessary, transform alpha regarding to its negative normal vector components
-        alphaStd = alpha
-        IF ( normx < 0.0_realk ) THEN
-            alphaStd = alphaStd - ddx*normx
-        ENDIF
-
-        IF ( normy < 0.0_realk ) THEN
-            alphaStd = alphaStd - ddy*normy
-        ENDIF
-
-        IF ( normz < 0.0_realk ) THEN
-            alphaStd = alphaStd - ddz*normz
-        ENDIF
-
-        ! 3. If necessary, transform alpha to its conjugate alphaMax - alpha
-        ! 4. Solve the standart case for vol
-        CALL comp_c_std(m1, m2, m3, c1, c2, c3, alphaStd, cellProportion)
-
-    END SUBROUTINE comp_c
+    END SUBROUTINE comp_c_loc
 
     !================================================================
 
@@ -430,7 +362,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
         LOGICAL, POINTER, CONTIGUOUS :: isIfc(:,:,:)
 
-        cFldName = "CS"//itoc(q)
+        cFldName = "CS"//int2char(q)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -462,7 +394,7 @@ CONTAINS
     !   What it does:
     !   Compute the volume fraction field for the staggered cells
     !   depending on q. The staggered cells are either moved by
-    !   1/2 ddx, 1/2 ddy or 1/2 ddz.
+    !   1/2ddx, 1/2ddy or 1/2ddz.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -483,7 +415,7 @@ CONTAINS
 
         cSq = 0.0_realk
 
-        CALL get_spatial_indices(q, iq, jq, kq)
+        CALL sel_ind(q, iq, jq, kq)
 
         DO i = 2, ii-2
             DO j = 2, jj-2
@@ -509,14 +441,14 @@ CONTAINS
                     ddsPl = iq * ddxPl + jq * ddyPl + kq * ddzPl
 
                     IF ( isIfc(k,j,i) .AND. isIfc(k+kq,j+jq,i+iq) ) THEN
-                        CALL comp_c(halfFractionMi, alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
-                        CALL comp_c(halfFractionPl, alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
+                        CALL comp_c_loc(halfFractionMi, alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
+                        CALL comp_c_loc(halfFractionPl, alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
                         cSq(k,j,i) = ( halfFractionMi * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE IF ( isIfc(k,j,i) .AND. .NOT. isIfc(k+kq,j+jq,i+iq) ) THEN
-                        CALL comp_c(halfFractionMi, alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
+                        CALL comp_c_loc(halfFractionMi, alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
                         cSq(k,j,i) = ( halfFractionMi * ddsMi + c(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE IF ( .NOT. isIfc(k,j,i) .AND. isIfc(k+kq,j+jq,i+iq) ) THEN
-                        CALL comp_c(halfFractionPl, alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
+                        CALL comp_c_loc(halfFractionPl, alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
                         cSq(k,j,i) = ( c(k,j,i) * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE
                         cSq(k,j,i) = ( c(k,j,i) * ddsMi + c(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
@@ -532,9 +464,8 @@ CONTAINS
     PURE SUBROUTINE get_order(m1, m2, m3, c1, c2, c3, normx, normy, normz, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
-    !   This is a pure subroutine to enhance the performance by 
-    !   inlining. It determines the order of the scaled normal values
-    !   and writes it to m1-m3 and c1-c3 respectively.
+    !   Determines the order of the scaled normal values
+    !   and writes it to m1-m3 and c1-c3.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -547,9 +478,9 @@ CONTAINS
         INTEGER(intk) :: i1, i2, i3, tmpi
 
         ! Set initial order
-        scaledNorm1 = abs(normx)*ddx
-        scaledNorm2 = abs(normy)*ddy
-        scaledNorm3 = abs(normz)*ddz
+        scaledNorm1 = ABS(normx)*ddx
+        scaledNorm2 = ABS(normy)*ddy
+        scaledNorm3 = ABS(normz)*ddz
 
         i1 = 1; i2 = 2; i3 = 3
 
@@ -583,257 +514,279 @@ CONTAINS
             tmpi = i1; i1 = i2; i2 = tmpi
         ENDIF
 
-        ! Assign new order to m1-m3 and c1-c3 respectively
-        ! The absolute value of norm(.) is a mirror transform (see comp_alpha 5.).
+        ! Assign new order to m1-m3 and c1-c3
         SELECT CASE (i1)
-        CASE (1); m1 = abs(normx); c1 = ddx
-        CASE (2); m1 = abs(normy); c1 = ddy
-        CASE (3); m1 = abs(normz); c1 = ddz
+        CASE (1); m1 = ABS(normx); c1 = ddx
+        CASE (2); m1 = ABS(normy); c1 = ddy
+        CASE (3); m1 = ABS(normz); c1 = ddz
         END SELECT
 
         SELECT CASE (i2)
-        CASE (1); m2 = abs(normx); c2 = ddx
-        CASE (2); m2 = abs(normy); c2 = ddy
-        CASE (3); m2 = abs(normz); c2 = ddz
+        CASE (1); m2 = ABS(normx); c2 = ddx
+        CASE (2); m2 = ABS(normy); c2 = ddy
+        CASE (3); m2 = ABS(normz); c2 = ddz
         END SELECT
 
         SELECT CASE (i3)
-        CASE (1); m3 = abs(normx); c3 = ddx
-        CASE (2); m3 = abs(normy); c3 = ddy
-        CASE (3); m3 = abs(normz); c3 = ddz
+        CASE (1); m3 = ABS(normx); c3 = ddx
+        CASE (2); m3 = ABS(normy); c3 = ddy
+        CASE (3); m3 = ABS(normz); c3 = ddz
         END SELECT
 
     END SUBROUTINE get_order
 
     !================================================================
 
-    PURE SUBROUTINE comp_alpha_std(m1, m2, m3, c1, c2, c3, alphaStd, alphaMax, c, ddx, ddy, ddz)
+    SUBROUTINE comp_alpha(alpha, kk, jj, ii, c, isIfc, ddx, ddy, ddz, normx, normy, normz)
     !----------------------------------------------------------------
     !   What it does:
-    !   This is a subroutine to enhance the performance by 
-    !   inlining. It solves the cubic equation
-    !
-    !   vol = 1 / (6 * m1 * m2 * m3) * [alphaStd^3
-    !   - sum_{j=1..3} H(alphaStd - m_j * c_j) * (alphaStd - m_j * c_j)^3
-    !   + sum_{j=1..3} H(alphaStd - alphaMax + m_j * c_j) * 
-    !   (alphaStd - alphaMax + m_j * c_j)^3]
-    !
-    !   where alphaMax = m1*c1 + m2*c2 + m3*c3
-    !
-    !   for alphaStd. This is done for the standart cases:
-    !       - 0 = mc1 = mc2 < mc3 (one-dimensional)
-    !       - 0 = mc1 < mc3 < mc3 (two-dimensional)
-    !       - mc1 < mc2 < mc3 (three-dimensional)
+    !   Compute alpha given the normal vector and volume fraction of
+    !   a cell.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        LOGICAL, INTENT(in) :: isIfc(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: m1, m2, m3, c1, c2, c3
+        REAL(realk) :: alphaStd
+
+        alpha = 0.0_realk
+        DO i = 2, ii-1
+            DO j = 2, jj-1
+                DO k = 2, kk-1
+                    IF ( .NOT. isIfc(k,j,i) ) CYCLE
+                    CALL get_order(m1, m2, m3, c1, c2, c3, normx(k,j,i), normy(k,j,i), normz(k,j,i), ddx(i), ddy(j), ddz(k))
+                    CALL comp_alpha_std(m1, m2, m3, c1, c2, c3, alphaStd, c(k,j,i))
+                    alpha(k,j,i) = alphaStd + mirror_shift(normx(k,j,i), normy(k,j,i), normz(k,j,i), ddx(i), ddy(j), ddz(k))
+                ENDDO
+            ENDDO
+        ENDDO
+
+    END SUBROUTINE comp_alpha
+
+    !================================================================
+
+    PURE SUBROUTINE comp_alpha_std(m1, m2, m3, c1, c2, c3, &
+        alphaStd, cLoc)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Solves the standart case for the plane constant alpha.
+    !   Mirrors comp_c_std.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         REAL(realk), INTENT(in) :: m1, m2, m3, c1, c2, c3
-        REAL(realk), INTENT(out) :: alphaStd, alphaMax
-        REAL(realk), INTENT(in) :: c
-        REAL(realk), INTENT(in) :: ddx, ddy, ddz
-        
+        REAL(realk), INTENT(out) :: alphaStd
+        REAL(realk), INTENT(in) :: cLoc
+
         ! Local variables
+        LOGICAL :: isUpper
         REAL(realk) :: mc1, mc2, mc3
-        REAL(realk) :: vol
-        REAL(realk) :: baseArea, criticalBaseArea
+        REAL(realk) :: alphaMax, alphaLow, volLow
+        REAL(realk) :: area, areaCrit
         REAL(realk) :: V1, V2, V3
         REAL(realk) :: a0, a1, a2
         REAL(realk) :: qo, po
         REAL(realk) :: theta
 
-        ! Transform c to a actual volume in bounds [0,0.5] * dV
-        ! Rotate voxel into standart configuration (see comp_alpha 4.)
-        vol = MIN(c, 1.0_realk - c) * ddx * ddy * ddz
-        
-        ! Solve the standart cases for alphaStd
-        ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
-        !         Journal of Computational Physics, Bd. 164, Nr. 1, S. 228–237, Okt. 2000, doi: 10.1006/jcph.2000.6567.
+        ! Scaled normal components
         mc1 = m1*c1
         mc2 = m2*c2
         mc3 = m3*c3
-        
+        alphaMax = comp_alpha_max(mc1, mc2, mc3)
+
+        ! Fold input onto the lower half
+        isUpper = ( cLoc > 0.5_realk )
+        volLow = MIN(cLoc, 1.0_realk - cLoc)*c1*c2*c3
+
         IF ( mc1 < vofTol ) THEN
             IF ( mc2 < vofTol ) THEN
-                ! One-dimensional case
-                alphaMax = mc3
-                alphaStd = vol / (c1*c2)
+                ! 1D
+                alphaLow = volLow/(c1*c2)
             ELSE
-                ! Two-dimensional cases
-                alphaMax = mc2 + mc3
-                
-                ! actual base area
-                baseArea = vol / c1
-                
-                ! When the critical base area is exceeded the volume shape transforms to a chamfered rectangle prism instead of triangular prism
-                criticalBaseArea = 1.0_realk/2.0_realk * c2**2 * m2/m3
-                
-                IF ( baseArea < criticalBaseArea ) THEN
-                    ! Here both interception lines of the interface with the coordinate axis are within the cell => triangular prism
-                    alphaStd = SQRT(2.0_realk * baseArea * m2 * m3)
+                ! 2D
+                areaCrit = 0.5_realk*c2**2*m2/m3
+                area = volLow/c1
+                IF ( area < areaCrit ) THEN
+                    alphaLow = SQRT(2.0_realk*area*m2*m3)
                 ELSE
-                    ! Here one interception line (with the c2 axis) is outside the cell => chamfered rectangle prism
-                    alphaStd = (m3) / (c2) * baseArea + (mc2) / 2.0_realk
+                    alphaLow = m3/c2*area + mc2*0.5_realk
                 ENDIF
             ENDIF
         ELSE
-            ! Three-dimensional cases
-            alphaMax = mc1 + mc2 + mc3
-
-            ! Define interval boundaries V1, V2, V3
-            V1 = mc1**2 * c1 / ( MAX(6.0_realk * m2 * m3, vofTol) )
-            V2 = V1 + c1 * c2 * ( mc2 - mc1 ) / ( 2.0_realk * m3 )
+            ! 3D
+            V1 = mc1**2*c1/(MAX(6.0_realk*m2*m3, vofTol))
+            V2 = V1 + c1*c2*(mc2 - mc1)/(2.0_realk*m3)
             IF ( mc3 < mc1 + mc2 ) THEN
-                V3 = ( mc3**2 * ( 3.0_realk * ( mc1 + mc2 ) - mc3 ) + &
-                        mc1**2 * ( mc1 - 3.0_realk * mc3 ) + &
-                        mc2**2 * ( mc2 - 3.0_realk * mc3 ) ) / &
-                        ( 6.0_realk * m1 * m2 * m3 )
+                V3 = (mc3**2*(3.0_realk*(mc1 + mc2) - mc3) + &
+                    mc1**2*(mc1 - 3.0_realk*mc3) + &
+                    mc2**2*(mc2 - 3.0_realk*mc3))/ &
+                    (6.0_realk*m1*m2*m3)
             ELSE
-                V3 = c1 * c2 * ( mc1 + mc2 ) / ( 2.0_realk * m3 )
+                V3 = c1*c2*(mc1 + mc2)/(2.0_realk*m3)
             ENDIF
-            
-            ! Calculate alphaStd dependent on V1, V2 and V3
-            IF ( vol < V1 ) THEN
-                alphaStd = ( 6.0_realk * m1 * m2 * m3 * vol )**( 1.0_realk/3.0_realk )
-            ELSE IF ( vol < V2 ) THEN
-                alphaStd = 1.0_realk/2.0_realk * ( mc1 + SQRT(mc1**2 + 8.0_realk * m2 * m3 * (vol - V1) / c1) )
-            ELSE IF ( vol < V3 ) THEN
-                a2 = - 3.0_realk * ( mc1 + mc2 )
-                a1 = 3.0_realk * ( mc1**2 + mc2**2 )
-                a0 = - (mc1**3 + mc2**3) + 6.0_realk * m1 * m2 * m3 * vol
-                po = a1 / 3.0_realk - a2**2 / 9.0_realk
-                qo = ( a1 * a2 - 3.0_realk * a0 ) / 6.0_realk - a2**3 / 27.0_realk
-                
-                theta = ACOS(qo / (-po*SQRT(-po))) / 3.0_realk
-                alphaStd = SQRT(-po) * ( SQRT(3.0_realk) * SIN(theta) - COS(theta) ) - a2 / 3.0_realk
-            ELSE IF ( vol >= V3 .AND. mc3 <= mc1 + mc2 ) THEN
-                a2 = - 3.0_realk/2.0_realk * ( mc1 + mc2 + mc3 )
-                a1 = 3.0_realk/2.0_realk * ( mc1**2 + mc2**2 + mc3**2 )
-                a0 = - 1.0_realk/2.0_realk * ( mc1**3 + mc2**3 + mc3**3 ) + 3.0_realk * m1 * m2 * m3 * vol
-                po = a1 / 3.0_realk - a2**2 / 9.0_realk
-                qo = ( a1 * a2 - 3.0_realk * a0 ) / 6.0_realk - a2**3 / 27.0_realk
-                
-                theta = ACOS(qo / (-po*SQRT(-po))) / 3.0_realk
-                alphaStd = SQRT(-po) * ( SQRT(3.0_realk) * SIN(theta) - COS(theta) ) - a2 / 3.0_realk
-            ELSE IF ( vol >= V3 .AND. mc3 > mc1 + mc2 ) THEN
-                alphaStd = m3 * vol / ( c1 * c2 ) + ( mc1 + mc2 ) / 2.0_realk
+
+            IF ( volLow < V1 ) THEN
+                alphaLow = (6.0_realk*m1*m2*m3*volLow)** &
+                    (1.0_realk/3.0_realk)
+            ELSE IF ( volLow < V2 ) THEN
+                alphaLow = 0.5_realk*(mc1 + SQRT(mc1**2 + &
+                    8.0_realk*m2*m3*(volLow - V1)/c1))
+            ELSE IF ( volLow < V3 ) THEN
+                a2 = -3.0_realk*(mc1 + mc2)
+                a1 = 3.0_realk*(mc1**2 + mc2**2)
+                a0 = -(mc1**3 + mc2**3) + 6.0_realk*m1*m2*m3*volLow
+                po = a1/3.0_realk - a2**2/9.0_realk
+                qo = (a1*a2 - 3.0_realk*a0)/6.0_realk - &
+                    a2**3/27.0_realk
+                theta = ACOS(qo/(-po*SQRT(-po)))/3.0_realk
+                alphaLow = SQRT(-po)*(SQRT(3.0_realk)*SIN(theta) - &
+                    COS(theta)) - a2/3.0_realk
+            ELSE IF ( volLow >= V3 .AND. mc3 <= mc1 + mc2 ) THEN
+                a2 = -3.0_realk/2.0_realk*(mc1 + mc2 + mc3)
+                a1 = 3.0_realk/2.0_realk*(mc1**2 + mc2**2 + mc3**2)
+                a0 = -0.5_realk*(mc1**3 + mc2**3 + mc3**3) + &
+                    3.0_realk*m1*m2*m3*volLow
+                po = a1/3.0_realk - a2**2/9.0_realk
+                qo = (a1*a2 - 3.0_realk*a0)/6.0_realk - &
+                    a2**3/27.0_realk
+                theta = ACOS(qo/(-po*SQRT(-po)))/3.0_realk
+                alphaLow = SQRT(-po)*(SQRT(3.0_realk)*SIN(theta) - &
+                    COS(theta)) - a2/3.0_realk
+            ELSE IF ( volLow >= V3 .AND. mc3 > mc1 + mc2 ) THEN
+                alphaLow = m3*volLow/(c1*c2) + (mc1 + mc2)*0.5_realk
             ENDIF
         ENDIF
+
+        ! Unfold result onto the full range
+        alphaStd = MERGE(alphaMax - alphaLow, alphaLow, isUpper)
 
     END SUBROUTINE comp_alpha_std
 
     !================================================================
 
-    PURE SUBROUTINE comp_c_std(m1, m2, m3, c1, c2, c3, alphaLoc, cellProportion)
+    PURE SUBROUTINE comp_c_std(m1, m2, m3, c1, c2, c3, &
+        alphaStd, cLoc)
     !----------------------------------------------------------------
     !   What it does:
-    !   This is a pure subroutine to enhance the performance by 
-    !   inlining. It solves the cubic equation
-    !
-    !   vol = 1 / (6 * m1 * m2 * m3) * [alphaStd^3
-    !   - sum_{j=1..3} H(alphaStd - m_j * c_j) * (alphaStd - m_j * c_j)^3
-    !   + sum_{j=1..3} H(alphaStd - alphaMax + m_j * c_j) * 
-    !   (alphaStd - alphaMax + m_j * c_j)^3]
-    !
-    !   where alphaMax = m1*c1 + m2*c2 + m3*c3
-    !
-    !   for vol. This is done for the standart cases:
-    !       - 0 = mc1 = mc2 < mc3 (one-dimensional)
-    !       - 0 = mc1 < mc3 < mc3 (two-dimensional)
-    !       - mc1 < mc2 < mc3 (three-dimensional)
+    !   Solves the standart case for the volume fraction.
+    !   Mirrors comp_alpha_std.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         REAL(realk), INTENT(in) :: m1, m2, m3, c1, c2, c3
-        REAL(realk), INTENT(in) :: alphaLoc
-        REAL(realk), INTENT(out) :: cellProportion
+        REAL(realk), INTENT(in) :: alphaStd
+        REAL(realk), INTENT(out) :: cLoc
 
         ! Local variables
+        LOGICAL :: isUpper
         REAL(realk) :: mc1, mc2, mc3
-        REAL(realk) :: vol
-        REAL(realk) :: alphaMax
-        REAL(realk) :: alphaStd
+        REAL(realk) :: alphaMax, alphaLow, volLow
+        REAL(realk) :: area, areaCrit
         REAL(realk) :: V1
-        REAL(realk) :: baseArea, chamferedRectangleArea, triangularArea
+        REAL(realk) :: cLow
 
-        ! Solve the standart cases for vol
-        ! Source: R. Scardovelli und S. Zaleski, „Analytical Relations Connecting Linear Interfaces and Volume Fractions in Rectangular Grids“,
-        !         Journal of Computational Physics, Bd. 164, Nr. 1, S. 228–237, Okt. 2000, doi: 10.1006/jcph.2000.6567.
+        ! Scaled normal components
         mc1 = m1*c1
         mc2 = m2*c2
         mc3 = m3*c3
+        alphaMax = comp_alpha_max(mc1, mc2, mc3)
+
+        ! Fold input onto the lower half
+        isUpper = ( alphaStd > 0.5_realk*alphaMax )
+        alphaLow = MAX(MIN(alphaStd, alphaMax - alphaStd), 0.0_realk)
 
         IF ( mc1 < vofTol ) THEN
             IF ( mc2 < vofTol ) THEN
-                ! One-dimensional case
-                alphaMax = mc3
-                alphaStd = MIN(alphaLoc, alphaMax - alphaLoc)
-
-                IF ( alphaStd <= 0.0_realk ) THEN
-                    IF ( alphaLoc >= alphaMax ) THEN
-                        vol = c1 * c2 * c3
-                    ELSE
-                        vol = 0.0_realk
-                    ENDIF 
-                ELSE
-                    vol = alphaStd * (c1*c2)
-                ENDIF
+                ! 1D
+                volLow = alphaLow*(c1*c2)
             ELSE
-                ! Two-dimensional cases
-                alphaMax = mc2 + mc3
-                alphaStd = MIN(alphaLoc, alphaMax - alphaLoc)
-
-                IF ( alphaStd <= 0.0_realk ) THEN
-                    IF ( alphaLoc >= alphaMax ) THEN
-                        vol = c1 * c2 * c3
-                    ELSE
-                        vol = 0.0_realk
-                    ENDIF
-                ! Calculate vol dependent on mc2 and mc3
-                ELSEIF ( alphaStd < mc2 ) THEN
-                    baseArea = 1.0_realk/2.0_realk * alphaStd**2 / ( m2 * m3 )
-                    vol = baseArea * c1
+                ! 2D
+                areaCrit = 0.5_realk*c2**2*m2/m3
+                IF ( alphaLow < mc2 ) THEN
+                    area = 0.5_realk*alphaLow**2/(m2*m3)
                 ELSE
-                    triangularArea = 1.0_realk/2.0_realk * c2**2 * m2 / m3
-                    chamferedRectangleArea = c2 * alphaStd / m3 - triangularArea
-                    vol = chamferedRectangleArea * c1
+                    area = c2*alphaLow/m3 - areaCrit
                 ENDIF
+                volLow = area*c1
             ENDIF
         ELSE
-            ! Three-dimensional cases
-            alphaMax = mc1 + mc2 + mc3
-            alphaStd = MIN(alphaLoc, alphaMax - alphaLoc)
-
-            V1 = mc1**2 * c1 / ( MAX(6.0_realk * m2 * m3, vofTol) )
-
-            IF ( alphaStd <= 0.0_realk ) THEN
-                IF ( alphaLoc >= alphaMax ) THEN
-                    vol = c1 * c2 * c3
-                ELSE
-                    vol = 0.0_realk
-                ENDIF
-            ! Calculate vol dependent on mc1, mc2 and mc3
-            ELSEIF ( alphaStd < mc1 ) THEN
-                vol = alphaStd**3 / ( 6.0_realk * m1 * m2 * m3 )
-            ELSE IF ( alphaStd < mc2 ) THEN
-                vol = ( alphaStd * c1 * ( alphaStd - mc1 ) ) / ( 2.0_realk * m2 * m3 ) + V1
-            ELSE IF ( alphaStd < MIN(mc1 + mc2, mc3) ) THEN
-                vol = ( alphaStd**2 * ( 3.0_realk * ( mc1 + mc2 ) - alphaStd ) + mc1**2 * ( mc1 - 3.0_realk * alphaStd ) + mc2**2 * ( mc2 - 3.0_realk * alphaStd ) ) / ( 6.0_realk * m1 * m2 * m3 )
-            ELSE IF ( alphaStd >= MIN(mc1 + mc2, mc3) .AND. mc3 <= mc1 + mc2 ) THEN
-                vol = ( alphaStd**2 * ( 3.0_realk * ( mc1 + mc2 + mc3 ) - 2.0_realk * alphaStd ) &
-                    + mc1**2 * ( mc1 - 3.0_realk * alphaStd ) &
-                    + mc2**2 * ( mc2 - 3.0_realk * alphaStd ) &
-                    + mc3**2 * ( mc3 - 3.0_realk * alphaStd ) ) / ( 6.0_realk * m1 * m2 * m3 )
-            ELSE IF ( alphaStd >= MIN(mc1 + mc2, mc3) .AND. mc3 > mc1 + mc2 ) THEN
-                vol = ( c1 * c2 * ( 2.0_realk * alphaStd - ( mc1 + mc2 ) ) ) / ( 2.0_realk * m3 )
+            ! 3D
+            V1 = mc1**2*c1/(MAX(6.0_realk*m2*m3, vofTol))
+            IF ( alphaLow < mc1 ) THEN
+                volLow = alphaLow**3/(6.0_realk*m1*m2*m3)
+            ELSE IF ( alphaLow < mc2 ) THEN
+                volLow = (alphaLow*c1*(alphaLow - mc1))/ &
+                    (2.0_realk*m2*m3) + V1
+            ELSE IF ( alphaLow < MIN(mc1 + mc2, mc3) ) THEN
+                volLow = (alphaLow**2*(3.0_realk* &
+                    (mc1 + mc2) - alphaLow) + &
+                    mc1**2*(mc1 - 3.0_realk*alphaLow) + &
+                    mc2**2*(mc2 - 3.0_realk*alphaLow))/ &
+                    (6.0_realk*m1*m2*m3)
+            ELSE IF ( alphaLow >= MIN(mc1 + mc2, mc3) .AND. &
+                      mc3 <= mc1 + mc2 ) THEN
+                volLow = (alphaLow**2*(3.0_realk* &
+                    (mc1 + mc2 + mc3) - 2.0_realk*alphaLow) + &
+                    mc1**2*(mc1 - 3.0_realk*alphaLow) + &
+                    mc2**2*(mc2 - 3.0_realk*alphaLow) + &
+                    mc3**2*(mc3 - 3.0_realk*alphaLow))/ &
+                    (6.0_realk*m1*m2*m3)
+            ELSE IF ( alphaLow >= MIN(mc1 + mc2, mc3) .AND. &
+                      mc3 > mc1 + mc2 ) THEN
+                volLow = (c1*c2*(2.0_realk*alphaLow - &
+                    (mc1 + mc2)))/(2.0_realk*m3)
             ENDIF
         ENDIF
 
-        cellProportion = vol / ( c1 * c2 * c3 )
-
-        IF ( alphaLoc > 0.5_realk * alphaMax .AND. alphaLoc < alphaMax ) THEN
-            cellProportion = 1.0_realk - cellProportion
-        ENDIF
+        ! Unfold result onto the full range
+        cLow = volLow/(c1*c2*c3)
+        cLoc = MERGE(1.0_realk - cLow, cLow, isUpper)
 
     END SUBROUTINE comp_c_std
+
+    !================================================================
+
+    PURE FUNCTION mirror_shift(normx, normy, normz, ddx, ddy, ddz) RESULT(shift)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Each direction with a negative normal component
+    !   mirrors the cell and shifts the plane constant by 
+    !   norm(.)*dd(.).
+    !----------------------------------------------------------------
+
+        REAL(realk), INTENT(in) :: normx, normy, normz
+        REAL(realk), INTENT(in) :: ddx, ddy, ddz
+        REAL(realk) :: shift
+
+        shift = MIN(normx*ddx, 0.0_realk) + &
+                MIN(normy*ddy, 0.0_realk) + &
+                MIN(normz*ddz, 0.0_realk)
+
+    END FUNCTION mirror_shift
+
+    !================================================================
+
+    PURE FUNCTION comp_alpha_max(mc1, mc2, mc3) RESULT(alphaMax)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Compute theoretical maximum alpha value.
+    !----------------------------------------------------------------
+
+        REAL(realk), INTENT(in) :: mc1, mc2, mc3
+        REAL(realk) :: alphaMax
+
+        alphaMax = MERGE(mc1, 0.0_realk, mc1 >= vofTol) + &
+                   MERGE(mc2, 0.0_realk, mc2 >= vofTol) + &
+                   MERGE(mc3, 0.0_realk, mc3 >= vofTol)
+
+    END FUNCTION comp_alpha_max
 
 END MODULE mph_plic_mod

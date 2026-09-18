@@ -40,12 +40,12 @@ MODULE mphcore_mod
     REAL(realk), PROTECTED :: grav(3)
 
     ! Error codes
-    INTEGER(intk), PROTECTED :: propsErr, vofErr, plicErr, mphInitErr
+    INTEGER(intk), PARAMETER :: mphInitErr = 124, propsErr = 125, vofErr = 126, plicErr = 127
 
     PUBLIC :: init_mphcore, finish_mphcore, hasMph, &
         mphTst, skpAdv, skpDif, skpExt, splPer, vofTol, divTol, &
         voltol, advScm, donCen, vofChk, volChk, divChk, rho1, rho2, &
-        gmol1, gmol2, grav, propsErr, vofErr, plicErr
+        gmol1, gmol2, grav, propsErr, vofErr, plicErr, mphInitErr
 
 CONTAINS
 
@@ -60,11 +60,6 @@ CONTAINS
         CHARACTER(len=*), PARAMETER :: descD = "density fld."
         CHARACTER(len=*), PARAMETER :: descC = "vol. frac. fld."
         CHARACTER(len=*), PARAMETER :: descCp = "prev. vol. frac. fld."
-        CHARACTER(len=*), PARAMETER :: descNorm = "ifc. norm. vec."
-        CHARACTER(len=*), PARAMETER :: descAlpha = "ifc. plane const."
-        CHARACTER(len=*), PARAMETER :: descIsIfc = "cell with ifc."
-        CHARACTER(len=*), PARAMETER :: descIsIfcVic = "cell in vic. of ifc."
-        CHARACTER(len=*), PARAMETER :: descGrdmask = "uncov. cells"
 
         hasMph = .FALSE.
         IF (.NOT. fort7%exists("/multiphase")) THEN
@@ -97,14 +92,14 @@ CONTAINS
         ! Read densities
         CALL mphConf%get_value("/rho1", rho1, 1.0_realk)
         CALL mphConf%get_value("/rho2", rho2, 1.0_realk)
-        IF (rho1 <= 0.0 .OR. rho2 <= 0.0) THEN
+        IF (rho1 <= 0.0_realk .OR. rho2 <= 0.0_realk) THEN
             WRITE(*, *) "Densities must be positive. rho1 = ", rho1, ", rho2 = ", rho2
             CALL errr(__FILE__, __LINE__)
         END IF
 
         ! Read viscosities
-        CALL mphConf%get_value("/gmol1", gmol1)
-        CALL mphConf%get_value("/gmol2", gmol2)
+        CALL mphConf%get_value("/gmol1", gmol1, 1.0E-3_realk)
+        CALL mphConf%get_value("/gmol2", gmol2, 1.0E-3_realk)
         IF (gmol1 <= 0.0_realk .OR. gmol2 <= 0.0_realk) THEN
             WRITE(*, *) "Viscosities must be positive. gmol1 = ", gmol1, ", gmol2 = ", gmol2
             CALL errr(__FILE__, __LINE__)
@@ -127,33 +122,12 @@ CONTAINS
             dread=.FALSE., required=.TRUE., dwrite=.FALSE., buffers=.TRUE.)
         CALL set_field("D", description=descD, &
             dread=.FALSE., required=.TRUE., dwrite=.FALSE., buffers=.TRUE.)
-        CALL set_field("NORMX", description=descNorm, &
-            dread=.FALSE., required=.FALSE., dwrite=.TRUE., buffers=.TRUE.)
-        CALL set_field("NORMY", description=descNorm, &
-            dread=.FALSE., required=.FALSE., dwrite=.TRUE., buffers=.TRUE.)
-        CALL set_field("NORMZ", description=descNorm, &
-            dread=.FALSE., required=.FALSE., dwrite=.TRUE., buffers=.TRUE.)
-        CALL set_field("ALPHA", description=descAlpha, &
-            dread=.FALSE., required=.FALSE., dwrite=.TRUE., buffers=.TRUE.)
-        CALL set_field("ISIFC", description=descIsIfc, &
-            dread=.FALSE., required=.FALSE., dwrite=.TRUE., buffers=.TRUE.)
-        CALL set_field("ISIFCVIC", description=descIsIfcVic, &
-            dread=.FALSE., required=.FALSE., dwrite=.TRUE., buffers=.TRUE.)
-
-        CALL set_field("GRDMASK", description=descGrdmask, &
-            dread=.FALSE., required=.FALSE., dwrite=.FALSE., buffers=.TRUE.)
-
-        ! Set multi-phase error codes
-        mphInitErr = 124
-        propsErr = 125
-        vofErr = 126
-        plicErr = 127
 
     END SUBROUTINE init_mphcore
 
     !================================================================
 
-    SUBROUTINE finish_mphcore
+    SUBROUTINE finish_mphcore()
 
         ! Subroutine arguments
         ! None

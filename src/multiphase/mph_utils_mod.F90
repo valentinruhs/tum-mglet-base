@@ -14,20 +14,19 @@
 
 MODULE mph_utils_mod
 
-    USE MPI_f08
-    USE grids_mod, ONLY: nmygrids, mygrids
-    USE field_mod, ONLY: field_t
-    USE fields_mod, ONLY: get_field
-    USE grids_mod, ONLY: get_mgdims
+    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, iparent, &
+        idprocofgrd, iposition, jposition, kposition, ngrid
     USE comms_mod, ONLY: myid
-    USE precision_mod, ONLY: intk, realk, mglet_mpi_real
-    USE mphcore_mod, ONLY: divTol, volTol
-    USE mph_io_mod, ONLY: initVol, initErr, trueVol
+    USE precision_mod, ONLY: intk, realk
+    USE mphcore_mod, ONLY: divTol, volTol, vofErr
+    USE fields_mod, ONLY: get_fieldptr, set_field
+    USE err_mod, ONLY: err_abort
 
     IMPLICIT NONE(type, external)
     PRIVATE
 
-    PUBLIC :: init_mph_utils, finish_mph_utils
+    PUBLIC :: init_mph_utils, finish_mph_utils, sel_ind, sel_extent, &
+        sel_vel, clp, int2char
 
 CONTAINS
 
@@ -37,9 +36,13 @@ CONTAINS
         ! None
 
         ! Local variables
+        CHARACTER(len=*), PARAMETER :: descGrdmask = "uncov. cells"
         INTEGER(intk) :: n, igrid, igridf, ipar
         INTEGER(intk) :: kk, jj, ii, kc0, jc0, ic0
         REAL(realk), POINTER, CONTIGUOUS :: grdMask(:,:,:)
+
+        CALL set_field("GRDMASK", description=descGrdmask, &
+            dread=.FALSE., required=.TRUE., dwrite=.FALSE., buffers=.TRUE.)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -84,7 +87,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE sel_index(lOrq, io, jo, ko)
+    SUBROUTINE sel_ind(lOrq, io, jo, ko)
     !----------------------------------------------------------------
     !   What it does:
     !   Depending on the direction (l) of component (q) the 
@@ -113,7 +116,7 @@ CONTAINS
             CALL err_abort(vofErr, "invalid direction lOrq.", __FILE__, __LINE__)
         END SELECT
 
-    END SUBROUTINE sel_index
+    END SUBROUTINE sel_ind
 
     !================================================================
 
@@ -156,37 +159,81 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE sel_velocity(kk, jj, ii, lOrq, u, v, w, vel)
+    SUBROUTINE sel_vel(lOrq, u, v, w, vel)
     !----------------------------------------------------------------
     !   What it does:
-    !   Depending on the direction (l) of component (q) the 
-    !   specific velocity (vel) is set to u, v or w.
+    !   Select the for lOrq relevant velocity.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii, lOrq
-        REAL(realk), INTENT(in) :: u(kk,jj,ii), v(kk,jj,ii), w(kk,jj,ii)
-        REAL(realk), INTENT(out) :: vel(kk,jj,ii)
+        INTEGER(intk), INTENT(in) :: lOrq
+        REAL(realk), POINTER, CONTIGUOUS, INTENT(in) :: u(:,:,:), v(:,:,:), w(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS, INTENT(out) :: vel(:,:,:)
 
         ! Local variables
         ! None
 
+        vel => NULL()
+
         SELECT CASE ( lOrq )
         CASE ( 1 )
-            vel = u
+            vel => u
         CASE ( 2 )
-            vel = v
+            vel => v
         CASE ( 3 )
-            vel = w
+            vel => w
         CASE DEFAULT
             CALL err_abort(vofErr, "invalid direction lOrq.", __FILE__, __LINE__)
         END SELECT
 
-    END SUBROUTINE sel_velocity
+    END SUBROUTINE sel_vel
 
     !================================================================
 
-    SUBROUTINE clip(kk, jj, ii, c)
+    SUBROUTINE comp_vol()
+    !----------------------------------------------------------------
+    !   What it does:
+    !
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+
+        ! Local variables
+
+
+    END SUBROUTINE comp_vol
+
+    !================================================================
+
+    SUBROUTINE comp_vol_grd(kk, jj, ii, c, grdMask, ddx, ddy, ddz)
+    !----------------------------------------------------------------
+    !   What it does:
+    !
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: c(kk, jj, ii), grdMask(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+
+        volFld1 = 0.0_realk
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    vol = ddx(i)*ddy(j)*ddz(k)
+                    volFld1 = volFld1 + c(k,j,i)*vol*grdMask(k,j,i)
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE comp_vol_grd
+
+    !================================================================
+
+    ELEMENTAL FUNCTION clp(c) RESULT(cc)
     !----------------------------------------------------------------
     !   What it does:
     !   Clips c to its boundaries [0, 1].
@@ -198,101 +245,18 @@ CONTAINS
     !   doi: 10.1016/j.compfluid.2020.104785.
     !----------------------------------------------------------------
 
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(inout) :: c(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c
+        REAL(realk) :: cc
+        cc = MAX(MIN(c, 1.0_realk), 0.0_realk)
 
-        ! Local variables
-        ! None
-
-        c = MAX(MIN(c, 1.0_realk), 0.0_realk)
-
-    END SUBROUTINE clip
+    END FUNCTION clp
 
     !================================================================
 
-    SUBROUTINE comp_mat_coeff_mph()
-    !----------------------------------------------------------------
-    !   What it does:
-    !   
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        ! None
-
-        ! Local variables
-        INTEGER(intk) :: k, j, i
-        INTEGER(intk) :: kk, jj, ii
-        INTEGER(intk) :: n, igrid
-
-        REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
-        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
-        REAL(realk), POINTER, CONTIGUOUS :: ae(:,:,:), aw(:,:,:), &
-                                            an(:,:,:), as(:,:,:), &
-                                            at(:,:,:), ab(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: ap(:, :, :)
-        REAL(realk), POINTER, CONTIGUOUS :: c(:, :, :)
-        REAL(realk), POINTER, CONTIGUOUS :: dBa(:, :, :), dLe(:, :, :), dTo(:, :, :)
-
-
-        DO n = 1, nmygrids
-            igrid = mygrids(n)
-
-            CALL get_mgdims(kk, jj, ii, igrid)
-
-            CALL get_fieldptr(c, "C", igrid)
-            CALL get_fieldptr(dx, "DX", igrid)
-            CALL get_fieldptr(dy, "DY", igrid)
-            CALL get_fieldptr(dz, "DZ", igrid)
-            CALL get_fieldptr(ddx, "DDX", igrid)
-            CALL get_fieldptr(ddy, "DDY", igrid)
-            CALL get_fieldptr(ddz, "DDZ", igrid)
-
-            CALL get_fieldptr(aw, "GSAW", igrid)
-            CALL get_fieldptr(ae, "GSAE", igrid)
-            CALL get_fieldptr(as, "GSAS", igrid)
-            CALL get_fieldptr(an, "GSAN", igrid)
-            CALL get_fieldptr(ab, "GSAB", igrid)
-            CALL get_fieldptr(at, "GSAT", igrid)
-            CALL get_fieldptr(ap, "GSAP", igrid)
-
-            CALL get_fieldptr(dBa, "dBa", igrid)
-            CALL get_fieldptr(dLe, "dLe", igrid)
-            CALL get_fieldptr(dTo, "dTo", igrid)
-
-            CALL comp_prop_face(kk, jj, ii, c, dBa, dLe, dTo, rho1, rho2, ddx, ddy, ddz)
-
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        ae(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i)*dBa(k,j,i))
-                        aw(k,j,i) = 2.0/((dx(i-1)+dx(i))*dx(i-1)*dBa(k,j,i-1))
-                        an(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j)*dLe(k,j,i))
-                        as(k,j,i) = 2.0/((dy(j-1)+dy(j))*dy(j-1)*dLe(k,j-1,i))
-                        at(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k)*dTo(k,j,i))
-                        ab(k,j,i) = 2.0/((dz(k-1)+dz(k))*dz(k-1)*dTo(k-1,j,i))
-                    ENDDO
-                ENDDO
-            ENDDO
-
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        ap(k, j, i) = -( ae(k,j,i) + aw(k,j,i) + an(k,j,i) &
-                                       + as(k,j,i) + at(k,j,i) + ab(k,j,i) )
-                    END DO
-                END DO
-            END DO
-        ENDDO
-
-    END SUBROUTINE comp_mat_coeff_mph
-
-    !================================================================
-
-    FUNCTION itoc(i) RESULT(c)
+    FUNCTION int2char(i) RESULT(c)
         INTEGER(intk), INTENT(in) :: i
         CHARACTER(len=1) :: c
         WRITE(c, '(I0)') i
-    END FUNCTION itoc
+    END FUNCTION int2char
 
 END MODULE mph_utils_mod
