@@ -25,7 +25,7 @@ MODULE mph_utils_mod
     IMPLICIT NONE(type, external)
     PRIVATE
 
-    PUBLIC :: init_mph_utils, finish_mph_utils, sel_ind, sel_extent, &
+    PUBLIC :: init_mph_utils, finish_mph_utils, sel_ind, sel_ext, &
         sel_vel, clp, int2char
 
 CONTAINS
@@ -120,7 +120,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE sel_extent(kk, jj, ii, q, l, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
+    SUBROUTINE sel_ext(kk, jj, ii, q, l, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
     !----------------------------------------------------------------
     !   What it does:
     !   Depending on the direction (l) of component (q) the 
@@ -138,13 +138,13 @@ CONTAINS
         ! Local variables
         ! None
 
-        IF ( l < 1 .OR. l > 3 .OR. q < 1 .OR. q > 3 ) THEN
+        IF ( l < 1 .OR. l > 3 .OR. q < 0 .OR. q > 3 ) THEN
             CALL err_abort(vofErr, "invalid direction l or q.", __FILE__, __LINE__)
         END IF
 
         dsx = ddx ; dsy = ddy ; dsz = ddz
 
-        IF ( q == l ) THEN
+        IF ( q == l .OR. q == 0 ) THEN
             SELECT CASE ( l )
             CASE ( 1 )
                 dsx = dx
@@ -155,7 +155,7 @@ CONTAINS
             END SELECT
         END IF
 
-    END SUBROUTINE sel_extent
+    END SUBROUTINE sel_ext
 
     !================================================================
 
@@ -190,46 +190,47 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_vol()
-    !----------------------------------------------------------------
-    !   What it does:
-    !
-    !----------------------------------------------------------------
+    ! SUBROUTINE comp_vol()
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !
+    ! !----------------------------------------------------------------
 
-        ! Subroutine arguments
+    !     ! Subroutine arguments
 
-        ! Local variables
+    !     ! Local variables
 
 
-    END SUBROUTINE comp_vol
+    ! END SUBROUTINE comp_vol
 
-    !================================================================
+    ! !================================================================
 
-    SUBROUTINE comp_vol_grd(kk, jj, ii, c, grdMask, ddx, ddy, ddz)
-    !----------------------------------------------------------------
-    !   What it does:
-    !
-    !----------------------------------------------------------------
+    ! SUBROUTINE comp_vol_grd(kk, jj, ii, c, grdMask, ddx, ddy, ddz)
+    ! !----------------------------------------------------------------
+    ! !   What it does:
+    ! !
+    ! !----------------------------------------------------------------
 
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: c(kk, jj, ii), grdMask(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+    !     ! Subroutine arguments
+    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
+    !     REAL(realk), INTENT(in) :: c(kk, jj, ii), grdMask(kk, jj, ii)
+    !     REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
 
-        ! Local variables
-        INTEGER(intk) :: k, j, i
+    !     ! Local variables
+    !     INTEGER(intk) :: k, j, i
+    !     REAL(realk) :: volFld1, vol
 
-        volFld1 = 0.0_realk
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
-                    vol = ddx(i)*ddy(j)*ddz(k)
-                    volFld1 = volFld1 + c(k,j,i)*vol*grdMask(k,j,i)
-                END DO
-            END DO
-        END DO
+    !     volFld1 = 0.0_realk
+    !     DO i = 3, ii-2
+    !         DO j = 3, jj-2
+    !             DO k = 3, kk-2
+    !                 vol = ddx(i)*ddy(j)*ddz(k)
+    !                 volFld1 = volFld1 + c(k,j,i)*vol*grdMask(k,j,i)
+    !             END DO
+    !         END DO
+    !     END DO
 
-    END SUBROUTINE comp_vol_grd
+    ! END SUBROUTINE comp_vol_grd
 
     !================================================================
 

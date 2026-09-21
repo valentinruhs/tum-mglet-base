@@ -26,12 +26,12 @@ MODULE mph_plic_mod
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims
     USE mphcore_mod, ONLY: vofTol
     USE fields_mod, ONLY: set_field, get_fieldptr
-        
+
     IMPLICIT NONE(type, external)
     PRIVATE 
 
     PUBLIC :: init_mph_plic, finish_mph_plic, &
-        comp_ifc, comp_c_stag, comp_isIfc_stag, comp_c_loc
+        comp_ifc, comp_c_stg, comp_isIfc_stg, comp_c_loc
 
 CONTAINS
 
@@ -89,7 +89,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_isIfc_stag(q)
+    SUBROUTINE comp_isIfc_stg(q)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -99,12 +99,12 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: q
 
         ! Local variables
-        CHARACTER(len=3) :: cFldName, isIfcFldName, isIfcVicFldName
+        CHARACTER(len=10) :: cFldName, isIfcFldName, isIfcVicFldName
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
         REAL(realk), POINTER, CONTIGUOUS :: cSq(:,:,:)
-        LOGICAL, POINTER, CONTIGUOUS :: isIfcSq(:,:,:)
-        LOGICAL, POINTER, CONTIGUOUS :: isIfcVicSq(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: isIfcSq(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: isIfcVicSq(:,:,:)
 
         cFldName = "CS"//int2char(q)
         isIfcFldName = "ISIFCS"//int2char(q)
@@ -122,7 +122,7 @@ CONTAINS
             CALL comp_isIfc_grd(kk, jj, ii, cSq, isIfcSq, isIfcVicSq)
         END DO
 
-    END SUBROUTINE comp_isIfc_stag
+    END SUBROUTINE comp_isIfc_stg
 
     !================================================================
 
@@ -136,18 +136,18 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
-        LOGICAL, INTENT(out) :: isIfc(kk, jj, ii)
-        LOGICAL, INTENT(out), OPTIONAL :: isIfcVic(kk, jj, ii)
+        REAL(realk), INTENT(out) :: isIfc(kk, jj, ii)
+        REAL(realk), INTENT(out), OPTIONAL :: isIfcVic(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i, vic
 
-        isIfc = .FALSE.
+        isIfc = -1.0_realk
         DO i = 1, ii
             DO j = 1, jj
                 DO k = 1, kk
                     IF ( c(k,j,i) > vofTol .AND. c(k,j,i) < 1.0_realk - vofTol ) THEN
-                        isIfc(k,j,i) = .TRUE.
+                        isIfc(k,j,i) = 1.0_realk
                     ENDIF
                 ENDDO
             ENDDO
@@ -156,12 +156,12 @@ CONTAINS
         IF ( .NOT. PRESENT(isIfcVic) ) RETURN
 
         vic = 2
-        isIfcVic = .FALSE.
+        isIfcVic = -1.0_realk
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    IF ( isIfc(k,j,i) ) THEN
-                        isIfcVic(k-vic:k+vic,j-vic:j+vic,i-vic:i+vic) = .TRUE.
+                    IF ( isIfc(k,j,i) > 0.0_realk ) THEN
+                        isIfcVic(k-vic:k+vic,j-vic:j+vic,i-vic:i+vic) = 1.0_realk
                     ENDIF
                 ENDDO
             ENDDO
@@ -262,7 +262,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
-        LOGICAL, POINTER, CONTIGUOUS :: isIfc(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: isIfc(:,:,:)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -303,7 +303,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
-        LOGICAL, INTENT(out) :: isIfc(kk, jj, ii)
+        REAL(realk), INTENT(out) :: isIfc(kk, jj, ii)
 
         ! Local variables
         ! None
@@ -341,7 +341,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_c_stag(q)
+    SUBROUTINE comp_c_stg(q)
     !----------------------------------------------------------------
     !   What it does:
     !   Compute the volume fraction field for the staggered cells
@@ -360,7 +360,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
-        LOGICAL, POINTER, CONTIGUOUS :: isIfc(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: isIfc(:,:,:)
 
         cFldName = "CS"//int2char(q)
 
@@ -380,15 +380,15 @@ CONTAINS
             CALL get_fieldptr(alpha, "ALPHA", igrid)
             CALL get_fieldptr(isIfc, "ISIFC", igrid)
 
-            CALL comp_c_stag_grd(kk, jj, ii, q, c, cSq, &
+            CALL comp_c_stg_grd(kk, jj, ii, q, c, cSq, &
                 ddx, ddy, ddz, normx, normy, normz, alpha, isIfc)
         END DO
 
-    END SUBROUTINE comp_c_stag
+    END SUBROUTINE comp_c_stg
 
     !================================================================
 
-    SUBROUTINE comp_c_stag_grd(kk, jj, ii, q, c, cSq, &
+    SUBROUTINE comp_c_stg_grd(kk, jj, ii, q, c, cSq, &
         ddx, ddy, ddz, normx, normy, normz, alpha, isIfc)
     !----------------------------------------------------------------
     !   What it does:
@@ -400,11 +400,11 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii, q
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
-        REAL(realk), INTENT(out) :: cSq(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: cSq(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isIfc(kk, jj, ii)
+        REAL(realk), INTENT(in) :: isIfc(kk, jj, ii)
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -440,14 +440,14 @@ CONTAINS
                     normzPl = normz(k+kq,j+jq,i+iq)
                     ddsPl = iq * ddxPl + jq * ddyPl + kq * ddzPl
 
-                    IF ( isIfc(k,j,i) .AND. isIfc(k+kq,j+jq,i+iq) ) THEN
+                    IF ( isIfc(k,j,i) > 0.0_realk .AND. isIfc(k+kq,j+jq,i+iq) > 0.0_realk ) THEN
                         CALL comp_c_loc(halfFractionMi, alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
                         CALL comp_c_loc(halfFractionPl, alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
                         cSq(k,j,i) = ( halfFractionMi * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
-                    ELSE IF ( isIfc(k,j,i) .AND. .NOT. isIfc(k+kq,j+jq,i+iq) ) THEN
+                    ELSE IF ( isIfc(k,j,i) > 0.0_realk .AND. isIfc(k+kq,j+jq,i+iq) < 0.0_realk ) THEN
                         CALL comp_c_loc(halfFractionMi, alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
                         cSq(k,j,i) = ( halfFractionMi * ddsMi + c(k+kq,j+jq,i+iq) * ddsPl ) / ( ddsMi + ddsPl )
-                    ELSE IF ( .NOT. isIfc(k,j,i) .AND. isIfc(k+kq,j+jq,i+iq) ) THEN
+                    ELSE IF ( isIfc(k,j,i) < 0.0_realk .AND. isIfc(k+kq,j+jq,i+iq) > 0.0_realk ) THEN
                         CALL comp_c_loc(halfFractionPl, alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
                         cSq(k,j,i) = ( c(k,j,i) * ddsMi + halfFractionPl * ddsPl ) / ( ddsMi + ddsPl )
                     ELSE
@@ -457,7 +457,7 @@ CONTAINS
             ENDDO
         ENDDO
 
-    END SUBROUTINE comp_c_stag_grd
+    END SUBROUTINE comp_c_stg_grd
 
     !================================================================
 
@@ -548,7 +548,7 @@ CONTAINS
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(out) :: alpha(kk, jj, ii)
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
-        LOGICAL, INTENT(in) :: isIfc(kk, jj, ii)
+        REAL(realk), INTENT(in) :: isIfc(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
 
@@ -561,7 +561,7 @@ CONTAINS
         DO i = 2, ii-1
             DO j = 2, jj-1
                 DO k = 2, kk-1
-                    IF ( .NOT. isIfc(k,j,i) ) CYCLE
+                    IF ( isIfc(k,j,i) < 0.0_realk ) CYCLE
                     CALL get_order(m1, m2, m3, c1, c2, c3, normx(k,j,i), normy(k,j,i), normz(k,j,i), ddx(i), ddy(j), ddz(k))
                     CALL comp_alpha_std(m1, m2, m3, c1, c2, c3, alphaStd, c(k,j,i))
                     alpha(k,j,i) = alphaStd + mirror_shift(normx(k,j,i), normy(k,j,i), normz(k,j,i), ddx(i), ddy(j), ddz(k))

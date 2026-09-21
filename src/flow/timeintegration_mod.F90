@@ -12,9 +12,8 @@ MODULE timeintegration_mod
     USE setboundarybuffers_mod
     USE boussinesqterm_mod, ONLY: boussinesqterm
     USE coriolisterm_mod, ONLY: coriolisterm
-    USE multiphase_vof_transport_mod, ONLY : multiphase_solve
-    USE multiphasecore_mod, ONLY: solve_multiphase, test_multiphase
-    USE multiphase_io_mod, ONLY: update_velocity
+    USE mphcore_mod, ONLY: hasMph
+    USE mph_mod, ONLY: mph_step
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -35,7 +34,7 @@ CONTAINS
         LOGICAL :: lastrk
         INTEGER(intk) :: ilevel
         REAL(realk) :: frhs, fu, dtrk, dtrki, timerk
-        TYPE(field_t), POINTER :: u, v, w, ut, vt, wt, pwu, pwv, pww, p, g, vff
+        TYPE(field_t), POINTER :: u, v, w, ut, vt, wt, pwu, pwv, pww, p, g, c
         TYPE(field_t), POINTER :: du, dv, dw
         TYPE(field_t) :: uo, vo, wo
 
@@ -48,7 +47,7 @@ CONTAINS
         CALL get_field(w, "W")
         CALL get_field(p, "P")
         CALL get_field(g, "G")
-        CALL get_field(vff, "VFF")
+        CALL get_field(c, "C")
 
         ! In all implemented RK schemes FRHS is 0.0 for IRK 1, this means
         ! that the method itself takes care of "initializing" these fields
@@ -95,12 +94,8 @@ CONTAINS
             CALL setibvalues(u, v, w)
         END IF
 
-        IF ( solve_multiphase ) THEN
-            IF ( test_multiphase /= "none" ) THEN
-                CALL update_velocity(u, v, w, vff, itstep, dt)
-            END IF
-
-            CALL multiphase_solve(u, v, w, vff, p, dt*dtrki, itstep, uo, vo, wo)
+        IF ( hasMph ) THEN
+            CALL mph_step(uo, vo, wo, dt, itstep)
 
             CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
             CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)

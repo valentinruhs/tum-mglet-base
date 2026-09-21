@@ -19,18 +19,19 @@ MODULE mph_mod
     USE field_mod, ONLY: field_t
 
     USE mphcore_mod, ONLY: init_mphcore, finish_mphcore, hasMph
-    USE mph_vof_mod, ONLY: init_mph_vof, finish_mph_vof, &
+    USE mph_vof_mod, ONLY: init_mph_vof, finish_mph_vof, cpy_flds, &
         adve_operator, diff_operator, pres_operator, exte_operator
     USE mph_plic_mod, ONLY: init_mph_plic, finish_mph_plic
     USE mph_props_mod, ONLY: init_mph_props, finish_mph_props, &
         comp_props
     USE mph_utils_mod, ONLY: init_mph_utils, finish_mph_utils
     USE mph_test_mod, ONLY: init_mph_test, finish_mph_test
+    USE mph_pois_mod, ONLY: init_mph_pois, finish_mph_pois
 
     IMPLICIT NONE(type, external)
     PRIVATE
 
-    PUBLIC :: init_mph, finish_mph
+    PUBLIC :: init_mph, finish_mph, mph_step
 
 CONTAINS
 
@@ -50,6 +51,7 @@ CONTAINS
             CALL init_mph_plic()
             CALL init_mph_vof()
             CALL init_mph_utils()
+            CALL init_mph_pois()
         END IF
 
     END SUBROUTINE init_mph
@@ -65,6 +67,7 @@ CONTAINS
         ! None
 
         IF ( hasMph ) THEN
+            CALL finish_mph_pois()
             CALL finish_mph_utils()
             CALL finish_mph_vof()
             CALL finish_mph_plic()
@@ -78,30 +81,26 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE mph_step(u_f, v_f, w_f, c_f, dt, itstep)
+    SUBROUTINE mph_step(uo_f, vo_f, wo_f, dt, itstep)
     !----------------------------------------------------------------
     !   What it does:
     !    
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        TYPE(field_t), INTENT(in) :: u_f, v_f, w_f, c_f
+        TYPE(field_t), INTENT(inout) :: uo_f, vo_f, wo_f
         REAL(realk), INTENT(in) :: dt
         INTEGER(intk), INTENT(in) :: itstep
 
         ! Local variables
         ! None
 
-        up_f%arr = u_f%arr
-        vp_f%arr = v_f%arr
-        wp_f%arr = w_f%arr
-        cp_f%arr = c_f%arr
-
+        CALL cpy_flds()
         CALL adve_operator(dt, itstep)
         CALL comp_props()
-        CALL diff_operator()
-        CALL pres_operator()
-        CALL exte_operator()
+        CALL diff_operator(uo_f, vo_f, wo_f)
+        CALL pres_operator(uo_f, vo_f, wo_f)
+        CALL exte_operator(uo_f, vo_f, wo_f)
 
     END SUBROUTINE mph_step
 

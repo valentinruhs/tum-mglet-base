@@ -28,7 +28,7 @@ MODULE mphcore_mod
     LOGICAL, PROTECTED :: hasMph
     CHARACTER(len=30), PROTECTED :: mphTst
     INTEGER(intk), PROTECTED :: splPer
-    LOGICAL, PROTECTED :: skpAdv, skpDif, skpExt
+    LOGICAL, PROTECTED :: skpAdv, skpDif, skpPre, skpExt
     REAL(realk), PROTECTED :: vofTol, divTol, volTol
     CHARACTER(len=5), PROTECTED :: advScm
     LOGICAL, PROTECTED :: donCen
@@ -43,7 +43,7 @@ MODULE mphcore_mod
     INTEGER(intk), PARAMETER :: mphInitErr = 124, propsErr = 125, vofErr = 126, plicErr = 127
 
     PUBLIC :: init_mphcore, finish_mphcore, hasMph, &
-        mphTst, skpAdv, skpDif, skpExt, splPer, vofTol, divTol, &
+        mphTst, skpAdv, skpDif, skpPre, skpExt, splPer, vofTol, divTol, &
         voltol, advScm, donCen, vofChk, volChk, divChk, rho1, rho2, &
         gmol1, gmol2, grav, propsErr, vofErr, plicErr, mphInitErr
 
@@ -78,6 +78,7 @@ CONTAINS
         CALL mphConf%get_value("/test", mphTst, "None")
         CALL mphConf%get_value("/skipAdvection", skpAdv, .FALSE.)
         CALL mphConf%get_value("/skipDiffusion", skpDif, .FALSE.)
+        CALL mphConf%get_value("/skipPressure", skpPre, .FALSE.)
         CALL mphConf%get_value("/skipExternal", skpExt, .FALSE.)
         CALL mphConf%get_value("/splitPermutation", splPer, 3_intk)
         CALL mphConf%get_value("/vofTolerance", vofTol, 1.0E-12_realk)
@@ -86,8 +87,8 @@ CONTAINS
         CALL mphConf%get_value("/advectionScheme", advScm, "QUICK")
         CALL mphConf%get_value("/donatingCentered", donCen, .FALSE.)
         CALL mphConf%get_value("/vofCheck", vofChk, .FALSE.)
-        CALL mphConf%get_value("/volCheck", volChk, .FALSE.)
         CALL mphConf%get_value("/divCheck", divChk, .FALSE.)
+        CALL mphConf%get_value("/volCheck", volChk, .FALSE.)
 
         ! Read densities
         CALL mphConf%get_value("/rho1", rho1, 1.0_realk)
@@ -117,7 +118,7 @@ CONTAINS
             dread=.FALSE., required=.TRUE., dwrite=.FALSE., buffers=.TRUE.)
 
         CALL set_field("C", description=descC, &
-            dread=.TRUE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
+            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
         CALL set_field("CP", description=descCp, &
             dread=.FALSE., required=.TRUE., dwrite=.FALSE., buffers=.TRUE.)
         CALL set_field("D", description=descD, &

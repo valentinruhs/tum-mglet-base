@@ -25,7 +25,8 @@ MODULE mph_props_mod
     PRIVATE
 
     PUBLIC :: init_mph_props, finish_mph_props, comp_prop, &
-        comp_prop_face, comp_prop_face_stag, comp_d_stag, comp_props
+        comp_prop_face, comp_prop_face_stg, comp_d_stg, &
+        comp_props
 
 CONTAINS
 
@@ -138,11 +139,6 @@ CONTAINS
 
         propFld = clp(c)*( prop1 - prop2 ) + prop2
 
-        IF ( MAXVAL(propFld) > MAX(prop1, prop2) .OR. &
-             MINVAL(propFld) < MIN(prop1, prop2) ) THEN
-            CALL err_abort(propsErr, "property out of bounds.", __FILE__, __LINE__)
-        END IF
-
     END SUBROUTINE comp_prop_arit
 
     !================================================================
@@ -168,11 +164,6 @@ CONTAINS
 
         propFld = 1.0_realk/( clp(c)*( invProp1 - invProp2 ) + invProp2 )
 
-        IF ( MAXVAL(propFld) > MAX(prop1, prop2) .OR. &
-             MINVAL(propFld) < MIN(prop1, prop2) ) THEN
-            CALL err_abort(propsErr, "property out of bounds.", __FILE__, __LINE__)
-        END IF
-
     END SUBROUTINE comp_prop_harm
 
     !================================================================
@@ -187,7 +178,7 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
-        REAL(realk), INTENT(out) :: pBa(kk, jj, ii), pLe(kk, jj, ii), pTo(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: pBa(kk, jj, ii), pLe(kk, jj, ii), pTo(kk, jj, ii)
         REAL(realk), INTENT(in) :: prop1, prop2
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         CHARACTER(len=4), INTENT(in), OPTIONAL :: meanFlag
@@ -228,7 +219,7 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
-        REAL(realk), INTENT(out) :: pBa(kk, jj, ii), pLe(kk, jj, ii), pTo(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: pBa(kk, jj, ii), pLe(kk, jj, ii), pTo(kk, jj, ii)
         REAL(realk), INTENT(in) :: prop1, prop2
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
 
@@ -236,9 +227,9 @@ CONTAINS
         INTEGER(intk) :: k, j, i
         REAL(realk) :: w(2), phi
 
-        DO i = 2, ii-2
-            DO j = 2, jj-2
-                DO k = 2, kk-2
+        DO i = 1, ii-1
+            DO j = 1, jj-1
+                DO k = 1, kk-1
                     w(1) = ddx(i)
                     w(2) = ddx(i+1)
                     phi = MIN(MAX((c(k,j,i)*w(1) + c(k,j,i+1)*w(2))/SUM(w), 0.0_realk), 1.0_realk)
@@ -278,7 +269,7 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
-        REAL(realk), INTENT(out) :: pBa(kk, jj, ii), pLe(kk, jj, ii), pTo(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: pBa(kk, jj, ii), pLe(kk, jj, ii), pTo(kk, jj, ii)
         REAL(realk), INTENT(in) :: prop1, prop2
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
 
@@ -290,9 +281,9 @@ CONTAINS
         invProp1 = 1.0_realk/prop1
         invProp2 = 1.0_realk/prop2
 
-        DO i = 2, ii-2
-            DO j = 2, jj-2
-                DO k = 2, kk-2
+        DO i = 1, ii-1
+            DO j = 1, jj-1
+                DO k = 1, kk-1
                     w(1) = ddx(i)
                     w(2) = ddx(i+1)
                     phi = MIN(MAX(2.0_realk*(c(k,j,i)*w(1) + c(k,j,i+1)*w(2))/SUM(w) - &
@@ -318,7 +309,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_prop_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz, meanFlag)
+    SUBROUTINE comp_prop_face_stg(kk, jj, ii, c, pXy, pXz, pYz, prop1, prop2, ddx, ddy, ddz, meanFlag)
     !----------------------------------------------------------------
     !   What it does:
     !   Compute property face values on the staggered grid depending 
@@ -328,7 +319,7 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
-        REAL(realk), INTENT(out) :: pxy(kk, jj, ii), pxz(kk, jj, ii), pyz(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: pXy(kk, jj, ii), pXz(kk, jj, ii), pYz(kk, jj, ii)
         REAL(realk), INTENT(in) :: prop1, prop2
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         CHARACTER(len=4), INTENT(in), OPTIONAL :: meanFlag
@@ -339,21 +330,21 @@ CONTAINS
         IF ( PRESENT(meanFlag) ) THEN
             SELECT CASE ( meanFlag )
             CASE ( "arit" )
-                CALL comp_prop_arit_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz)
+                CALL comp_prop_arit_face_stg(kk, jj, ii, c, pXy, pXz, pYz, prop1, prop2, ddx, ddy, ddz)
             CASE ( "harm" )
-                CALL comp_prop_harm_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz)
+                CALL comp_prop_harm_face_stg(kk, jj, ii, c, pXy, pXz, pYz, prop1, prop2, ddx, ddy, ddz)
             CASE DEFAULT
                 CALL err_abort(propsErr, "unknown meanFlag.", __FILE__, __LINE__)
             END SELECT
         ELSE
-            CALL comp_prop_arit_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz)
+            CALL comp_prop_arit_face_stg(kk, jj, ii, c, pXy, pXz, pYz, prop1, prop2, ddx, ddy, ddz)
         END IF
 
-    END SUBROUTINE comp_prop_face_stag
+    END SUBROUTINE comp_prop_face_stg
 
     !================================================================
 
-    SUBROUTINE comp_prop_arit_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz)
+    SUBROUTINE comp_prop_arit_face_stg(kk, jj, ii, c, pXy, pXz, pYz, prop1, prop2, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
     !   Compute property face values on the staggered grid depending 
@@ -369,7 +360,7 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
-        REAL(realk), INTENT(out) :: pxy(kk, jj, ii), pxz(kk, jj, ii), pyz(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: pXy(kk, jj, ii), pXz(kk, jj, ii), pYz(kk, jj, ii)
         REAL(realk), INTENT(in) :: prop1, prop2
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
 
@@ -377,16 +368,16 @@ CONTAINS
         INTEGER(intk) :: k, j, i
         REAL(realk) :: w(4), phi
 
-        DO i = 2, ii-2
-            DO j = 2, jj-2
-                DO k = 2, kk-2
+        DO i = 1, ii-1
+            DO j = 1, jj-1
+                DO k = 1, kk-1
                     w(1) = ddx(i)*ddy(j)
                     w(2) = ddx(i+1)*ddy(j)
                     w(3) = ddx(i)*ddy(j+1)
                     w(4) = ddx(i+1)*ddy(j+1)
                     phi = MIN(MAX((c(k,j,i)*w(1) + c(k,j,i+1)*w(2) + &
                                    c(k,j+1,i)*w(3) + c(k,j+1,i+1)*w(4))/SUM(w), 0.0_realk), 1.0_realk)
-                    pxy(k,j,i) = phi*( prop1 - prop2 ) + prop2
+                    pXy(k,j,i) = phi*( prop1 - prop2 ) + prop2
 
                     w(1) = ddx(i)*ddz(k)
                     w(2) = ddx(i+1)*ddz(k)
@@ -394,7 +385,7 @@ CONTAINS
                     w(4) = ddx(i+1)*ddz(k+1)
                     phi = MIN(MAX((c(k,j,i)*w(1) + c(k,j,i+1)*w(2) + &
                                    c(k+1,j,i)*w(3) + c(k+1,j,i+1)*w(4))/SUM(w), 0.0_realk), 1.0_realk)
-                    pxz(k,j,i) = phi*( prop1 - prop2 ) + prop2
+                    pXz(k,j,i) = phi*( prop1 - prop2 ) + prop2
 
                     w(1) = ddy(j)*ddz(k)
                     w(2) = ddy(j+1)*ddz(k)
@@ -402,16 +393,16 @@ CONTAINS
                     w(4) = ddy(j+1)*ddz(k+1)
                     phi = MIN(MAX((c(k,j,i)*w(1) + c(k,j+1,i)*w(2) + &
                                    c(k+1,j,i)*w(3) + c(k+1,j+1,i)*w(4))/SUM(w), 0.0_realk), 1.0_realk)
-                    pyz(k,j,i) = phi*( prop1 - prop2 ) + prop2
+                    pYz(k,j,i) = phi*( prop1 - prop2 ) + prop2
                 ENDDO
             ENDDO
         ENDDO
 
-    END SUBROUTINE comp_prop_arit_face_stag
+    END SUBROUTINE comp_prop_arit_face_stg
 
     !================================================================
 
-    SUBROUTINE comp_prop_harm_face_stag(kk, jj, ii, c, pxy, pxz, pyz, prop1, prop2, ddx, ddy, ddz)
+    SUBROUTINE comp_prop_harm_face_stg(kk, jj, ii, c, pXy, pXz, pYz, prop1, prop2, ddx, ddy, ddz)
     !----------------------------------------------------------------
     !   What it does:
     !   Compute property face values on the staggered grid depending 
@@ -428,7 +419,7 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: c(kk, jj, ii)
-        REAL(realk), INTENT(out) :: pxy(kk, jj, ii), pxz(kk, jj, ii), pyz(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: pXy(kk, jj, ii), pXz(kk, jj, ii), pYz(kk, jj, ii)
         REAL(realk), INTENT(in) :: prop1, prop2
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
 
@@ -440,9 +431,9 @@ CONTAINS
         invProp1 = 1.0_realk/prop1
         invProp2 = 1.0_realk/prop2
 
-        DO i = 2, ii-2
-            DO j = 2, jj-2
-                DO k = 2, kk-2
+        DO i = 1, ii-1
+            DO j = 1, jj-1
+                DO k = 1, kk-1
                     w(1) = ddx(i)*ddy(j)
                     w(2) = ddx(i+1)*ddy(j)
                     w(3) = ddx(i)*ddy(j+1)
@@ -450,7 +441,7 @@ CONTAINS
                     phi = MIN(MAX(2.0_realk*(c(k,j,i)*w(1) + c(k,j,i+1)*w(2) + &
                                              c(k,j+1,i)*w(3) + c(k,j+1,i+1)*w(4))/SUM(w) - &
                                              0.5_realk, 0.0_realk), 1.0_realk)
-                    pxy(k,j,i) = 1.0_realk/( phi*( invProp1 - invProp2 ) + invProp2 )
+                    pXy(k,j,i) = 1.0_realk/( phi*( invProp1 - invProp2 ) + invProp2 )
 
                     w(1) = ddx(i)*ddz(k)
                     w(2) = ddx(i+1)*ddz(k)
@@ -459,7 +450,7 @@ CONTAINS
                     phi = MIN(MAX(2.0_realk*(c(k,j,i)*w(1) + c(k,j,i+1)*w(2) + &
                                              c(k+1,j,i)*w(3) + c(k+1,j,i+1)*w(4))/SUM(w) - &
                                              0.5_realk, 0.0_realk), 1.0_realk)
-                    pxz(k,j,i) = 1.0_realk/( phi*( invProp1 - invProp2 ) + invProp2 )
+                    pXz(k,j,i) = 1.0_realk/( phi*( invProp1 - invProp2 ) + invProp2 )
 
                     w(1) = ddy(j)*ddz(k)
                     w(2) = ddy(j+1)*ddz(k)
@@ -468,16 +459,16 @@ CONTAINS
                     phi = MIN(MAX(2.0_realk*(c(k,j,i)*w(1) + c(k,j+1,i)*w(2) + &
                                              c(k+1,j,i)*w(3) + c(k+1,j+1,i)*w(4))/SUM(w) - &
                                              0.5_realk, 0.0_realk), 1.0_realk)
-                    pyz(k,j,i) = 1.0_realk/( phi*( invProp1 - invProp2 ) + invProp2 )
+                    pYz(k,j,i) = 1.0_realk/( phi*( invProp1 - invProp2 ) + invProp2 )
                 ENDDO
             ENDDO
         ENDDO
 
-    END SUBROUTINE comp_prop_harm_face_stag
+    END SUBROUTINE comp_prop_harm_face_stg
 
     !================================================================
 
-    SUBROUTINE comp_d_stag(q)
+    SUBROUTINE comp_d_stg(q)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -504,7 +495,7 @@ CONTAINS
             CALL comp_prop(kk, jj, ii, cSq, dSq, rho1, rho2, meanFlag="arit")
         END DO
 
-    END SUBROUTINE comp_d_stag
+    END SUBROUTINE comp_d_stg
 
     !================================================================
 
@@ -520,8 +511,8 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
-        REAL(realk), POINTER, CONTIGUOUS :: cp(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: g(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:), cp(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: d(:,:,:), g(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: gUv(:,:,:), gUw(:,:,:), gVw(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dBa(:,:,:), dLe(:,:,:), dTo(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
@@ -529,6 +520,8 @@ CONTAINS
         DO n = 1, nmygrids
             igrid = mygrids(n)
             CALL get_mgdims(kk, jj, ii, igrid)
+            CALL get_fieldptr(c, "C", igrid)
+            CALL get_fieldptr(d, "D", igrid)
             CALL get_fieldptr(cp, "CP", igrid)
             CALL get_fieldptr(g, "G", igrid)
             CALL get_fieldptr(gUv, "GUV", igrid)
@@ -541,11 +534,13 @@ CONTAINS
             CALL get_fieldptr(ddy, "DDY", igrid)
             CALL get_fieldptr(ddz, "DDZ", igrid)
 
+            CALL comp_prop(kk, jj, ii, c, d, rho1, rho2, meanFlag="arit")
+            CALL comp_prop_face(kk, jj, ii, c, dBa, dLe, dTo, rho1, rho2, &
+                ddx, ddy, ddz, meanFlag="arit")
+
             CALL comp_prop(kk, jj, ii, cp, g, gmol1, gmol2, meanFlag="harm")
-            CALL comp_prop_face_stag(kk, jj, ii, cp, gUv, gUw, gVw, &
+            CALL comp_prop_face_stg(kk, jj, ii, cp, gUv, gUw, gVw, &
                 gmol1, gmol2, ddx, ddy, ddz, meanFlag="harm")
-            CALL comp_prop_face(kk, jj, ii, cp, dBa, dLe, dTo, &
-                rho1, rho2, ddx, ddy, ddz, meanFlag="arit")
         END DO
 
     END SUBROUTINE comp_props

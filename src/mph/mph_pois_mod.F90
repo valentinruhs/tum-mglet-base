@@ -14,14 +14,13 @@
 MODULE mph_pois_mod
 
     USE precision_mod, ONLY: intk, realk
-    USE mph_utils_mod, ONLY: sel_index
-    USE mphcore_mod, ONLY: vofTol
-    USE fields_mod, ONLY: set_field
+    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims
+    USE fields_mod, ONLY: get_fieldptr
         
     IMPLICIT NONE(type, external)
     PRIVATE 
 
-    PUBLIC :: init_mph_pois, finish_mph_pois
+    PUBLIC :: init_mph_pois, finish_mph_pois, comp_mat_coeff_mph
 
 CONTAINS
 
@@ -101,8 +100,6 @@ CONTAINS
             CALL get_fieldptr(dBa, "DBA", igrid)
             CALL get_fieldptr(dLe, "DLE", igrid)
             CALL get_fieldptr(dTo, "DTO", igrid)
-
-            CALL comp_prop_face(kk, jj, ii, c, dBa, dLe, dTo, rho1, rho2, ddx, ddy, ddz)
 
             DO i = 3, ii-2
                 DO j = 3, jj-2

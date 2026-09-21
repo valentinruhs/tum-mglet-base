@@ -5,9 +5,8 @@ MODULE pressuresolver_mod
     USE ib_mod
     USE itinfo_mod, ONLY: itinfo_sample
     USE plog_mod
-    USE multiphasecore_mod, ONLY: solve_multiphase, rho1, rho2
-    USE multiphase_mod, ONLY: comp_matrix_coeff_multiphase
-    USE multiphase_material_mod, ONLY: comp_prop_face
+    USE mphcore_mod, ONLY: hasMph, rho1, rho2, skpPre
+    USE mph_pois_mod, ONLY: comp_mat_coeff_mph
 
     IMPLICIT NONE (type, external)
     PRIVATE
@@ -321,6 +320,10 @@ CONTAINS
         REAL(realk) :: prefak, maxrhs, maxrhsall
         REAL(realk), ALLOCATABLE :: maxrhslvl(:)
 
+        IF ( hasMph ) THEN
+            IF ( skpPre ) RETURN
+        END IF
+
         CALL start_timer(320)
 
         ALLOCATE(maxrhslvl(minlevel:maxlevel))
@@ -339,10 +342,10 @@ CONTAINS
         CALL dp%init_buffers()
         CALL hilf%init_buffers()
 
-        IF ( solve_multiphase ) THEN
+        IF ( hasMph ) THEN
             ! div(1/rho * grad(p)) = prefak * div(u) is the underlying equation
             prefak = 1.0_realk/dt
-            CALL comp_matrix_coeff_multiphase()
+            CALL comp_mat_coeff_mph()
             CALL init_sip()
             CALL init_sor()
         ELSE
@@ -1467,10 +1470,10 @@ CONTAINS
 
         TYPE(field_t), POINTER :: rdx_f, rdy_f, rdz_f
         TYPE(field_t), POINTER :: ddx_f, ddy_f, ddz_f
-        TYPE(field_t), POINTER :: vff_f
 
         REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:), bp(:, :, :)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: dBa(:,:,:), dLe(:,:,:), dTo(:,:,:)
 
         NULLIFY(bp)
 
@@ -1480,7 +1483,6 @@ CONTAINS
         CALL get_field(rdx_f, "RDX")
         CALL get_field(rdy_f, "RDY")
         CALL get_field(rdz_f, "RDZ")
-        IF ( solve_multiphase ) CALL get_field(vff_f, "VFF")
 
         DO i = 1, nmygrids
             igrid = mygrids(i)
@@ -1497,9 +1499,12 @@ CONTAINS
                 CALL bp_f%get_ptr(bp, igrid)
             END IF
 
-            IF ( solve_multiphase ) THEN
+            IF ( hasMph ) THEN
+                CALL get_fieldptr(dBa, "DBA", igrid)
+                CALL get_fieldptr(dLe, "DLE", igrid)
+                CALL get_fieldptr(dTo, "DTO", igrid)
                 CALL mgpcorr_grid(kk, jj, ii, u%arr(ip3), v%arr(ip3), w%arr(ip3), &
-                    p%arr(ip3), dp%arr(ip3), rdx, rdy, rdz, fak, bp, vff_f%arr(ip3))
+                    p%arr(ip3), dp%arr(ip3), rdx, rdy, rdz, fak, bp, dBa, dLe, dTo)
             ELSE
                 CALL mgpcorr_grid(kk, jj, ii, u%arr(ip3), v%arr(ip3), w%arr(ip3), &
                     p%arr(ip3), dp%arr(ip3), rdx, rdy, rdz, fak, bp)
@@ -1509,7 +1514,7 @@ CONTAINS
 
 
     SUBROUTINE mgpcorr_grid(kk, jj, ii, u, v, w, p, dp, rdx, rdy, rdz, &
-            fak, bp, vff)
+            fak, bp, dBa, dLe, dTo)
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(inout) :: u(kk, jj, ii)
@@ -1520,10 +1525,9 @@ CONTAINS
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
         REAL(realk), INTENT(in) :: fak
         REAL(realk), INTENT(in), OPTIONAL :: bp(kk, jj, ii)
-        REAL(realk), INTENT(in), OPTIONAL :: vff(kk, jj, ii)
+        REAL(realk), INTENT(in), OPTIONAL :: dBa(kk, jj, ii), dLe(kk, jj, ii), dTo(kk, jj, ii)
 
         ! Local variables
-        REAL(realk) :: rhoe(kk, jj, ii), rhon(kk, jj, ii), rhot(kk, jj, ii)
         INTEGER(intk) :: k, j, i
         REAL(realk) :: rfak
 
@@ -1568,9 +1572,7 @@ CONTAINS
                 END DO
             END DO
         ELSE
-            IF ( PRESENT(vff) ) THEN
-                CALL comp_prop_face(kk, jj, ii, vff, rhoe, rhon, rhot, rho1, rho2, rdx, rdy, rdz)
-
+            IF ( PRESENT(dBa) ) THEN
                 DO i = 2, ii-1
                     DO j = 2, jj-1
                         DO k = 2, kk-1
@@ -1583,7 +1585,7 @@ CONTAINS
                     DO j = 3, jj-2
                         DO k = 3, kk-2
                             u(k, j, i) = u(k, j, i) &
-                                + (dp(k, j, i) - dp(k, j, i+1))*rdx(i)*rfak * 1.0_realk / rhoe(k,j,i)
+                                + (dp(k, j, i) - dp(k, j, i+1))*rdx(i)*rfak * 1.0_realk/dBa(k,j,i)
                         END DO
                     END DO
                 END DO
@@ -1592,7 +1594,7 @@ CONTAINS
                     DO j = 2, jj-2
                         DO k = 3, kk-2
                             v(k, j, i) = v(k, j, i) &
-                                + (dp(k, j, i) - dp(k, j+1, i))*rdy(j)*rfak * 1.0_realk / rhon(k,j,i)
+                                + (dp(k, j, i) - dp(k, j+1, i))*rdy(j)*rfak * 1.0_realk/dLe(k,j,i)
                         END DO
                     END DO
                 END DO
@@ -1601,7 +1603,7 @@ CONTAINS
                     DO j = 3, jj-2
                         DO k = 2, kk-2
                             w(k, j, i) = w(k, j, i) &
-                                + (dp(k, j, i) - dp(k+1, j, i))*rdz(k)*rfak * 1.0_realk / rhot(k,j,i)
+                                + (dp(k, j, i) - dp(k+1, j, i))*rdz(k)*rfak * 1.0_realk/dTo(k,j,i)
                         END DO
                     END DO
                 END DO
