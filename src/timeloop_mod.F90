@@ -4,6 +4,7 @@ MODULE timeloop_mod
     USE flow_mod, ONLY: timeintegrate_flow, itinfo_flow
     USE scalar_mod, ONLY: timeintegrate_scalar, itinfo_scalar
     USE runinfo_mod
+    USE mph_chk_mod, ONLY: itinfo_mph
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -253,6 +254,7 @@ CONTAINS
                 CALL itinfo_time(itstep, ittot, timeph, dt)
                 CALL itinfo_scalar(itstep, ittot, timeph, dt, exploded)
                 CALL itinfo_flow(itstep, ittot, timeph, dt, cflmax, exploded)
+                CALL itinfo_mph()
                 IF (myid == 0) WRITE(*, '()')
 
                 ! Call plugins

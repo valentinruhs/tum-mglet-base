@@ -18,7 +18,7 @@ MODULE mph_vof_mod
     USE fields_mod, ONLY: get_field, set_field, get_fieldptr
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_gradpxflag, &
         minlevel, maxlevel
-    USE flowcore_mod, ONLY: gradp
+    ! USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
     USE parent_mod, ONLY: parent
     USE ftoc_mod, ONLY: ftoc
@@ -842,15 +842,15 @@ CONTAINS
         gpx = 0.0_realk
         gpy = 0.0_realk
         gpz = 0.0_realk
-        DO i = 2, ii-2
-            DO j = 2, jj-2
-                DO k = 2, kk-2
-                    gpx(k,j,i) = gradp(1)*gradpflag*MERGE(1.0_realk, 0.0_realk, c(k,j,i) > vofTol)
-                    gpy(k,j,i) = gradp(2)*gradpflag*MERGE(1.0_realk, 0.0_realk, c(k,j,i) > vofTol)
-                    gpz(k,j,i) = gradp(3)*gradpflag*MERGE(1.0_realk, 0.0_realk, c(k,j,i) > vofTol)
-                ENDDO
-            ENDDO
-        ENDDO
+        ! DO i = 2, ii-2
+        !     DO j = 2, jj-2
+        !         DO k = 2, kk-2
+        !             gpx(k,j,i) = gradp(1)*gradpflag*MERGE(1.0_realk, 0.0_realk, c(k,j,i) > vofTol)
+        !             gpy(k,j,i) = gradp(2)*gradpflag*MERGE(1.0_realk, 0.0_realk, c(k,j,i) > vofTol)
+        !             gpz(k,j,i) = gradp(3)*gradpflag*MERGE(1.0_realk, 0.0_realk, c(k,j,i) > vofTol)
+        !         ENDDO
+        !     ENDDO
+        ! ENDDO
 
         DO i = 2, ii-2
             DO j = 3, jj-2

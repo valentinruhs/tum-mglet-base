@@ -7,6 +7,7 @@ add_library(mph STATIC
 	mph_plic_mod.F90
 	mph_vof_mod.F90
 	mph_pois_mod.F90
+	mph_chk_mod.F90
 )
 
 target_include_directories(mph

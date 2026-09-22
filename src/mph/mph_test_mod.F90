@@ -17,7 +17,8 @@ MODULE mph_test_mod
     USE precision_mod, ONLY: realk, intk, pi
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_bbox
     USE fields_mod, ONLY: get_fieldptr
-    USE mphcore_mod, ONLY: mphTst, mphInitErr
+    USE mphcore_mod, ONLY: mphTst, mphInitErr, vofTol
+    USE mph_plic_mod, ONLY: comp_c_stg
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -242,11 +243,12 @@ CONTAINS
         SELECT CASE ( tst )
         CASE ( tstUCylAd )
             CALL set_vel_uni(0.016_realk, 0.016_realk, 0.0_realk)
+        CASE ( tstACylAd )
+            CALL set_vel_c(0.016_realk, 0.016_realk, 0.0_realk, h=2)
         CASE ( tstEllRec )
             CALL set_vel_uni(0.0_realk, 0.0_realk, 0.0_realk)
         CASE DEFAULT
-            CALL err_abort(mphInitErr, "no velocity field for this test.", &
-                __FILE__, __LINE__)
+            CALL err_abort(mphInitErr, "no velocity field for this test.", __FILE__, __LINE__)
         END SELECT
 
     END SUBROUTINE init_vel
@@ -281,6 +283,94 @@ CONTAINS
         END DO
 
     END SUBROUTINE set_vel_uni
+
+    !================================================================
+
+    SUBROUTINE set_vel_c(uc, vc, wc, h)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Sets u, v and w to a uniform value on every grid. The whole
+    !   array is written, ghost layers included, hence no connect or
+    !   parent is needed afterwards.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        REAL(realk), INTENT(in) :: uc, vc, wc
+        INTEGER(intk), INTENT(in) :: h
+
+        ! Local variables
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii, q
+        REAL(realk), POINTER, CONTIGUOUS :: cS1(:,:,:), cS2(:,:,:), cS3(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:)
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+            CALL get_mgdims(kk, jj, ii, igrid)
+            CALL get_fieldptr(cS1, "CS1", igrid)
+            CALL get_fieldptr(cS2, "CS2", igrid)
+            CALL get_fieldptr(cS3, "CS3", igrid)
+            CALL get_fieldptr(u, "U", igrid)
+            CALL get_fieldptr(v, "V", igrid)
+            CALL get_fieldptr(w, "W", igrid)
+
+            DO q = 1, 3
+                CALL comp_c_stg(q)
+            END DO
+            CALL set_vel_c_grd(kk, jj, ii, cS1, cS2, cS3, u, v, w, uc, vc, wc, h)
+        END DO
+
+    END SUBROUTINE set_vel_c
+
+    !================================================================
+
+    SUBROUTINE set_vel_c_grd(kk, jj, ii, cS1, cS2, cS3, u, v, w, uc, vc, wc, h)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: cS1(kk, jj, ii), cS2(kk, jj, ii), cS3(kk, jj, ii)
+        REAl(realk), INTENT(inout) :: u(kk, jj, ii), w(kk, jj, ii), v(kk, jj, ii)
+        REAL(realk), INTENT(in) :: uc, vc, wc
+        INTEGER(intk), INTENT(in) :: h
+
+        ! Local variables
+        INTEGER(intk) :: k, j, I
+
+        DO i = 2, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    IF ( cS1(k,j,i) > vofTol ) THEN
+                        u(k-h:k+h,j-h:j+h,i-h:i+h) = cS1(k-h:k+h,j-h:j+h,i-h:i+h)*uc
+                    END IF
+                END DO
+            END DO
+        END DO
+
+        DO i = 3, ii-2
+            DO j = 2, jj-2
+                DO k = 3, kk-2
+                    IF ( cS2(k,j,i) > vofTol ) THEN
+                        v(k-h:k+h,j-h:j+h,i-h:i+h) = cS2(k-h:k+h,j-h:j+h,i-h:i+h)*vc
+                    END IF
+                END DO
+            END DO
+        END DO
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 2, kk-2
+                    IF ( cS3(k,j,i) > vofTol ) THEN
+                        w(k-h:k+h,j-h:j+h,i-h:i+h) = cS3(k-h:k+h,j-h:j+h,i-h:i+h)*wc
+                    END IF
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE set_vel_c_grd
 
     !================================================================
 

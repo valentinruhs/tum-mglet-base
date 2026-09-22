@@ -14,12 +14,8 @@
 
 MODULE mph_utils_mod
 
-    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, iparent, &
-        idprocofgrd, iposition, jposition, kposition, ngrid
-    USE comms_mod, ONLY: myid
     USE precision_mod, ONLY: intk, realk
-    USE mphcore_mod, ONLY: divTol, volTol, vofErr
-    USE fields_mod, ONLY: get_fieldptr, set_field
+    USE mphcore_mod, ONLY: vofErr
     USE err_mod, ONLY: err_abort
 
     IMPLICIT NONE(type, external)
@@ -36,38 +32,9 @@ CONTAINS
         ! None
 
         ! Local variables
-        CHARACTER(len=*), PARAMETER :: descGrdmask = "uncov. cells"
-        INTEGER(intk) :: n, igrid, igridf, ipar
-        INTEGER(intk) :: kk, jj, ii, kc0, jc0, ic0
-        REAL(realk), POINTER, CONTIGUOUS :: grdMask(:,:,:)
+        ! None
 
-        CALL set_field("GRDMASK", description=descGrdmask, &
-            dread=.FALSE., required=.TRUE., dwrite=.FALSE., buffers=.TRUE.)
-
-        DO n = 1, nmygrids
-            igrid = mygrids(n)
-
-            CALL get_fieldptr(grdMask, "GRDMASK", igrid)
-            grdMask = 1.0_realk
-        END DO
-
-        DO igridf = 1, ngrid
-            ipar = iparent(igridf)
-
-            IF (ipar == 0) CYCLE
-            IF (idprocofgrd(ipar) /= myid) CYCLE
-
-            CALL get_fieldptr(grdMask, "GRDMASK", ipar)
-            CALL get_mgdims(kk, jj, ii, igridf)
-
-            ic0 = iposition(igridf)
-            jc0 = jposition(igridf)
-            kc0 = kposition(igridf)
-
-            grdMask(kc0:kc0+(kk-4)/2-1, &
-                    jc0:jc0+(jj-4)/2-1, &
-                    ic0:ic0+(ii-4)/2-1) = 0.0_realk
-        END DO
+        CONTINUE
 
     END SUBROUTINE init_mph_utils
 
@@ -187,50 +154,6 @@ CONTAINS
         END SELECT
 
     END SUBROUTINE sel_vel
-
-    !================================================================
-
-    ! SUBROUTINE comp_vol()
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !
-    ! !----------------------------------------------------------------
-
-    !     ! Subroutine arguments
-
-    !     ! Local variables
-
-
-    ! END SUBROUTINE comp_vol
-
-    ! !================================================================
-
-    ! SUBROUTINE comp_vol_grd(kk, jj, ii, c, grdMask, ddx, ddy, ddz)
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !
-    ! !----------------------------------------------------------------
-
-    !     ! Subroutine arguments
-    !     INTEGER(intk), INTENT(in) :: kk, jj, ii
-    !     REAL(realk), INTENT(in) :: c(kk, jj, ii), grdMask(kk, jj, ii)
-    !     REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-
-    !     ! Local variables
-    !     INTEGER(intk) :: k, j, i
-    !     REAL(realk) :: volFld1, vol
-
-    !     volFld1 = 0.0_realk
-    !     DO i = 3, ii-2
-    !         DO j = 3, jj-2
-    !             DO k = 3, kk-2
-    !                 vol = ddx(i)*ddy(j)*ddz(k)
-    !                 volFld1 = volFld1 + c(k,j,i)*vol*grdMask(k,j,i)
-    !             END DO
-    !         END DO
-    !     END DO
-
-    ! END SUBROUTINE comp_vol_grd
 
     !================================================================
 
