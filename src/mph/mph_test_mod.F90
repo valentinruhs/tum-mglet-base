@@ -26,8 +26,9 @@ MODULE mph_test_mod
     INTEGER(intk), PARAMETER :: tstCylTra=1, tstZalDis=2, tstRKoVor=3, tstUCylAd=4, tstACylAd=5, tstEllRec=6, tstOpCFl=7
     INTEGER(intk), PARAMETER :: shpCircle=1, shpZalesak=2, shpEllipse=3, shpPlane=4
     LOGICAL, PROTECTED :: frcVelFld
+    INTEGER(intk) :: tstId
 
-    PUBLIC :: init_mph_test, finish_mph_test
+    PUBLIC :: init_mph_test, finish_mph_test, frc_vel_fld
 
     TYPE :: shape_t
         INTEGER(intk) :: shp = shpCircle
@@ -54,50 +55,49 @@ CONTAINS
         ! None
 
         ! Local variables
-        INTEGER(intk) :: tst
         TYPE(shape_t) :: shape
 
         SELECT CASE ( mphTst )
         CASE ( "Cylinder Translation" )
-            tst = tstCylTra
+            tstId = tstCylTra
             shape = shape_t(shp=shpCircle, &
                 xc=0.5_realk, yc=0.5_realk, ra=0.15_realk)
             frcVelFld = .TRUE.
 
         CASE ( "Zalesak Disk" )
-            tst = tstZalDis
+            tstId = tstZalDis
             shape = shape_t(shp=shpZalesak, &
                 xc=0.5_realk, yc=0.5_realk, ra=0.15_realk, &
                 slotW=0.05_realk, slotH=0.25_realk)
             frcVelFld = .TRUE.
 
         CASE ( "Rider-Kothe Vortex" )
-            tst = tstRKoVor
+            tstId = tstRKoVor
             shape = shape_t(shp=shpCircle, &
                 xc=0.5_realk, yc=0.75_realk, ra=0.15_realk)
             frcVelFld = .TRUE.
 
         CASE ( "Uniform Cylinder Advection" )
-            tst = tstUCylAd
+            tstId = tstUCylAd
             shape = shape_t(shp=shpCircle, &
                 xc=0.2_realk, yc=0.2_realk, ra=0.1_realk)
             frcVelFld = .FALSE.
 
         CASE ( "Abrupt Cylinder Advection" )
-            tst = tstACylAd
+            tstId = tstACylAd
             shape = shape_t(shp=shpCircle, &
                 xc=0.2_realk, yc=0.2_realk, ra=0.1_realk)
             frcVelFld = .FALSE.
 
         CASE ( "Ellipse Reconstruction" )
-            tst = tstEllRec
+            tstId = tstEllRec
             shape = shape_t(shp=shpEllipse, &
                 xc=0.5_realk, yc=0.5_realk, &
                 ra=0.3464_realk, rb=0.1414_realk, theta=pi)
             frcVelFld = .TRUE.
 
         CASE ( "Open Channel Flow" )
-            tst = tstOpCFl
+            tstId = tstOpCFl
             shape = shape_t(shp=shpPlane, lvl=0.0_realk)
             frcVelFld = .FALSE.
 
@@ -107,7 +107,7 @@ CONTAINS
 
         CALL fill_c_dom(dist_func, shape)
         CALL fill_c_bou(shape%shp)
-        CALL init_vel(tst)
+        CALL init_vel(tstId)
 
     END SUBROUTINE init_mph_test
 
@@ -226,7 +226,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE init_vel(tst)
+    SUBROUTINE init_vel(tstId, dt, itstep)
     !----------------------------------------------------------------
     !   What it does:
     !   Imposes the prescribed velocity field of the selected test
@@ -235,12 +235,22 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: tst
+        INTEGER(intk), INTENT(in) :: tstId
+        REAL(realk), INTENT(in), OPTIONAL :: dt
+        INTEGER(intk), INTENT(in), OPTIONAL :: itstep
 
         ! Local variables
-        ! None
+        REAL(realk) :: t
 
-        SELECT CASE ( tst )
+        IF ( PRESENT(itstep) ) THEN
+            t = dt*itstep
+        ELSE
+            t = 0.0_realk
+        END IF
+
+        SELECT CASE ( tstId )
+        CASE ( tstRKoVor )
+            CALL set_vel_vtx(t)
         CASE ( tstUCylAd )
             CALL set_vel_uni(0.016_realk, 0.016_realk, 0.0_realk)
         CASE ( tstACylAd )
@@ -289,9 +299,7 @@ CONTAINS
     SUBROUTINE set_vel_c(uc, vc, wc, h)
     !----------------------------------------------------------------
     !   What it does:
-    !   Sets u, v and w to a uniform value on every grid. The whole
-    !   array is written, ghost layers included, hence no connect or
-    !   parent is needed afterwards.
+    !   
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -374,23 +382,106 @@ CONTAINS
 
     !================================================================
 
-    ! SUBROUTINE frc_vel_fld()
-    ! !----------------------------------------------------------------
-    ! !   What it does:
-    ! !   Re-imposes the prescribed velocity field. Called once per
-    ! !   time step so that neither the flow solver nor upd_vel_stg
-    ! !   can alter it.
-    ! !----------------------------------------------------------------
+    SUBROUTINE set_vel_vtx(t)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
 
-    !     ! Subroutine arguments
-    !     ! None
+        ! Subroutine arguments
+        REAL(realk), INTENT(in) :: t
 
-    !     ! Local variables
-    !     ! None
+        ! Local variables
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
+        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:)
 
-    !     CALL init_vel(mphTstId)
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+            CALL get_mgdims(kk, jj, ii, igrid)
+            CALL get_bbox(minx, maxx, miny, maxy, minz, maxz, igrid)
+            CALL get_fieldptr(u, "U", igrid)
+            CALL get_fieldptr(v, "V", igrid)
+            CALL get_fieldptr(ddx, "DDX", igrid)
+            CALL get_fieldptr(ddy, "DDY", igrid)
 
-    ! END SUBROUTINE frc_vel_fld
+            CALL set_vel_vtx_grid(kk, jj, ii, u, v, ddx, ddy, minx, miny, t)
+        END DO
+
+    END SUBROUTINE set_vel_vtx
+
+    !================================================================
+
+    SUBROUTINE set_vel_vtx_grid(kk, jj, ii, u, v, ddx, ddy, minx, miny, t)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAl(realk), INTENT(inout) :: u(kk, jj, ii), v(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj)
+        REAL(realk), INTENT(in) :: minx, miny, t
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: psi(jj, ii)
+        REAL(realk) :: x, y, xm, ym
+
+        xm = minx - 0.5*ddx(2)
+        DO i = 2, ii-2
+            x = xm + 0.5_realk*ddx(i)
+            ym = miny - 0.5*ddy(2)
+            DO j = 2, jj-2
+                y = ym + 0.5_realk*ddy(j)
+
+                psi(j,i) = 1.0_realk/pi*COS(pi*t/2.0_realk)* &
+                    SIN(pi*x)**2 * SIN(pi*y)**2
+
+                ym = ym + ddy(j)
+            END DO
+            xm = xm + ddx(i)
+        END DO
+
+        DO i = 2, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    u(k,j,i) = -(psi(j,i) - psi(j-1,i))/ddy(j)
+                END DO
+            END DO
+        END DO
+
+        DO i = 3, ii-2
+            DO j = 2, jj-2
+                DO k = 3, kk-2
+                    v(k,j,i) = (psi(j,i) - psi(j,i-1))/ddx(i)
+                END DO
+            END DO
+        END DO
+
+    END SUBROUTINE set_vel_vtx_grid
+
+    !================================================================
+
+    SUBROUTINE frc_vel_fld(dt, itstep)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        REAL(realk), INTENT(in) :: dt
+        INTEGER(intk), INTENT(in) :: itstep
+
+        ! Local variables
+        ! None
+
+        CALL init_vel(tstId, dt, itstep)
+
+    END SUBROUTINE frc_vel_fld
 
     !================================================================
 
