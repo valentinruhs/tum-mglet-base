@@ -7,7 +7,7 @@
 	"read": false
     },
     "io": {
-        "grids": "grids.h5",
+        "grids": "grids128.h5",
         "infile": "fields_in.h5",
         "outfile": "fields.h5"
     },

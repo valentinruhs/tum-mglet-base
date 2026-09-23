@@ -17,18 +17,21 @@ MODULE mph_test_mod
     USE precision_mod, ONLY: realk, intk, pi
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_bbox
     USE fields_mod, ONLY: get_fieldptr
+
     USE mphcore_mod, ONLY: mphTst, mphInitErr, vofTol
     USE mph_plic_mod, ONLY: comp_c_stg
+    USE mph_plic_mod, ONLY: comp_c_loc
 
     IMPLICIT NONE(type, external)
     PRIVATE
 
     INTEGER(intk), PARAMETER :: tstCylTra=1, tstZalDis=2, tstRKoVor=3, tstUCylAd=4, tstACylAd=5, tstEllRec=6, tstOpCFl=7
     INTEGER(intk), PARAMETER :: shpCircle=1, shpZalesak=2, shpEllipse=3, shpPlane=4
-    LOGICAL, PROTECTED :: frcVelFld
-    INTEGER(intk) :: tstId
+    LOGICAL, PROTECTED :: frcVelFld, isRevTst
+    INTEGER(intk), PROTECTED :: tstId
+    REAL(realk), PROTECTED :: circumf
 
-    PUBLIC :: init_mph_test, finish_mph_test, frc_vel_fld
+    PUBLIC :: init_mph_test, finish_mph_test, frc_vel_fld, isRevTst, comp_eGeo, comp_eIfc, circumf, shape
 
     TYPE :: shape_t
         INTEGER(intk) :: shp = shpCircle
@@ -37,6 +40,8 @@ MODULE mph_test_mod
         REAL(realk) :: lvl = 0.0_realk
         REAL(realk) :: slotW = 0.0_realk, slotH = 0.0_realk
     END TYPE shape_t
+
+    TYPE(shape_t), PROTECTED :: shape
 
     ABSTRACT INTERFACE
         PURE FUNCTION dist_func_interface(x, y, z, s) RESULT(phi)
@@ -55,7 +60,7 @@ CONTAINS
         ! None
 
         ! Local variables
-        TYPE(shape_t) :: shape
+        ! None
 
         SELECT CASE ( mphTst )
         CASE ( "Cylinder Translation" )
@@ -63,6 +68,7 @@ CONTAINS
             shape = shape_t(shp=shpCircle, &
                 xc=0.5_realk, yc=0.5_realk, ra=0.15_realk)
             frcVelFld = .TRUE.
+            isRevTst = .TRUE.
 
         CASE ( "Zalesak Disk" )
             tstId = tstZalDis
@@ -70,12 +76,14 @@ CONTAINS
                 xc=0.5_realk, yc=0.5_realk, ra=0.15_realk, &
                 slotW=0.05_realk, slotH=0.25_realk)
             frcVelFld = .TRUE.
+            isRevTst = .FALSE.
 
         CASE ( "Rider-Kothe Vortex" )
             tstId = tstRKoVor
             shape = shape_t(shp=shpCircle, &
                 xc=0.5_realk, yc=0.75_realk, ra=0.15_realk)
             frcVelFld = .TRUE.
+            isRevTst = .TRUE.
 
         CASE ( "Uniform Cylinder Advection" )
             tstId = tstUCylAd
@@ -100,14 +108,17 @@ CONTAINS
             tstId = tstOpCFl
             shape = shape_t(shp=shpPlane, lvl=0.0_realk)
             frcVelFld = .FALSE.
+            isRevTst = .FALSE.
 
         CASE DEFAULT
             CALL err_abort(mphInitErr, "unknown test case.", __FILE__, __LINE__)
+
         END SELECT
 
+        IF ( isRevTst ) circumf = circ_func(shape)
         CALL fill_c_dom(dist_func, shape)
         CALL fill_c_bou(shape%shp)
-        CALL init_vel(tstId)
+        CALL init_vel()
 
     END SUBROUTINE init_mph_test
 
@@ -144,8 +155,8 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         INTEGER(intk) :: i, j, k
-        REAL(realk) :: xm, x, ym, y, zm, z, halfDiag, dist
-        INTEGER(intk) :: ins, is, js, ks
+        REAL(realk) :: xMi, x, yMi, y, zMi, z, halfDiag, dist
+        INTEGER(intk) :: ins, is, js
         INTEGER, PARAMETER :: nSub = 64
         REAL(realk) :: xs, ys, zs
 
@@ -161,15 +172,15 @@ CONTAINS
             CALL get_fieldptr(ddz, "DDZ", igrid)
 
             c = 0.0_realk
-            xm = minx
+            xMi = minx
             DO i = 3, ii-2
-                x = xm + 0.5_realk*ddx(i)
-                ym = miny
+                x = xMi + 0.5_realk*ddx(i)
+                yMi = miny
                 DO j = 3, jj-2
-                    y = ym + 0.5_realk*ddy(j)
-                    zm = minz
+                    y = yMi + 0.5_realk*ddy(j)
+                    zMi = minz
                     DO k = 3, kk-2
-                        z = zm + 0.5_realk*ddz(k)
+                        z = zMi + 0.5_realk*ddz(k)
 
                         halfDiag = 0.5_realk*SQRT(ddx(i)**2 + ddy(j)**2 + ddz(k)**2)
                         dist = dist_func(x, y, z, s)
@@ -181,24 +192,22 @@ CONTAINS
                         ELSE 
                             ins = 0
                             DO is = 1, nSub
-                                xs = xm + (REAL(is, realk) - 0.5_realk)*ddx(i)/REAL(nSub, realk)
+                                xs = xMi + (REAL(is, realk) - 0.5_realk)*ddx(i)/REAL(nSub, realk)
                                 DO js = 1, nSub
-                                    ys = ym + (REAL(js, realk) - 0.5_realk)*ddy(j)/REAL(nSub, realk)
-                                    DO ks = 1, nSub
-                                        zs = zm + (REAL(ks, realk) - 0.5_realk)*ddz(k)/REAL(nSub, realk)
-                                        IF ( dist_func(xs, ys, zs, s) < 0.0_realk ) THEN
-                                            ins = ins + 1
-                                        END IF
-                                    END DO
+                                    ys = yMi + (REAL(js, realk) - 0.5_realk)*ddy(j)/REAL(nSub, realk)
+                                    zs = zMi + 0.5_realk*ddz(k)
+                                    IF ( dist_func(xs, ys, zs, s) < 0.0_realk ) THEN
+                                        ins = ins + 1
+                                    END IF
                                 END DO
                             END DO
-                            c(k,j,i) = REAL(ins, realk)/REAL(nSub, realk)**3
+                            c(k,j,i) = REAL(ins, realk)/REAL(nSub, realk)**2
                         END IF
-                        zm = zm + ddz(k)
+                        zMi = zMi + ddz(k)
                     END DO
-                    ym = ym + ddy(j)
+                    yMi = yMi + ddy(j)
                 END DO
-                xm = xm + ddx(i)
+                xMi = xMi + ddx(i)
             END DO
         END DO
 
@@ -226,7 +235,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE init_vel(tstId, dt, itstep)
+    SUBROUTINE init_vel(dt, itstep)
     !----------------------------------------------------------------
     !   What it does:
     !   Imposes the prescribed velocity field of the selected test
@@ -235,7 +244,6 @@ CONTAINS
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: tstId
         REAL(realk), INTENT(in), OPTIONAL :: dt
         INTEGER(intk), INTENT(in), OPTIONAL :: itstep
 
@@ -429,21 +437,21 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: k, j, i
         REAL(realk) :: psi(jj, ii)
-        REAL(realk) :: x, y, xm, ym
+        REAL(realk) :: x, y, xMi, yMi
 
-        xm = minx - 0.5*ddx(2)
+        xMi = minx - 0.5*ddx(2)
         DO i = 2, ii-2
-            x = xm + 0.5_realk*ddx(i)
-            ym = miny - 0.5*ddy(2)
+            x = xMi + 0.5_realk*ddx(i)
+            yMi = miny - 0.5*ddy(2)
             DO j = 2, jj-2
-                y = ym + 0.5_realk*ddy(j)
+                y = yMi + 0.5_realk*ddy(j)
 
                 psi(j,i) = 1.0_realk/pi*COS(pi*t/2.0_realk)* &
                     SIN(pi*x)**2 * SIN(pi*y)**2
 
-                ym = ym + ddy(j)
+                yMi = yMi + ddy(j)
             END DO
-            xm = xm + ddx(i)
+            xMi = xMi + ddx(i)
         END DO
 
         DO i = 2, ii-2
@@ -479,7 +487,7 @@ CONTAINS
         ! Local variables
         ! None
 
-        CALL init_vel(tstId, dt, itstep)
+        CALL init_vel(dt, itstep)
 
     END SUBROUTINE frc_vel_fld
 
@@ -505,6 +513,24 @@ CONTAINS
             phi = 1.0_realk
         END SELECT
     END FUNCTION dist_func
+
+    !================================================================
+
+    PURE FUNCTION circ_func(s) RESULT(phi)
+        TYPE(shape_t), INTENT(in) :: s
+        REAL(realk) :: phi
+
+        SELECT CASE ( s%shp )
+        CASE ( shpCircle )
+            phi = circ_func_circle(s%ra)
+        CASE ( shpZalesak )
+            
+        CASE ( shpEllipse )
+            phi = circ_func_ellipse(s%ra, s%rb)
+        CASE DEFAULT
+            phi = 1.0_realk
+        END SELECT
+    END FUNCTION circ_func
 
     !================================================================
 
@@ -534,5 +560,80 @@ CONTAINS
         yr = -st*(x - xc) + ct*(y - yc)
         phi = MIN(ra, rb)*(SQRT((xr/ra)**2 + (yr/rb)**2) - 1.0_realk)
     END FUNCTION dist_func_ellipse
+
+    !================================================================
+
+    PURE FUNCTION circ_func_circle(ra) RESULT(phi)
+        REAL(realk), INTENT(in) :: ra
+        REAL(realk) :: phi
+        phi = 2.0_realk*pi*ra
+    END FUNCTION circ_func_circle
+
+    !================================================================
+
+    PURE FUNCTION circ_func_ellipse(ra, rb) RESULT(phi)
+        REAL(realk), INTENT(in) :: ra, rb
+        REAL(realk) :: phi
+        REAL(realk) :: lbd
+        lbd = (ra - rb)/(ra + rb)
+        phi = (ra + rb)*pi*(1.0_realk + (3.0_realk*lbd**2)/ &
+            (10.0_realk + SQRT(4.0_realk - 3.0_realk*lbd**2)))
+    END FUNCTION circ_func_ellipse
+
+    !================================================================
+
+    FUNCTION comp_eGeo(ddx, ddy, ddz, cAct, cRef) RESULT(eGeo)
+        REAL(realk) :: ddx, ddy, ddz, cAct, cRef
+        REAL(realk) :: eGeo
+
+        eGeo = ddx*ddy*ddz*ABS(cAct - cRef)
+
+    END FUNCTION comp_eGeo
+
+    !================================================================
+
+    RECURSIVE FUNCTION comp_eIfc(xMi, yMi, zMi, ddx, ddy, ddz, &
+        normx, normy, normz, alpha, c, isIfc, s) RESULT(eIfc)
+        REAL(realk), INTENT(in) :: xMi, yMi, zMi, ddx, ddy, ddz
+        REAL(realk), INTENT(in) :: normx, normy, normz, alpha, c
+        REAL(realk), INTENT(in) :: isIfc
+        TYPE(shape_t), INTENT(in) :: s
+        REAL(realk) :: eIfc
+
+        INTEGER(intk), PARAMETER :: nSub = 256
+        REAL(realk) :: vol, cAppr, dist, halfDiag, xs, ys, zs
+        INTEGER(intk) :: is, js, ins
+        LOGICAL :: inExac, inAppr
+
+        vol = ddx*ddy*ddz
+        cAppr = c
+
+        halfDiag = 0.5_realk*SQRT(ddx**2 + ddy**2 + ddz**2)
+        dist = dist_func(xMi + 0.5_realk*ddx, yMi + 0.5_realk*ddy, zMi + 0.5_realk*ddz, s)
+
+        IF ( dist <= -halfDiag ) THEN
+            eIfc = (1.0_realk - cAppr)*vol
+        ELSE IF ( dist >= halfDiag ) THEN
+            eIfc = cAppr*vol
+        ELSE
+            ins = 0
+            DO is = 1, nSub
+                xs = (REAL(is, realk) - 0.5_realk)*ddx/REAL(nSub, realk)
+                DO js = 1, nSub
+                    ys = (REAL(js, realk) - 0.5_realk)*ddy/REAL(nSub, realk)
+                    zs = 0.5_realk*ddz
+                    inExac = dist_func(xMi+xs, yMi+ys, zMi+zs, s) < 0.0_realk
+                    IF ( isIfc > 0.0_realk ) THEN
+                        inAppr = normx*xs + normy*ys + normz*zs < alpha
+                    ELSE
+                        inAppr = c > 0.5_realk
+                    END IF
+                    IF (inExac .NEQV. inAppr) ins = ins + 1
+                END DO
+            END DO
+            eIfc = vol*REAL(ins,realk)/REAL(nSub,realk)**2
+        END IF
+
+    END FUNCTION comp_eIfc
 
 END MODULE mph_test_mod

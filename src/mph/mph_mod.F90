@@ -27,7 +27,7 @@ MODULE mph_mod
     USE mph_utils_mod, ONLY: init_mph_utils, finish_mph_utils
     USE mph_test_mod, ONLY: init_mph_test, finish_mph_test, frc_vel_fld
     USE mph_pois_mod, ONLY: init_mph_pois, finish_mph_pois
-    USE mph_chk_mod, ONLY: init_mph_chk, finish_mph_chk, final_vol_chk
+    USE mph_chk_mod, ONLY: init_mph_chk, finish_mph_chk, final_chk
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -68,7 +68,7 @@ CONTAINS
         ! Local variables
         ! None
 
-        CALL final_vol_chk()
+        CALL final_chk()
 
         IF ( hasMph ) THEN
             CALL finish_mph_chk()
