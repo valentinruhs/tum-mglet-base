@@ -31,7 +31,7 @@ MODULE mph_test_mod
     INTEGER(intk), PROTECTED :: tstId
     REAL(realk), PROTECTED :: circumf
 
-    PUBLIC :: init_mph_test, finish_mph_test, frc_vel_fld, isRevTst, comp_eGeo, comp_eIfc, circumf, shape
+    PUBLIC :: init_mph_test, finish_mph_test, frc_vel_fld, isRevTst, comp_eGeo, comp_eIfc, circumf, shape, frcVelFld
 
     TYPE :: shape_t
         INTEGER(intk) :: shp = shpCircle
@@ -73,10 +73,10 @@ CONTAINS
         CASE ( "Zalesak Disk" )
             tstId = tstZalDis
             shape = shape_t(shp=shpZalesak, &
-                xc=0.5_realk, yc=0.5_realk, ra=0.15_realk, &
+                xc=0.5_realk, yc=0.75_realk, ra=0.15_realk, &
                 slotW=0.05_realk, slotH=0.25_realk)
             frcVelFld = .TRUE.
-            isRevTst = .FALSE.
+            isRevTst = .TRUE.
 
         CASE ( "Rider-Kothe Vortex" )
             tstId = tstRKoVor
@@ -115,7 +115,7 @@ CONTAINS
 
         END SELECT
 
-        IF ( isRevTst ) circumf = circ_func(shape)
+        circumf = circ_func(shape)
         CALL fill_c_dom(dist_func, shape)
         CALL fill_c_bou(shape%shp)
         CALL init_vel()
@@ -257,6 +257,8 @@ CONTAINS
         END IF
 
         SELECT CASE ( tstId )
+        CASE ( tstZalDis )
+            CALL set_vel_cav()
         CASE ( tstRKoVor )
             CALL set_vel_vtx(t)
         CASE ( tstUCylAd )
@@ -474,6 +476,83 @@ CONTAINS
 
     !================================================================
 
+    SUBROUTINE set_vel_cav()
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        ! None
+
+        ! Local variables
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
+        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:)
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+            CALL get_mgdims(kk, jj, ii, igrid)
+            CALL get_bbox(minx, maxx, miny, maxy, minz, maxz, igrid)
+            CALL get_fieldptr(u, "U", igrid)
+            CALL get_fieldptr(v, "V", igrid)
+            CALL get_fieldptr(ddx, "DDX", igrid)
+            CALL get_fieldptr(ddy, "DDY", igrid)
+
+            CALL set_vel_cav_grid(kk, jj, ii, u, v, ddx, ddy, minx, miny)
+        END DO
+
+    END SUBROUTINE set_vel_cav
+
+    !================================================================
+
+    SUBROUTINE set_vel_cav_grid(kk, jj, ii, u, v, ddx, ddy, minx, miny)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAl(realk), INTENT(inout) :: u(kk, jj, ii), v(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj)
+        REAL(realk), INTENT(in) :: minx, miny
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: omega
+        REAL(realk) :: x, y, xMi, yMi
+
+        omega = 2.0_realk*pi/6.28_realk
+
+        DO i = 2, ii-2
+            yMi = miny
+            DO j = 3, jj-2
+                y = yMi + 0.5_realk*ddy(j)
+                DO k = 3, kk-2
+                    u(k,j,i) = -omega*(y - 0.5_realk)
+                END DO
+                yMi = yMi + ddy(j)
+            END DO
+        END DO
+
+        xMi = minx
+        DO i = 3, ii-2
+            x = xMi + 0.5_realk*ddx(i)
+            DO j = 2, jj-2
+                DO k = 3, kk-2
+                    v(k,j,i) = omega*(x - 0.5_realk)
+                END DO
+            END DO
+            xMi = xMi + ddx(i)
+        END DO
+
+    END SUBROUTINE set_vel_cav_grid
+
+    !================================================================
+
     SUBROUTINE frc_vel_fld(dt, itstep)
     !----------------------------------------------------------------
     !   What it does:
@@ -524,7 +603,8 @@ CONTAINS
         CASE ( shpCircle )
             phi = circ_func_circle(s%ra)
         CASE ( shpZalesak )
-            
+            phi = circ_func_circle(s%ra) - 2.0_realk*s%ra*ASIN(0.5_realk*s%slotW/s%ra) &
+                + 2.0_realk*(s%slotH - s%ra + SQRT(s%ra**2 - 0.25_realk*s%slotW**2)) + s%slotW
         CASE ( shpEllipse )
             phi = circ_func_ellipse(s%ra, s%rb)
         CASE DEFAULT

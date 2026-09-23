@@ -1,13 +1,13 @@
 {
     "time": {
-        "dt": 0.001,
-        "mtstep": 1000,
+        "dt": 0.005,
+        "mtstep": 1256,
 	"itinfo": 10,
         "tstat": 10.0,
 	"read": false
     },
     "io": {
-        "grids": "grids.h5",
+        "grids": "grids128.h5",
         "infile": "fields_in.h5",
         "outfile": "fields.h5"
     },
@@ -31,11 +31,11 @@
     },
     
     "multiphase": {
-	"test": "Abrupt Cylinder Advection",
+	"test": "Zalesak Disk",
 	"skipAdvection": false,
-   	"skipDiffusion": false,
-    	"skipPressure": false,
-    	"skipExternal": false,
+   	"skipDiffusion": true,
+    	"skipPressure": true,
+    	"skipExternal": true,
     	"splitPermutation": 3,
     	"vofTolerance": 1.0E-12,
     	"divTolerance": 1.0E-8,
@@ -45,7 +45,7 @@
     	"vofCheck": false,
     	"divCheck": false,
     	"volCheck": false,
-	"rho1" : 1000000.0,
+	"rho1" : 1.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.001,
 	"gmol2" : 0.001,
