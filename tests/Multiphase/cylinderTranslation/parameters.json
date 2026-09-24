@@ -1,13 +1,13 @@
 {
     "time": {
-        "dt": 0.001,
-        "mtstep": 6280,
-	"itinfo": 10,
+        "dt": 0.1,
+        "mtstep": 1400,
+	"itinfo": 100,
         "tstat": 10.0,
 	"read": false
     },
     "io": {
-        "grids": "grids256.h5",
+        "grids": "grids320.h5",
         "infile": "fields_in.h5",
         "outfile": "fields.h5"
     },
@@ -31,19 +31,16 @@
     },
     
     "multiphase": {
-	"test": "Zalesak Disk",
+	"test": "Cylinder Translation",
 	"skipAdvection": false,
    	"skipDiffusion": true,
     	"skipPressure": true,
     	"skipExternal": true,
-    	"splitPermutation": 3,
     	"vofTolerance": 1.0E-12,
-    	"divTolerance": 1.0E-8,
     	"volTolerance": 1.0E-8,
     	"advectionScheme": "QUICK",
     	"donatingCentered": false,
     	"vofCheck": false,
-    	"divCheck": false,
     	"volCheck": false,
 	"rho1" : 1.0,
 	"rho2" : 1.0,

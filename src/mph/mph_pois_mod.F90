@@ -72,7 +72,6 @@ CONTAINS
                                             an(:,:,:), as(:,:,:), &
                                             at(:,:,:), ab(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ap(:, :, :)
-        REAL(realk), POINTER, CONTIGUOUS :: c(:, :, :)
         REAL(realk), POINTER, CONTIGUOUS :: dBa(:, :, :), dLe(:, :, :), dTo(:, :, :)
 
 
@@ -81,7 +80,6 @@ CONTAINS
 
             CALL get_mgdims(kk, jj, ii, igrid)
 
-            CALL get_fieldptr(c, "C", igrid)
             CALL get_fieldptr(dx, "DX", igrid)
             CALL get_fieldptr(dy, "DY", igrid)
             CALL get_fieldptr(dz, "DZ", igrid)

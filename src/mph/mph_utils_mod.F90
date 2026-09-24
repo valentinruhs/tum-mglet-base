@@ -111,7 +111,7 @@ CONTAINS
 
         dsx = ddx ; dsy = ddy ; dsz = ddz
 
-        IF ( q == l .OR. q == 0 ) THEN
+        IF ( q == l ) THEN
             SELECT CASE ( l )
             CASE ( 1 )
                 dsx = dx

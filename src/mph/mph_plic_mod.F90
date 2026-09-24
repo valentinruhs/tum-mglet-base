@@ -310,6 +310,8 @@ CONTAINS
 
         CALL comp_isIfc_grd(kk, jj, ii, c, isIfc)
         CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, c, dx, dy, dz)
+        ! Fix for cells with no normal vector e.g. flotsam
+        WHERE ( normx**2 + normy**2 + normz**2 < 0.5_realk ) isIfc = -1.0_realk
         CALL comp_alpha(alpha, kk, jj, ii, c, isIfc, ddx, ddy, ddz, normx, normy, normz)
 
     END SUBROUTINE comp_ifc_grd

@@ -1,8 +1,8 @@
 {
     "time": {
-        "dt": 0.001,
-        "mtstep": 1000,
-	"itinfo": 10,
+        "dt": 0.05,
+        "mtstep": 1500,
+	"itinfo": 100,
         "tstat": 10.0,
 	"read": false
     },
@@ -33,19 +33,16 @@
     "multiphase": {
 	"test": "Abrupt Cylinder Advection",
 	"skipAdvection": false,
-   	"skipDiffusion": false,
+   	"skipDiffusion": true,
     	"skipPressure": false,
     	"skipExternal": false,
-    	"splitPermutation": 3,
     	"vofTolerance": 1.0E-12,
-    	"divTolerance": 1.0E-8,
     	"volTolerance": 1.0E-8,
     	"advectionScheme": "QUICK",
     	"donatingCentered": false,
     	"vofCheck": false,
-    	"divCheck": false,
     	"volCheck": false,
-	"rho1" : 1000000.0,
+	"rho1" : 1.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.001,
 	"gmol2" : 0.001,

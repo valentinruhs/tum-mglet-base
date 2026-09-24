@@ -27,12 +27,11 @@ MODULE mphcore_mod
     ! Control parameters
     LOGICAL, PROTECTED :: hasMph
     CHARACTER(len=30), PROTECTED :: mphTst
-    INTEGER(intk), PROTECTED :: splPer
     LOGICAL, PROTECTED :: skpAdv, skpDif, skpPre, skpExt
-    REAL(realk), PROTECTED :: vofTol, divTol, volTol
+    REAL(realk), PROTECTED :: vofTol, volTol
     CHARACTER(len=5), PROTECTED :: advScm
     LOGICAL, PROTECTED :: donCen
-    LOGICAL, PROTECTED :: vofChk, volChk, divChk
+    LOGICAL, PROTECTED :: vofChk, volChk
 
     ! Physical parameters
     REAL(realk), PROTECTED :: rho1, rho2
@@ -43,8 +42,8 @@ MODULE mphcore_mod
     INTEGER(intk), PARAMETER :: mphInitErr = 124, propsErr = 125, vofErr = 126, plicErr = 127
 
     PUBLIC :: init_mphcore, finish_mphcore, hasMph, &
-        mphTst, skpAdv, skpDif, skpPre, skpExt, splPer, vofTol, divTol, &
-        voltol, advScm, donCen, vofChk, volChk, divChk, rho1, rho2, &
+        mphTst, skpAdv, skpDif, skpPre, skpExt, vofTol, &
+        volTol, advScm, donCen, vofChk, volChk, rho1, rho2, &
         gmol1, gmol2, grav, propsErr, vofErr, plicErr, mphInitErr
 
 CONTAINS
@@ -80,14 +79,11 @@ CONTAINS
         CALL mphConf%get_value("/skipDiffusion", skpDif, .FALSE.)
         CALL mphConf%get_value("/skipPressure", skpPre, .FALSE.)
         CALL mphConf%get_value("/skipExternal", skpExt, .FALSE.)
-        CALL mphConf%get_value("/splitPermutation", splPer, 3_intk)
         CALL mphConf%get_value("/vofTolerance", vofTol, 1.0E-12_realk)
-        CALL mphConf%get_value("/divTolerance", divTol, 1.0E-8_realk)
-        CALL mphConf%get_value("/volTolerance", voltol, 1.0E-8_realk)
+        CALL mphConf%get_value("/volTolerance", volTol, 1.0E-8_realk)
         CALL mphConf%get_value("/advectionScheme", advScm, "QUICK")
         CALL mphConf%get_value("/donatingCentered", donCen, .FALSE.)
         CALL mphConf%get_value("/vofCheck", vofChk, .FALSE.)
-        CALL mphConf%get_value("/divCheck", divChk, .FALSE.)
         CALL mphConf%get_value("/volCheck", volChk, .FALSE.)
 
         ! Read densities

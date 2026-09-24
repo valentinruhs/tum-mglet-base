@@ -23,8 +23,8 @@ MODULE mph_chk_mod
     USE comms_mod, ONLY: myid
     USE grids_mod, ONLY: minlevel, maxlevel
 
-    USE mphcore_mod, ONLY: volChk, divChk, vofChk, volTol, divTol, vofTol, hasMph
-    USE mph_test_mod, ONLY: comp_eGeo, comp_eIfc, circumf, shape
+    USE mphcore_mod, ONLY: volChk, vofChk, volTol, vofTol, hasMph
+    USE mph_test_mod, ONLY: comp_abs_res, circumf, area, shape
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -141,19 +141,18 @@ CONTAINS
         ! None
 
         ! Local variables
-        REAL(realk) :: volFini, eGeo, eIfc
+        REAL(realk) :: volFini, L1, L2
 
         CALL comp_vol(volFini)
-        CALL comp_err_geo(eGeo)
-        CALL comp_err_ifc(eIfc)
+        CALL comp_L_norm_err(L1, L2)
 
         IF ( myid == 0 ) THEN
             WRITE(*, '()')
             WRITE(*,'(A,E11.5)') "Final volume is: ", volFini
             WRITE(*,'(A,E11.5)') "Absolute volume error: ", ABS(volInit-volFini)
             WRITE(*,'(A,E11.5)') "Relative volume error: ", ABS(volInit-volFini)/volInit
-            WRITE(*,'(A,E11.5)') "Geometrical error: ", eGeo
-            WRITE(*,'(A,E11.5)') "Interface error: ", eIfc
+            WRITE(*,'(A,E11.5)') "E_{l=1,B=1}: ", L1
+            WRITE(*,'(A,E11.5)') "E_{l=1,B=L}: ", L1/circumf
             WRITE(*, '()')
         END IF
 
@@ -161,80 +160,14 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_err_geo(eGeo)
+    SUBROUTINE comp_L_norm_err(L1, L2)
     !----------------------------------------------------------------
     !   What it does:
     !
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        REAL(realk), INTENT(out) :: eGeo
-
-        ! Local variables
-        INTEGER(intk) :: n, igrid
-        INTEGER(intk) :: kk, jj, ii
-        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:), cInit(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
-        REAL(realk) :: eGeoLoc, eGeoGrd
-
-        eGeoLoc = 0.0_realk
-        DO n = 1, nmygrids
-            igrid = mygrids(n)
-            CALL get_mgdims(kk, jj, ii, igrid)
-            CALL get_fieldptr(c, "C", igrid)
-            CALL get_fieldptr(cInit, "CINIT", igrid)
-            CALL get_fieldptr(ddx, "DDX", igrid)
-            CALL get_fieldptr(ddy, "DDY", igrid)
-            CALL get_fieldptr(ddz, "DDZ", igrid)
-
-            CALL comp_err_geo_grd(kk, jj, ii, c, cInit, ddx, ddy, ddz, eGeoGrd)
-            eGeoLoc = eGeoLoc + eGeoGrd
-        END DO
-
-        CALL MPI_Allreduce(eGeoLoc, eGeo, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
-
-        eGeo = eGeo/circumf
-
-    END SUBROUTINE comp_err_geo
-
-    !================================================================
-
-    SUBROUTINE comp_err_geo_grd(kk, jj, ii, c, cInit, ddx, ddy, ddz, eGeo)
-    !----------------------------------------------------------------
-    !   What it does:
-    !
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: c(kk, jj, ii), cInit(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(out) :: eGeo
-
-        ! Local variables
-        INTEGER(intk) :: k, j, i
-
-        eGeo = 0.0_realk
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
-                    eGeo = eGeo + comp_eGeo(ddx(i), ddy(j), ddz(k), c(k,j,i), cInit(k,j,i))
-                END DO
-            END DO
-        END DO
-
-    END SUBROUTINE comp_err_geo_grd
-
-    !================================================================
-
-    SUBROUTINE comp_err_ifc(eIfc)
-    !----------------------------------------------------------------
-    !   What it does:
-    !
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        REAL(realk), INTENT(out) :: eIfc
+        REAL(realk), INTENT(out) :: L1, L2
 
         ! Local variables
         INTEGER(intk) :: n, igrid
@@ -245,9 +178,10 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
         REAl(realk), POINTER, CONTIGUOUS :: isIfc(:,:,:)
-        REAL(realk) :: eIfcLoc, eIfcGrd
+        REAL(realk) :: L1Loc, L2Loc, L1Grd, L2Grd
 
-        eIfcLoc = 0.0_realk
+        L1Loc = 0.0_realk
+        L2Loc = 0.0_realk
         DO n = 1, nmygrids
             igrid = mygrids(n)
             CALL get_mgdims(kk, jj, ii, igrid)
@@ -262,21 +196,24 @@ CONTAINS
             CALL get_fieldptr(alpha, "ALPHA", igrid)
             CALL get_fieldptr(isIfc, "ISIFC", igrid)
 
-            CALL comp_err_ifc_grd(kk, jj, ii, minx, miny, minz, c, &
-                normx, normy, normz, alpha, isIfc, ddx, ddy, ddz, eIfcGrd)
-            eIfcLoc = eIfcLoc + eIfcGrd
+            CALL comp_L_norm_err_grd(kk, jj, ii, minx, miny, minz, c, &
+                normx, normy, normz, alpha, isIfc, ddx, ddy, ddz, L1Grd, L2Grd)
+            L1Loc = L1Loc + L1Grd
+            L2Loc = L2Loc + L2Grd
         END DO
 
-        CALL MPI_Allreduce(eIfcLoc, eIfc, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
+        CALL MPI_Allreduce(L1Loc, L1, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
+        CALL MPI_Allreduce(L2Loc, L2, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
 
-        eIfc = eIfc/circumf
+        L1 = L1
+        L2 = SQRT(L2)
 
-    END SUBROUTINE comp_err_ifc
+    END SUBROUTINE comp_L_norm_err
 
     !================================================================
 
-    SUBROUTINE comp_err_ifc_grd(kk, jj, ii, minx, miny, minz, c, &
-        normx, normy, normz, alpha, isIfc, ddx, ddy, ddz, eIfc)
+    SUBROUTINE comp_L_norm_err_grd(kk, jj, ii, minx, miny, minz, c, &
+        normx, normy, normz, alpha, isIfc, ddx, ddy, ddz, L1, L2)
     !----------------------------------------------------------------
     !   What it does:
     !
@@ -289,22 +226,28 @@ CONTAINS
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii), isIfc(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
-        REAL(realk), INTENT(out) :: eIfc
+        REAL(realk), INTENT(out) :: L1, L2
 
         ! Local variables
         INTEGER(intk) :: k, j, i
         REAL(realk) :: xMi, yMi, zMi
+        REAL(realk) :: vol, absRes, eps
 
-        eIfc = 0.0_realk
+        L1 = 0.0_realk
+        L2 = 0.0_realk
         xMi = minx
         DO i = 3, ii-2
             yMi = miny
             DO j = 3, jj-2
                 zMi = minz
                 DO k = 3, kk-2
-                    eIfc = eIfc + comp_eIfc(xMi, yMi, zMi, ddx(i), ddy(j), ddz(k), &
+                    vol = ddx(i)*ddy(j)*ddz(k)
+                    absRes = comp_abs_res(xMi, yMi, zMi, ddx(i), ddy(j), ddz(k), &
                         normx(k,j,i), normy(k,j,i), normz(k,j,i), alpha(k,j,i), &
                         c(k,j,i), isIfc(k,j,i), shape)
+                    eps = absRes/vol
+                    L1 = L1 + eps*vol
+                    L2 = L2 + eps**2*vol
                 zMi = zMi + ddz(k)
                 END DO
                 yMi = yMi + ddy(j)
@@ -312,7 +255,7 @@ CONTAINS
             xMi = xMi + ddx(i)
         END DO
 
-    END SUBROUTINE comp_err_ifc_grd
+    END SUBROUTINE comp_L_norm_err_grd
 
     !================================================================
 

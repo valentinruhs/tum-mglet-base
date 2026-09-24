@@ -511,9 +511,10 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
-        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:), cp(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: d(:,:,:), g(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: gUv(:,:,:), gUw(:,:,:), gVw(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: dS1(:,:,:), dS2(:,:,:), dS3(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dBa(:,:,:), dLe(:,:,:), dTo(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
 
@@ -522,11 +523,13 @@ CONTAINS
             CALL get_mgdims(kk, jj, ii, igrid)
             CALL get_fieldptr(c, "C", igrid)
             CALL get_fieldptr(d, "D", igrid)
-            CALL get_fieldptr(cp, "CP", igrid)
             CALL get_fieldptr(g, "G", igrid)
             CALL get_fieldptr(gUv, "GUV", igrid)
             CALL get_fieldptr(gUw, "GUW", igrid)
             CALL get_fieldptr(gVw, "GVW", igrid)
+            CALL get_fieldptr(dS1, "DS1", igrid)
+            CALL get_fieldptr(dS2, "DS2", igrid)
+            CALL get_fieldptr(dS3, "DS3", igrid)
             CALL get_fieldptr(dBa, "DBA", igrid)
             CALL get_fieldptr(dLe, "DLE", igrid)
             CALL get_fieldptr(dTo, "DTO", igrid)
@@ -534,12 +537,19 @@ CONTAINS
             CALL get_fieldptr(ddy, "DDY", igrid)
             CALL get_fieldptr(ddz, "DDZ", igrid)
 
+            ! New d-field depending on c
+            ! This is the "correct" density field
             CALL comp_prop(kk, jj, ii, c, d, rho1, rho2, meanFlag="arit")
-            CALL comp_prop_face(kk, jj, ii, c, dBa, dLe, dTo, rho1, rho2, &
-                ddx, ddy, ddz, meanFlag="arit")
 
-            CALL comp_prop(kk, jj, ii, cp, g, gmol1, gmol2, meanFlag="harm")
-            CALL comp_prop_face_stg(kk, jj, ii, cp, gUv, gUw, gVw, &
+            ! Densities at faces depending on cSq
+            ! This is only valid for one time-step. Otherwise, the c-/d-fields
+            ! would diverge.
+            dBa = dS1
+            dLe = dS2
+            dTo = dS3
+
+            CALL comp_prop(kk, jj, ii, c, g, gmol1, gmol2, meanFlag="harm")
+            CALL comp_prop_face_stg(kk, jj, ii, c, gUv, gUw, gVw, &
                 gmol1, gmol2, ddx, ddy, ddz, meanFlag="harm")
         END DO
 

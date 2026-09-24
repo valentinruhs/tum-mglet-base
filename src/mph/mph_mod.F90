@@ -68,9 +68,9 @@ CONTAINS
         ! Local variables
         ! None
 
-        CALL final_chk()
-
         IF ( hasMph ) THEN
+            CALL final_chk()
+
             CALL finish_mph_chk()
             CALL finish_mph_test()
             CALL finish_mph_pois()
@@ -86,24 +86,25 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE mph_step(uo_f, vo_f, wo_f, dt, itstep)
+    SUBROUTINE mph_step(uo_f, vo_f, wo_f, dt, irk, itstep, timeph)
     !----------------------------------------------------------------
     !   What it does:
-    !    
+    !   
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         TYPE(field_t), INTENT(inout) :: uo_f, vo_f, wo_f
-        REAL(realk), INTENT(in) :: dt
-        INTEGER(intk), INTENT(in) :: itstep
+        REAL(realk), INTENT(in) :: dt, timeph
+        INTEGER(intk), INTENT(in) :: irk, itstep
 
-        ! Local variables
-        ! None
+        ! Einmal pro Zeitschritt: geometrische Advektion über volles dt
+        IF ( irk == 1 ) THEN
+            IF ( frcVelFld ) CALL frc_vel_fld(timeph + 0.5_realk*dt, itstep)
+            CALL cpy_flds()
+            CALL adve_operator(dt, itstep)
+            CALL comp_props()
+        END IF
 
-        IF ( frcVelFld ) CALL frc_vel_fld(dt, itstep)
-        CALL cpy_flds()
-        CALL adve_operator(dt, itstep)
-        CALL comp_props()
         CALL diff_operator(uo_f, vo_f, wo_f)
         CALL pres_operator(uo_f, vo_f, wo_f)
         CALL exte_operator(uo_f, vo_f, wo_f)

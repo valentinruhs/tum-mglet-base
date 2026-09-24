@@ -24,13 +24,11 @@ MODULE mph_vof_mod
     USE ftoc_mod, ONLY: ftoc
     USE err_mod, ONLY: err_abort
 
-    USE mphcore_mod, ONLY: rho1, rho2, gmol1, gmol2, grav, splPer, &
-        skpAdv, skpDif, skpPre, skpExt, vofTol, advScm, donCen, volChk, &
-        divChk, vofErr
+    USE mphcore_mod, ONLY: rho1, rho2, gmol1, gmol2, grav, &
+        skpAdv, skpDif, skpPre, skpExt, vofTol, advScm, donCen, volChk, vofErr
     USE mph_utils_mod, ONLY: sel_ind, sel_ext, sel_vel, clp, int2char
     USE mph_plic_mod, ONLY: comp_ifc, comp_c_stg, comp_isIfc_stg, comp_c_loc
-    USE mph_props_mod, ONLY: comp_prop, comp_prop_face, comp_prop_face_stg, &
-        comp_d_stg
+    USE mph_props_mod, ONLY: comp_d_stg
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -149,7 +147,7 @@ CONTAINS
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
         REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: up(:,:,:), vp(:,:,:), wp(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: vel(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: cFlx1(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
@@ -163,9 +161,9 @@ CONTAINS
             CALL get_mgdims(kk, jj, ii, igrid)
 
             CALL get_fieldptr(c, "C", igrid)
-            CALL get_fieldptr(u, "U", igrid)
-            CALL get_fieldptr(v, "V", igrid)
-            CALL get_fieldptr(w, "W", igrid)
+            CALL get_fieldptr(up, "UP", igrid)
+            CALL get_fieldptr(vp, "VP", igrid)
+            CALL get_fieldptr(wp, "WP", igrid)
             CALL get_fieldptr(cFlx1, "CFLX1", igrid)
             CALL get_fieldptr(ddx, "DDX", igrid)
             CALL get_fieldptr(ddy, "DDY", igrid)
@@ -176,7 +174,7 @@ CONTAINS
             CALL get_fieldptr(alpha, "ALPHA", igrid)
             CALL get_fieldptr(isIfc, "ISIFC", igrid)
 
-            CALL sel_vel(l, u, v, w, vel)
+            CALL sel_vel(l, up, vp, wp, vel)
             CALL comp_flx_grd(kk, jj, ii, l, c, vel, cFlx1, &
                 ddx, ddy, ddz, normx, normy, normz, alpha, isIfc, dt)
         END DO
@@ -495,18 +493,6 @@ CONTAINS
     !   x -> y -> z,
     !   y -> z -> x or
     !   z -> x -> y.
-    !   
-    !   Permutation can also be see as the sum of all possible 
-    !   sequences. For three dimensions we get six sequences.
-    !   x -> y -> z,
-    !   y -> z -> x,
-    !   z -> x -> y,
-    !   x -> z -> y,
-    !   y -> x -> z or
-    !   z -> y -> x.
-    !
-    !   The splPer variable controls which version 
-    !   is used.
     !
     !   Source:
     !   T. Arrufat et al., “A mass-momentum consistent, 
@@ -528,16 +514,13 @@ CONTAINS
         INTEGER(intk) :: perInd
 
         ! perInd only changes in a new time-step
-        perInd = mod(iteration-1, splPer)
+        perInd = mod(iteration-1, 3)
 
         ! Select permutation of split advection
         SELECT CASE ( perInd )
             CASE (0); advSeq = [1, 2, 3]
             CASE (1); advSeq = [3, 1, 2]
             CASE (2); advSeq = [2, 3, 1]
-            CASE (3); advSeq = [1, 3, 2]
-            CASE (4); advSeq = [3, 2, 1]
-            CASE (5); advSeq = [2, 1, 3]
         END SELECT
 
     END SUBROUTINE def_adv_seq
@@ -624,12 +607,12 @@ CONTAINS
             CALL prlg_stg(fldName1="DS1", fldName2="DS2", fldName3="DS3")
             CALL prlg_stg(fldName1="MS1", fldName2="MS2", fldName3="MS3")
 
-            CALL comp_ifc()
-        END DO
+            ! Update u, v, w with mS(.) and dS(.)
+            DO q = 1, 3
+                CALL upd_vel_stg(q)
+            END DO
 
-        ! Update u, v, w with mS(.) and dS(.)
-        DO q = 1, 3
-            CALL upd_vel_stg(q)
+            CALL comp_ifc()
         END DO
 
     END SUBROUTINE adve_operator
@@ -648,7 +631,7 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
-        REAL(realk), POINTER, CONTIGUOUS :: up(:,:,:), vp(:,:,:), wp(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: uo(:,:,:), vo(:,:,:), wo(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: g(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: gUv(:,:,:), gUw(:,:,:), gVw(:,:,:)
@@ -663,9 +646,9 @@ CONTAINS
 
             CALL get_mgdims(kk, jj, ii, igrid)
 
-            CALL get_fieldptr(up, "UP", igrid)
-            CALL get_fieldptr(vp, "VP", igrid)
-            CALL get_fieldptr(wp, "WP", igrid)
+            CALL get_fieldptr(u, "U", igrid)
+            CALL get_fieldptr(v, "V", igrid)
+            CALL get_fieldptr(w, "W", igrid)
             CALL uo_f%get_ptr(uo, igrid)
             CALL vo_f%get_ptr(vo, igrid)
             CALL wo_f%get_ptr(wo, igrid)
@@ -683,7 +666,7 @@ CONTAINS
             CALL get_fieldptr(rddy, "RDDY", igrid)
             CALL get_fieldptr(rddz, "RDDZ", igrid)
 
-            CALL diff_operator_grd(kk, jj, ii, up, vp, wp, &
+            CALL diff_operator_grd(kk, jj, ii, u, v, w, &
                 g, gUv, gUw, gVw, dBa, dLe, dTo, &
                 rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
         END DO
@@ -692,7 +675,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE diff_operator_grd(kk, jj, ii, up, vp, wp, g, &
+    SUBROUTINE diff_operator_grd(kk, jj, ii, u, v, w, g, &
         gUv, gUw, gVw, dBa, dLe, dTo, rdx, rdy, rdz, &
         rddx, rddy, rddz, uo, vo, wo)
     !----------------------------------------------------------------
@@ -702,7 +685,7 @@ CONTAINS
     
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: up(kk, jj, ii), vp(kk, jj, ii), wp(kk, jj, ii)
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
         REAL(realk), INTENT(in) :: g(kk, jj, ii)
         REAL(realk), INTENT(in) :: gUv(kk, jj, ii), gUw(kk, jj, ii), gVw(kk, jj, ii)
         REAL(realk), INTENT(in) :: dBa(kk, jj, ii), dLe(kk, jj, ii), dTo(kk, jj, ii)
@@ -719,12 +702,12 @@ CONTAINS
         DO i = 2, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    tauXxPl = g(k,j,i+1)*2.0_realk*(up(k,j,i+1) - up(k,j,i))*rddx(i+1)
-                    tauXxMi = g(k,j,i)*2.0_realk*(up(k,j,i) - up(k,j,i-1))*rddx(i)
-                    tauXyPl = gUv(k,j,i)*((up(k,j+1,i) - up(k,j,i))*rdy(j) + (vp(k,j,i+1) - vp(k,j,i))*rdx(i))
-                    tauXyMi = gUv(k,j-1,i)*((up(k,j,i) - up(k,j-1,i))*rdy(j-1) + (vp(k,j-1,i+1) - vp(k,j-1,i))*rdx(i))
-                    tauXzPl = gUw(k,j,i)*((up(k+1,j,i) - up(k,j,i))*rdz(k) + (wp(k,j,i+1) - wp(k,j,i))*rdx(i))
-                    tauXzMi = gUw(k-1,j,i)*((up(k,j,i) - up(k-1,j,i))*rdz(k-1) + (wp(k-1,j,i+1) - wp(k-1,j,i))*rdx(i))
+                    tauXxPl = g(k,j,i+1)*2.0_realk*(u(k,j,i+1) - u(k,j,i))*rddx(i+1)
+                    tauXxMi = g(k,j,i)*2.0_realk*(u(k,j,i) - u(k,j,i-1))*rddx(i)
+                    tauXyPl = gUv(k,j,i)*((u(k,j+1,i) - u(k,j,i))*rdy(j) + (v(k,j,i+1) - v(k,j,i))*rdx(i))
+                    tauXyMi = gUv(k,j-1,i)*((u(k,j,i) - u(k,j-1,i))*rdy(j-1) + (v(k,j-1,i+1) - v(k,j-1,i))*rdx(i))
+                    tauXzPl = gUw(k,j,i)*((u(k+1,j,i) - u(k,j,i))*rdz(k) + (w(k,j,i+1) - w(k,j,i))*rdx(i))
+                    tauXzMi = gUw(k-1,j,i)*((u(k,j,i) - u(k-1,j,i))*rdz(k-1) + (w(k-1,j,i+1) - w(k-1,j,i))*rdx(i))
 
                     uo(k,j,i) = uo(k,j,i) + 1.0_realk/dBa(k,j,i)* &
                         ((tauXxPl - tauXxMi)*rdx(i) + &
@@ -737,12 +720,12 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 2, jj-2
                 DO k = 3, kk-2
-                    tauYxPl = gUv(k,j,i)*((up(k,j+1,i) - up(k,j,i))*rdy(j) + (vp(k,j,i+1) - vp(k,j,i))*rdx(i))
-                    tauYxMi = gUv(k,j,i-1)*((up(k,j+1,i-1) - up(k,j,i-1))*rdy(j) + (vp(k,j,i) - vp(k,j,i-1))*rdx(i-1))
-                    tauYyPl = g(k,j+1,i)*2.0_realk*(vp(k,j+1,i) - vp(k,j,i))*rddy(j+1)
-                    tauYyMi = g(k,j,i)*2.0_realk*(vp(k,j,i) - vp(k,j-1,i))*rddy(j)
-                    tauYzPl = gVw(k,j,i)*((vp(k+1,j,i) - vp(k,j,i))*rdz(k) + (wp(k,j+1,i) - wp(k,j,i))*rdy(j))
-                    tauYzMi = gVw(k-1,j,i)*((vp(k,j,i) - vp(k-1,j,i))*rdz(k-1) + (wp(k-1,j+1,i) - wp(k-1,j,i))*rdy(j))
+                    tauYxPl = gUv(k,j,i)*((u(k,j+1,i) - u(k,j,i))*rdy(j) + (v(k,j,i+1) - v(k,j,i))*rdx(i))
+                    tauYxMi = gUv(k,j,i-1)*((u(k,j+1,i-1) - u(k,j,i-1))*rdy(j) + (v(k,j,i) - v(k,j,i-1))*rdx(i-1))
+                    tauYyPl = g(k,j+1,i)*2.0_realk*(v(k,j+1,i) - v(k,j,i))*rddy(j+1)
+                    tauYyMi = g(k,j,i)*2.0_realk*(v(k,j,i) - v(k,j-1,i))*rddy(j)
+                    tauYzPl = gVw(k,j,i)*((v(k+1,j,i) - v(k,j,i))*rdz(k) + (w(k,j+1,i) - w(k,j,i))*rdy(j))
+                    tauYzMi = gVw(k-1,j,i)*((v(k,j,i) - v(k-1,j,i))*rdz(k-1) + (w(k-1,j+1,i) - w(k-1,j,i))*rdy(j))
 
                     vo(k,j,i) = vo(k,j,i) + 1.0_realk/dLe(k,j,i)* &
                         ((tauYxPl - tauYxMi)*rddx(i) + &
@@ -755,12 +738,12 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 2, kk-2
-                    tauZxPl = gUw(k,j,i)*((up(k+1,j,i) - up(k,j,i))*rdz(k) + (wp(k,j,i+1) - wp(k,j,i))*rdx(i))
-                    tauZxMi = gUw(k,j,i-1)*((up(k+1,j,i-1) - up(k,j,i-1))*rdz(k) + (wp(k,j,i) - wp(k,j,i-1))*rdx(i-1))
-                    tauZyPl = gVw(k,j,i)*((vp(k+1,j,i) - vp(k,j,i))*rdz(k) + (wp(k,j+1,i) - wp(k,j,i))*rdy(j))
-                    tauZyMi = gVw(k,j-1,i)*((vp(k+1,j-1,i) - vp(k,j-1,i))*rdz(k) + (wp(k,j,i) - wp(k,j-1,i))*rdy(j-1))
-                    tauZzPl = g(k+1,j,i)*2.0_realk*(wp(k+1,j,i) - wp(k,j,i))*rddz(k+1)
-                    tauZzMi = g(k,j,i)*2.0_realk*(wp(k,j,i) - wp(k-1,j,i))*rddz(k)
+                    tauZxPl = gUw(k,j,i)*((u(k+1,j,i) - u(k,j,i))*rdz(k) + (w(k,j,i+1) - w(k,j,i))*rdx(i))
+                    tauZxMi = gUw(k,j,i-1)*((u(k+1,j,i-1) - u(k,j,i-1))*rdz(k) + (w(k,j,i) - w(k,j,i-1))*rdx(i-1))
+                    tauZyPl = gVw(k,j,i)*((v(k+1,j,i) - v(k,j,i))*rdz(k) + (w(k,j+1,i) - w(k,j,i))*rdy(j))
+                    tauZyMi = gVw(k,j-1,i)*((v(k+1,j-1,i) - v(k,j-1,i))*rdz(k) + (w(k,j,i) - w(k,j-1,i))*rdy(j-1))
+                    tauZzPl = g(k+1,j,i)*2.0_realk*(w(k+1,j,i) - w(k,j,i))*rddz(k+1)
+                    tauZzMi = g(k,j,i)*2.0_realk*(w(k,j,i) - w(k-1,j,i))*rddz(k)
 
                     wo(k,j,i) = wo(k,j,i) + 1.0_realk/dTo(k,j,i)*&
                         ((tauZxPl - tauZxMi)*rddx(i) + &
@@ -968,7 +951,7 @@ CONTAINS
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
         REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:), cWy(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: up(:,:,:), vp(:,:,:), wp(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: vel(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: cFlx1(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
@@ -981,9 +964,9 @@ CONTAINS
 
             CALL get_fieldptr(c, "C", igrid)
             CALL get_fieldptr(cWy, "CWY", igrid)
-            CALL get_fieldptr(u, "U", igrid)
-            CALL get_fieldptr(v, "V", igrid)
-            CALL get_fieldptr(w, "W", igrid)
+            CALL get_fieldptr(up, "UP", igrid)
+            CALL get_fieldptr(vp, "VP", igrid)
+            CALL get_fieldptr(wp, "WP", igrid)
             CALL get_fieldptr(cFlx1, "CFLX1", igrid)
             CALL get_fieldptr(dx, "DX", igrid)
             CALL get_fieldptr(dy, "DY", igrid)
@@ -992,7 +975,7 @@ CONTAINS
             CALL get_fieldptr(ddy, "DDY", igrid)
             CALL get_fieldptr(ddz, "DDZ", igrid)
 
-            CALL sel_vel(l, u, v, w, vel)
+            CALL sel_vel(l, up, vp, wp, vel)
             CALL adv_c_grd(kk, jj, ii, 0, l, c, cWy, vel, cFlx1, &
                 dx, dy, dz, ddx, ddy, ddz, dt)
         END DO
@@ -1085,6 +1068,8 @@ CONTAINS
                 END DO
             END DO
         END DO
+
+        c = clp(c)
 
     END SUBROUTINE adv_c_grd
 
@@ -1879,7 +1864,7 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
-        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: up(:,:,:), vp(:,:,:), wp(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: vel(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: advr(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
@@ -1889,15 +1874,15 @@ CONTAINS
 
             CALL get_mgdims(kk, jj, ii, igrid)
 
-            CALL get_fieldptr(u, "U", igrid)
-            CALL get_fieldptr(v, "V", igrid)
-            CALL get_fieldptr(w, "W", igrid)
+            CALL get_fieldptr(up, "UP", igrid)
+            CALL get_fieldptr(vp, "VP", igrid)
+            CALL get_fieldptr(wp, "WP", igrid)
             CALL get_fieldptr(advr, "ADVR", igrid)
             CALL get_fieldptr(ddx, "DDX", igrid)
             CALL get_fieldptr(ddy, "DDY", igrid)
             CALL get_fieldptr(ddz, "DDZ", igrid)
 
-            CALL sel_vel(l, u, v, w, vel)
+            CALL sel_vel(l, up, vp, wp, vel)
             CALL comp_advr_stg_grd(kk, jj, ii, q, l, vel, advr, &
                 ddx, ddy, ddz)
         END DO
@@ -1948,7 +1933,7 @@ CONTAINS
                     DO k = 2, kk-2
                         ddnqMi = iq*ddx(i) + jq*ddy(j) + kq*ddz(k)
                         ddnqPl = iq*ddx(i+iq) + jq*ddy(j+jq) + kq*ddz(k+kq)
-                        advr(k,j,i) = (vel(k,j,i)*ddnqPl + vel(k+kq,j+jq,i+iq)*ddnqMi)/(ddnqMi + ddnqPl)
+                        advr(k,j,i) = (vel(k,j,i)*ddnqMi + vel(k+kq,j+jq,i+iq)*ddnqPl)/(ddnqMi + ddnqPl)
                     ENDDO
                 ENDDO
             ENDDO
