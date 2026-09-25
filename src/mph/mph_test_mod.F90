@@ -27,6 +27,7 @@ MODULE mph_test_mod
 
     INTEGER(intk), PARAMETER :: tstCylTra=1, tstZalDis=2, tstRKoVor=3, tstUCylAd=4, tstACylAd=5, tstOpCFl=6
     INTEGER(intk), PARAMETER :: shpCircle=1, shpZalesak=2, shpPlane=3
+    INTEGER, PARAMETER :: nSub = 64
     LOGICAL, PROTECTED :: frcVelFld, isRevTst
     INTEGER(intk), PROTECTED :: tstId
     REAL(realk), PROTECTED :: circumf, area
@@ -153,7 +154,6 @@ CONTAINS
         INTEGER(intk) :: i, j, k
         REAL(realk) :: xMi, x, yMi, y, zMi, z, halfDiag, dist
         INTEGER(intk) :: ins, is, js
-        INTEGER, PARAMETER :: nSub = 256
         REAL(realk) :: xs, ys, zs
 
         DO n = 1, nmygrids
@@ -731,7 +731,6 @@ CONTAINS
         TYPE(shape_t), INTENT(in) :: s
         REAL(realk) :: L1
 
-        INTEGER(intk), PARAMETER :: nSub = 256
         REAL(realk) :: vol, cAppr, dist, halfDiag, xs, ys, zs
         INTEGER(intk) :: is, js, inRibbon
         LOGICAL :: inExac, inAppr

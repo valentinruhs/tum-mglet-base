@@ -2,7 +2,7 @@
     "time": {
         "dt": 0.001,
         "mtstep": 6280,
-	"itinfo": 10,
+	"itinfo": 100,
         "tstat": 10.0,
 	"read": false
     },
