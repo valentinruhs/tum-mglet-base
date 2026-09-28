@@ -21,6 +21,7 @@ MODULE mph_test_mod
     USE mphcore_mod, ONLY: mphTst, mphInitErr, vofTol
     USE mph_plic_mod, ONLY: comp_c_stg, comp_ifc
     USE mph_plic_mod, ONLY: comp_c_loc
+    usE mph_vof_mod, ONLY: rstr, prlg
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -67,7 +68,7 @@ CONTAINS
         CASE ( "Cylinder Translation" )
             tstId = tstCylTra
             shape = shape_t(shp=shpCircle, &
-                xc=0.5_realk, yc=0.5_realk, ra=0.15_realk)
+                xc=0.5_realk, yc=0.5_realk, ra=5.5_realk/80.0_realk)
             frcVelFld = .TRUE.
             isRevTst = .TRUE.
 
@@ -114,6 +115,8 @@ CONTAINS
         area = area_func(shape)
         CALL fill_c_dom(dist_func, shape)
         CALL fill_c_bou(shape%shp)
+        CALL rstr(fldName="C", flag="D")
+        CALL prlg(fldName="C")
         CALL comp_ifc()
         CALL init_vel()
 
@@ -168,14 +171,14 @@ CONTAINS
             CALL get_fieldptr(ddz, "DDZ", igrid)
 
             c = 0.0_realk
-            xMi = minx
-            DO i = 3, ii-2
+            xMi = minx - ddx(1) - ddx(2)
+            DO i = 1, ii
                 x = xMi + 0.5_realk*ddx(i)
-                yMi = miny
-                DO j = 3, jj-2
+                yMi = miny - ddy(1) - ddy(2)
+                DO j = 1, jj
                     y = yMi + 0.5_realk*ddy(j)
-                    zMi = minz
-                    DO k = 3, kk-2
+                    zMi = minz - ddz(1) - ddz(2)
+                    DO k = 1, kk
                         z = zMi + 0.5_realk*ddz(k)
 
                         halfDiag = 0.5_realk*SQRT(ddx(i)**2 + ddy(j)**2 + ddz(k)**2)
@@ -231,7 +234,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE init_vel(time, itstep)
+    SUBROUTINE init_vel(time)
     !----------------------------------------------------------------
     !   What it does:
     !   Imposes the prescribed velocity field of the selected test
@@ -241,7 +244,6 @@ CONTAINS
 
         ! Subroutine arguments
         REAL(realk), INTENT(in), OPTIONAL :: time
-        INTEGER(intk), INTENT(in), OPTIONAL :: itstep
 
         ! Local variables
         REAL(realk) :: t
@@ -254,11 +256,7 @@ CONTAINS
 
         SELECT CASE ( tstId )
         CASE ( tstCylTra )
-            IF ( PRESENT(itstep) ) THEN
-                CALL set_vel_tra(0.0125_realk, itstep)
-            ELSE
-                CALL set_vel_tra(0.0125_realk, 1)
-            END IF
+            CALL set_vel_tra(0.0125_realk, t)
         CASE ( tstZalDis )
             CALL set_vel_cav()
         CASE ( tstRKoVor )
@@ -277,15 +275,14 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE set_vel_tra(mag, itstep)
+    SUBROUTINE set_vel_tra(mag, t)
     !----------------------------------------------------------------
     !   What it does:
     !   
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        REAL(realk), INTENT(in) :: mag
-        INTEGER(intk), INTENT(in) :: itstep
+        REAL(realk), INTENT(in) :: mag, t
 
         ! Local variables
         INTEGER(intk) :: n, igrid
@@ -298,14 +295,14 @@ CONTAINS
             CALL get_fieldptr(u, "U", igrid)
             CALL get_fieldptr(v, "V", igrid)
 
-            CALL set_vel_tra_grid(kk, jj, ii, u, v, mag, itstep)
+            CALL set_vel_tra_grid(kk, jj, ii, u, v, mag, t)
         END DO
 
     END SUBROUTINE set_vel_tra
 
     !================================================================
 
-    SUBROUTINE set_vel_tra_grid(kk, jj, ii, u, v, mag, itstep)
+    SUBROUTINE set_vel_tra_grid(kk, jj, ii, u, v, mag, t)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -313,23 +310,27 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAl(realk), INTENT(inout) :: u(kk, jj, ii), v(kk, jj, ii)
-        REAL(realk), INTENT(in) :: mag
-        INTEGER(intk), INTENT(in) :: itstep
+        REAL(realk), INTENT(inout) :: u(kk, jj, ii), v(kk, jj, ii)
+        REAL(realk), INTENT(in) :: mag, t
 
         ! Local variables
-        REAL(realk) :: fac(6)
+        REAL(realk), PARAMETER :: tPha = 200.0_realk
+        REAL(realk) :: fac(6), uPha(7), vPha(7)
+        INTEGER(intk) :: iPha
 
-        fac = [0.7686000, 0.5968000, 0.1035700, &
-               0.5514000, 0.2242010, 0.2512981]
+        fac = [0.7686000_realk, 0.5968000_realk, 0.1035700_realk, &
+               0.5514000_realk, 0.2242010_realk, 0.2512981_realk]
 
-        IF ( itstep <= 1200 ) THEN 
-            u(3:kk-2,3:jj-2,2:ii-2) = COS(fac(floor((itstep-1)/200.0_realk) + 1)*2.0_realk*pi)*mag
-            v(3:kk-2,2:jj-2,3:ii-2) = SIN(fac(floor((itstep-1)/200.0_realk) + 1)*2.0_realk*pi)*mag
-        ELSE IF ( itstep <= 1400 ) THEN
-            u(3:kk-2,3:jj-2,2:ii-2) =   0.008793826_realk
-            v(3:kk-2,2:jj-2,3:ii-2) = - 0.008883616_realk
-        ELSE 
+        uPha(1:6) = COS(2.0_realk*pi*fac)*mag
+        vPha(1:6) = SIN(2.0_realk*pi*fac)*mag
+        uPha(7) = -SUM(uPha(1:6))
+        vPha(7) = -SUM(vPha(1:6))
+        iPha = FLOOR(t/tPha) + 1
+
+        IF ( iPha <= 7 ) THEN
+            u = uPha(iPha)
+            v = vPha(iPha)
+        ELSE
             u = 0.0_realk
             v = 0.0_realk
         END IF
@@ -616,7 +617,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE frc_vel_fld(time, itstep)
+    SUBROUTINE frc_vel_fld(time)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -624,12 +625,11 @@ CONTAINS
 
         ! Subroutine arguments
         REAL(realk), INTENT(in) :: time
-        INTEGER(intk), INTENT(in) :: itstep
 
         ! Local variables
         ! None
 
-        CALL init_vel(time, itstep)
+        CALL init_vel(time)
 
     END SUBROUTINE frc_vel_fld
 

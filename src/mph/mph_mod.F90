@@ -99,7 +99,7 @@ CONTAINS
 
         ! Einmal pro Zeitschritt: geometrische Advektion über volles dt
         IF ( irk == 1 ) THEN
-            IF ( frcVelFld ) CALL frc_vel_fld(timeph + 0.5_realk*dt, itstep)
+            IF ( frcVelFld ) CALL frc_vel_fld(timeph + 0.5_realk*dt)
             CALL cpy_flds()
             CALL adve_operator(dt, itstep)
             CALL comp_props()

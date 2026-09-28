@@ -29,7 +29,7 @@ MODULE mph_chk_mod
     IMPLICIT NONE(type, external)
     PRIVATE
 
-    REAL(realk) :: volInit
+    REAL(realk) :: volInit, L1Init, L2Init
 
     PUBLIC :: init_mph_chk, finish_mph_chk, comp_vol, final_chk, itinfo_mph
 
@@ -81,6 +81,7 @@ CONTAINS
         END DO
 
         CALL comp_vol(volInit)
+        CALL comp_L_norm_err(L1Init, L2Init)
         WRITE(*,'(A,E11.5)') "Initial volume is: ", volInit
         WRITE(*, '()')
 
@@ -151,6 +152,8 @@ CONTAINS
             WRITE(*,'(A,E11.5)') "Final volume is: ", volFini
             WRITE(*,'(A,E11.5)') "Absolute volume error: ", ABS(volInit-volFini)
             WRITE(*,'(A,E11.5)') "Relative volume error: ", ABS(volInit-volFini)/volInit
+            WRITE(*,'(A,E11.5)') "E_{l=1,B=1} initial: ", L1Init
+            WRITE(*,'(A,E11.5)') "E_{l=1,B=L} initial: ", L1Init/circumf
             WRITE(*,'(A,E11.5)') "E_{l=1,B=1}: ", L1
             WRITE(*,'(A,E11.5)') "E_{l=1,B=L}: ", L1/circumf
             WRITE(*, '()')

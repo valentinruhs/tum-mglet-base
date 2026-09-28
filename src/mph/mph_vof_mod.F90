@@ -34,7 +34,8 @@ MODULE mph_vof_mod
     PRIVATE
 
     PUBLIC :: init_mph_vof, finish_mph_vof, cpy_flds, &
-        adve_operator, diff_operator, pres_operator, exte_operator
+        adve_operator, diff_operator, pres_operator, exte_operator, &
+        rstr, prlg
 
 CONTAINS
 
@@ -221,8 +222,8 @@ CONTAINS
                         ! Compute face flx width and characteristic length
                         flxWidth = abs( vel(k,j,i) )*dt
                         dds = il*ddx(i) + jl*ddy(j) + kl*ddz(k)
-                        IF ( flxWidth > 0.5_realk*dds  ) THEN
-                            CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
+                        IF ( flxWidth > (1.0_realk + 1.0E-12_realk)*dds ) THEN
+                            CALL err_abort(vofErr, "flxWidth > cellWidth.", __FILE__, __LINE__)
                         ENDIF
 
                         IF ( isIfc(k,j,i) > 0.0_realk ) THEN
@@ -248,8 +249,8 @@ CONTAINS
                         ! Compute face flx width and characteristic length
                         flxWidth = abs( vel(k,j,i) )*dt
                         dds = il*ddx(i+il) + jl*ddy(j+jl) + kl*ddz(k+kl)
-                        IF ( flxWidth > 0.5_realk*dds  ) THEN
-                            CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
+                        IF ( flxWidth > (1.0_realk + 1.0E-12_realk)*dds ) THEN
+                            CALL err_abort(vofErr, "flxWidth > cellWidth.", __FILE__, __LINE__)
                         ENDIF
 
                         IF ( isIfc(k+kl,j+jl,i+il) > 0.0_realk ) THEN
@@ -548,14 +549,13 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: q, advSeq(3), dirLoop, l
 
-        IF ( skpAdv ) RETURN
-
         ! Initialize alpha, norm(.), cWy
         CALL comp_ifc()
         CALL comp_cWy()
 
         ! Initialize stg. grid cS(.), dS(.), mS(.), cWyS(.)
         DO q = 1, 3
+            IF ( skpAdv ) CYCLE
             CALL comp_c_stg(q)
             CALL comp_d_stg(q)
             CALL comp_m_stg(q)
@@ -565,6 +565,7 @@ CONTAINS
         ! Restriction
         CALL rstr(fldName="C", flag="D")
         DO q = 1, 3
+            IF ( skpAdv ) CYCLE
             CALL rstr_stg(q=q, fldName="CS")
             CALL rstr_stg(q=q, fldName="DS")
             CALL rstr_stg(q=q, fldName="MS")
@@ -572,15 +573,18 @@ CONTAINS
 
         ! Prologation
         CALL prlg(fldName="C")
-        CALL prlg_stg(fldName1="CS1", fldName2="CS2", fldName3="CS3")
-        CALL prlg_stg(fldName1="DS1", fldName2="DS2", fldName3="DS3")
-        CALL prlg_stg(fldName1="MS1", fldName2="MS2", fldName3="MS3")
+        IF ( .NOT. skpAdv ) THEN
+            CALL prlg_stg(fldName1="CS1", fldName2="CS2", fldName3="CS3")
+            CALL prlg_stg(fldName1="DS1", fldName2="DS2", fldName3="DS3")
+            CALL prlg_stg(fldName1="MS1", fldName2="MS2", fldName3="MS3")
+        END IF
 
         CALL def_adv_seq(itstep, advSeq)
         DO dirLoop = 1, 3
             l = advSeq(dirLoop)
                 ! Advect stg. grid mS(.), cS(.), dS(.)
                 DO q = 1, 3
+                    IF ( skpAdv ) CYCLE
                     CALL comp_isIfc_stg(q)
                     CALL comp_advr_stg(q, l)
                     CALL comp_adve_stg(q, l, dt)
@@ -596,6 +600,7 @@ CONTAINS
             ! Restriction
             CALL rstr(fldName="C", flag="D")
             DO q = 1, 3
+                IF ( skpAdv ) CYCLE
                 CALL rstr_stg(q=q, fldName="CS")
                 CALL rstr_stg(q=q, fldName="DS")
                 CALL rstr_stg(q=q, fldName="MS")
@@ -603,12 +608,15 @@ CONTAINS
 
             ! Prologation
             CALL prlg(fldName="C")
-            CALL prlg_stg(fldName1="CS1", fldName2="CS2", fldName3="CS3")
-            CALL prlg_stg(fldName1="DS1", fldName2="DS2", fldName3="DS3")
-            CALL prlg_stg(fldName1="MS1", fldName2="MS2", fldName3="MS3")
+            IF ( .NOT. skpAdv ) THEN
+                CALL prlg_stg(fldName1="CS1", fldName2="CS2", fldName3="CS3")
+                CALL prlg_stg(fldName1="DS1", fldName2="DS2", fldName3="DS3")
+                CALL prlg_stg(fldName1="MS1", fldName2="MS2", fldName3="MS3")
+            END IF
 
             ! Update u, v, w with mS(.) and dS(.)
             DO q = 1, 3
+                IF ( skpAdv ) CYCLE
                 CALL upd_vel_stg(q)
             END DO
 
