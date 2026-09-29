@@ -21,7 +21,9 @@ MODULE mph_test_mod
     USE mphcore_mod, ONLY: mphTst, mphInitErr, vofTol
     USE mph_plic_mod, ONLY: comp_c_stg, comp_ifc
     USE mph_plic_mod, ONLY: comp_c_loc
-    usE mph_vof_mod, ONLY: rstr, prlg
+    USE mph_vof_mod, ONLY: rstr, prlg
+    USE mphcore_mod, ONLY: gmol1, rho1
+
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -68,7 +70,7 @@ CONTAINS
         CASE ( "Cylinder Translation" )
             tstId = tstCylTra
             shape = shape_t(shp=shpCircle, &
-                xc=0.5_realk, yc=0.5_realk, ra=5.5_realk/80.0_realk)
+                xc=0.5_realk, yc=0.5_realk, ra=4.0_realk/80.0_realk)
             frcVelFld = .TRUE.
             isRevTst = .TRUE.
 
@@ -103,7 +105,7 @@ CONTAINS
 
         CASE ( "Open Channel Flow" )
             tstId = tstOpCFl
-            shape = shape_t(shp=shpPlane, lvl=0.0_realk)
+            shape = shape_t(shp=shpPlane, lvl=1.0_realk)
             frcVelFld = .FALSE.
             isRevTst = .FALSE.
 
@@ -245,7 +247,7 @@ CONTAINS
         CASE ( tstACylAd )
             CALL set_vel_c(0.016_realk, 0.016_realk, 0.0_realk, h=1)
         CASE ( tstOpCFl )
-            CALL set_vel_cha()
+            CALL set_vel_cha(120.0_realk, 1.0_realk)
         CASE DEFAULT
             CALL err_abort(mphInitErr, "no velocity field for this test.", __FILE__, __LINE__)
         END SELECT
@@ -596,39 +598,37 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE set_vel_cha()
+    SUBROUTINE set_vel_cha(ReTau, h)
     !----------------------------------------------------------------
     !   What it does:
     !   
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        ! None
+        REAL(realk), INTENT(in) :: ReTau, h
 
         ! Local variables
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
         REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
-        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:)
+        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddy(:)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
             CALL get_mgdims(kk, jj, ii, igrid)
             CALL get_bbox(minx, maxx, miny, maxy, minz, maxz, igrid)
             CALL get_fieldptr(u, "U", igrid)
-            CALL get_fieldptr(v, "V", igrid)
-            CALL get_fieldptr(ddx, "DDX", igrid)
             CALL get_fieldptr(ddy, "DDY", igrid)
 
-            CALL set_vel_cha_grid(kk, jj, ii, u, v, ddx, ddy, minx, miny)
+            CALL set_vel_cha_grid(kk, jj, ii, u, ddy, miny, ReTau, h)
         END DO
 
     END SUBROUTINE set_vel_cha
 
     !================================================================
 
-    SUBROUTINE set_vel_cha_grid(kk, jj, ii, u, v, ddx, ddy, minx, miny)
+    SUBROUTINE set_vel_cha_grid(kk, jj, ii, u, ddy, miny, ReTau, h)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -636,38 +636,34 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAl(realk), INTENT(inout) :: u(kk, jj, ii), v(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj)
-        REAL(realk), INTENT(in) :: minx, miny
+        REAl(realk), INTENT(inout) :: u(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddy(jj)
+        REAL(realk), INTENT(in) :: miny
+        REAL(realk), INTENT(in) :: ReTau, h
 
         ! Local variables
-        INTEGER(intk) :: k, j, i
-        REAL(realk) :: omega
-        REAL(realk) :: x, y, xMi, yMi
+        INTEGER(intk) :: j
+        REAL(realk) :: y, yMi, uTau, nu
 
-        omega = 2.0_realk*pi/6.28_realk
+        nu = gmol1/rho1
+        uTau = ReTau*nu/h
 
-        DO i = 2, ii-2
-            yMi = miny
-            DO j = 3, jj-2
-                y = yMi + 0.5_realk*ddy(j)
-                DO k = 3, kk-2
-                    u(k,j,i) = -omega*(y - 0.5_realk)
-                END DO
-                yMi = yMi + ddy(j)
-            END DO
+        yMi = miny
+        DO j = 3, jj-2
+            y = MIN(yMi + 0.5_realk*ddy(j), h)
+            WRITE(*,*) y*uTau/nu
+            u(3:kk-2,j,2:ii-2) = uTau*reichardt(y*uTau/nu)
+            yMi = yMi + ddy(j)
         END DO
 
-        xMi = minx
-        DO i = 3, ii-2
-            x = xMi + 0.5_realk*ddx(i)
-            DO j = 2, jj-2
-                DO k = 3, kk-2
-                    v(k,j,i) = omega*(x - 0.5_realk)
-                END DO
-            END DO
-            xMi = xMi + ddx(i)
-        END DO
+    CONTAINS
+
+        PURE REAL(realk) FUNCTION reichardt(yPl) RESULT(uPl)
+            REAL(realk), INTENT(in) :: yPl
+            REAL(realk), PARAMETER :: kappa = 0.41_realk, C = 7.8_realk
+            uPl = LOG(1.0_realk + kappa*yPl)/kappa + &
+                C*(1.0_realk - EXP(-yPl/11.0_realk) - yPl/11.0_realk*EXP(-yPl/3.0_realk))
+        END FUNCTION reichardt
 
     END SUBROUTINE set_vel_cha_grid
 

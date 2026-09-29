@@ -31,7 +31,7 @@ MODULE mphcore_mod
     REAL(realk), PROTECTED :: vofTol, volTol
     CHARACTER(len=5), PROTECTED :: advScm
     LOGICAL, PROTECTED :: donCen
-    LOGICAL, PROTECTED :: vofChk, volChk
+    LOGICAL, PROTECTED :: finChk
 
     ! Physical parameters
     REAL(realk), PROTECTED :: rho1, rho2
@@ -43,7 +43,7 @@ MODULE mphcore_mod
 
     PUBLIC :: init_mphcore, finish_mphcore, hasMph, &
         mphTst, skpAdv, skpDif, skpPre, skpExt, vofTol, &
-        volTol, advScm, donCen, vofChk, volChk, rho1, rho2, &
+        volTol, advScm, donCen, finChk, rho1, rho2, &
         gmol1, gmol2, grav, propsErr, vofErr, plicErr, mphInitErr
 
 CONTAINS
@@ -83,8 +83,7 @@ CONTAINS
         CALL mphConf%get_value("/volTolerance", volTol, 1.0E-8_realk)
         CALL mphConf%get_value("/advectionScheme", advScm, "QUICK")
         CALL mphConf%get_value("/donatingCentered", donCen, .FALSE.)
-        CALL mphConf%get_value("/vofCheck", vofChk, .FALSE.)
-        CALL mphConf%get_value("/volCheck", volChk, .FALSE.)
+        CALL mphConf%get_value("/finalCheck", finChk, .FALSE.)
 
         ! Read densities
         CALL mphConf%get_value("/rho1", rho1, 1.0_realk)

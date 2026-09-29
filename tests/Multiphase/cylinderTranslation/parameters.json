@@ -1,13 +1,13 @@
 {
     "time": {
-        "dt": 0.0125,
-        "mtstep": 112000,
+        "dt": 1.0,
+        "mtstep": 0,
 	"itinfo": 100,
         "tstat": 10.0,
 	"read": false
     },
     "io": {
-        "grids": "grids160.h5",
+        "grids": "grids80.h5",
         "infile": "fields_in.h5",
         "outfile": "fields.h5"
     },
@@ -40,8 +40,7 @@
     	"volTolerance": 1.0E-8,
     	"advectionScheme": "QUICK",
     	"donatingCentered": false,
-    	"vofCheck": false,
-    	"volCheck": false,
+    	"finalCheck": true,
 	"rho1" : 1.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.001,

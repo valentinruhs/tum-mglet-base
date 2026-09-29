@@ -1,13 +1,13 @@
 {
     "time": {
-        "dt": 0.1,
-        "mtstep": 120,
+        "dt": 0.01,
+        "mtstep": 100,
 	"itinfo": 10,
         "tstat": 10.0,
 	"read": false
     },
     "io": {
-        "grids": "gridsFtoC.h5",
+        "grids": "gridsSmallBoxWater.h5",
         "infile": "fields_in.h5",
         "outfile": "fields.h5"
     },
@@ -31,7 +31,7 @@
     },
     
     "multiphase": {
-	"test": "Uniform Cylinder Advection",
+	"test": "Open Channel Flow",
 	"skipAdvection": false,
    	"skipDiffusion": false,
     	"skipPressure": false,
@@ -40,7 +40,7 @@
     	"volTolerance": 1.0E-8,
     	"advectionScheme": "QUICK",
     	"donatingCentered": false,
-    	"finalCheck": true,
+    	"finalCheck": false,
 	"rho1" : 1000.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.001,

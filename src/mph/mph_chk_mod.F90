@@ -23,7 +23,7 @@ MODULE mph_chk_mod
     USE comms_mod, ONLY: myid
     USE grids_mod, ONLY: minlevel, maxlevel
 
-    USE mphcore_mod, ONLY: volChk, vofChk, volTol, vofTol, hasMph
+    USE mphcore_mod, ONLY: finChk, volTol, vofTol, hasMph
     USE mph_test_mod, ONLY: comp_abs_res, circumf, area, shape
 
     IMPLICIT NONE(type, external)
@@ -147,6 +147,8 @@ CONTAINS
 
         ! Local variables
         REAL(realk) :: volFini, L1, L2
+
+        IF ( .NOT. finChk ) RETURN
 
         CALL comp_vol(volFini)
         CALL comp_L_norm_err(L1, L2)
