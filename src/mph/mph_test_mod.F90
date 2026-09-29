@@ -114,7 +114,6 @@ CONTAINS
         circumf = circf_func(shape)
         area = area_func(shape)
         CALL fill_c_dom(dist_func, shape)
-        CALL fill_c_bou(shape%shp)
         CALL rstr(fldName="C", flag="D")
         CALL prlg(fldName="C")
         CALL comp_ifc()
@@ -171,14 +170,14 @@ CONTAINS
             CALL get_fieldptr(ddz, "DDZ", igrid)
 
             c = 0.0_realk
-            xMi = minx - ddx(1) - ddx(2)
-            DO i = 1, ii
+            xMi = minx
+            DO i = 3, ii-2
                 x = xMi + 0.5_realk*ddx(i)
-                yMi = miny - ddy(1) - ddy(2)
-                DO j = 1, jj
+                yMi = miny
+                DO j = 3, jj-2
                     y = yMi + 0.5_realk*ddy(j)
-                    zMi = minz - ddz(1) - ddz(2)
-                    DO k = 1, kk
+                    zMi = minz
+                    DO k = 3, kk-2
                         z = zMi + 0.5_realk*ddz(k)
 
                         halfDiag = 0.5_realk*SQRT(ddx(i)**2 + ddy(j)**2 + ddz(k)**2)
@@ -214,26 +213,6 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE fill_c_bou(shp)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   Fill the volume fraction field c depending on the selected
-    !   distance function. Only the boundaries of the domain are
-    !   filled.
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: shp
-
-        ! Local variabels
-        ! None
-
-        CONTINUE
-
-    END SUBROUTINE fill_c_bou
-
-    !================================================================
-
     SUBROUTINE init_vel(time)
     !----------------------------------------------------------------
     !   What it does:
@@ -266,7 +245,7 @@ CONTAINS
         CASE ( tstACylAd )
             CALL set_vel_c(0.016_realk, 0.016_realk, 0.0_realk, h=1)
         CASE ( tstOpCFl )
-
+            CALL set_vel_cha()
         CASE DEFAULT
             CALL err_abort(mphInitErr, "no velocity field for this test.", __FILE__, __LINE__)
         END SELECT
@@ -614,6 +593,83 @@ CONTAINS
         END DO
 
     END SUBROUTINE set_vel_cav_grid
+
+    !================================================================
+
+    SUBROUTINE set_vel_cha()
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        ! None
+
+        ! Local variables
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
+        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:)
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+            CALL get_mgdims(kk, jj, ii, igrid)
+            CALL get_bbox(minx, maxx, miny, maxy, minz, maxz, igrid)
+            CALL get_fieldptr(u, "U", igrid)
+            CALL get_fieldptr(v, "V", igrid)
+            CALL get_fieldptr(ddx, "DDX", igrid)
+            CALL get_fieldptr(ddy, "DDY", igrid)
+
+            CALL set_vel_cha_grid(kk, jj, ii, u, v, ddx, ddy, minx, miny)
+        END DO
+
+    END SUBROUTINE set_vel_cha
+
+    !================================================================
+
+    SUBROUTINE set_vel_cha_grid(kk, jj, ii, u, v, ddx, ddy, minx, miny)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAl(realk), INTENT(inout) :: u(kk, jj, ii), v(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj)
+        REAL(realk), INTENT(in) :: minx, miny
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: omega
+        REAL(realk) :: x, y, xMi, yMi
+
+        omega = 2.0_realk*pi/6.28_realk
+
+        DO i = 2, ii-2
+            yMi = miny
+            DO j = 3, jj-2
+                y = yMi + 0.5_realk*ddy(j)
+                DO k = 3, kk-2
+                    u(k,j,i) = -omega*(y - 0.5_realk)
+                END DO
+                yMi = yMi + ddy(j)
+            END DO
+        END DO
+
+        xMi = minx
+        DO i = 3, ii-2
+            x = xMi + 0.5_realk*ddx(i)
+            DO j = 2, jj-2
+                DO k = 3, kk-2
+                    v(k,j,i) = omega*(x - 0.5_realk)
+                END DO
+            END DO
+            xMi = xMi + ddx(i)
+        END DO
+
+    END SUBROUTINE set_vel_cha_grid
 
     !================================================================
 

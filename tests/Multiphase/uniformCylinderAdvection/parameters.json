@@ -2,7 +2,7 @@
     "time": {
         "dt": 0.1,
         "mtstep": 625,
-	"itinfo": 100,
+	"itinfo": 1,
         "tstat": 10.0,
 	"read": false
     },
@@ -38,12 +38,10 @@
     	"skipExternal": false,
     	"splitPermutation": 3,
     	"vofTolerance": 1.0E-12,
-    	"divTolerance": 1.0E-8,
     	"volTolerance": 1.0E-8,
     	"advectionScheme": "QUICK",
     	"donatingCentered": false,
     	"vofCheck": false,
-    	"divCheck": false,
     	"volCheck": false,
 	"rho1" : 1000.0,
 	"rho2" : 1.0,

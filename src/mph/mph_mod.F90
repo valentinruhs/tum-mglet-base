@@ -97,7 +97,6 @@ CONTAINS
         REAL(realk), INTENT(in) :: dt, timeph
         INTEGER(intk), INTENT(in) :: irk, itstep
 
-        ! Einmal pro Zeitschritt: geometrische Advektion über volles dt
         IF ( irk == 1 ) THEN
             IF ( frcVelFld ) CALL frc_vel_fld(timeph + 0.5_realk*dt)
             CALL cpy_flds()

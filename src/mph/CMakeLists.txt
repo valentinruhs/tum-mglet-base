@@ -1,6 +1,7 @@
 add_library(mph STATIC
 	mphcore_mod.F90
 	mph_mod.F90
+	mph_bound_c_mod.F90
 	mph_utils_mod.F90
 	mph_props_mod.F90
 	mph_test_mod.F90

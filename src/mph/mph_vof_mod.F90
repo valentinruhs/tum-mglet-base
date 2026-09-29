@@ -29,6 +29,7 @@ MODULE mph_vof_mod
     USE mph_utils_mod, ONLY: sel_ind, sel_ext, sel_vel, clp, int2char
     USE mph_plic_mod, ONLY: comp_ifc, comp_c_stg, comp_isIfc_stg, comp_c_loc
     USE mph_props_mod, ONLY: comp_d_stg
+    USE mph_bound_c_mod, ONLY: bound_c
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -1003,17 +1004,20 @@ CONTAINS
         REAL(realk), INTENT(in) :: dt
 
         ! Local variables
-        CHARACTER(len=5) :: cFldName, cWyFldName
+        CHARACTER(len=5) :: cFldName, cWyFldName, mFldName
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
         REAL(realk), POINTER, CONTIGUOUS :: cSq(:,:,:), cWySq(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: advr(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: cFlx1(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: mSq(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:), vel(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
 
         cFldName = "CS"//int2Char(q)
         cWyFldName = "CWYS"//int2Char(q)
+        mFldName = "MS"//int2Char(q)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -1024,6 +1028,10 @@ CONTAINS
             CALL get_fieldptr(cWySq, cWyFldName, igrid)
             CALL get_fieldptr(advr, "ADVR", igrid)
             CALL get_fieldptr(cFlx1, "CFLX1", igrid)
+            CALL get_fieldptr(mSq, mFldName, igrid)
+            CALL get_fieldptr(u, "U", igrid)
+            CALL get_fieldptr(v, "V", igrid)
+            CALL get_fieldptr(w, "W", igrid)
             CALL get_fieldptr(dx, "DX", igrid)
             CALL get_fieldptr(dy, "DY", igrid)
             CALL get_fieldptr(dz, "DZ", igrid)
@@ -1033,6 +1041,11 @@ CONTAINS
 
             CALL adv_c_grd(kk, jj, ii, q, l, cSq, cWySq, advr, cFlx1, &
                 dx, dy, dz, ddx, ddy, ddz, dt)
+
+            ! Clip cS and correct mS by clipped amount
+            CALL sel_vel(q, u, v, w, vel)
+            mSq = mSq + (rho1 - rho2)*( clp(cSq) - cSq )*vel
+            cSq = clp(cSq)
         END DO
 
     END SUBROUTINE adv_c_stg
@@ -1077,7 +1090,7 @@ CONTAINS
             END DO
         END DO
 
-        c = clp(c)
+        IF ( q == 0 ) c = clp(c)
 
     END SUBROUTINE adv_c_grd
 
@@ -1516,6 +1529,7 @@ CONTAINS
 
         DO ilevel = minlevel, maxlevel
             CALL parent(ilevel, s1=fld_p)
+            CALL bound_c%bound(ilevel, f1=fld_p)
             CALL connect(ilevel, 2, s1=fld_p, corners=.TRUE.)
         END DO
 

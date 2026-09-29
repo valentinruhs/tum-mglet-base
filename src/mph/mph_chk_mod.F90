@@ -113,18 +113,22 @@ CONTAINS
         ! None
 
         ! Local variables
-        REAL(realk) :: volCurr
+        REAL(realk) :: volCurr, xCtr, yCtr, zCtr
         INTEGER(intk) :: i
 
         IF (.NOT. hasMph) RETURN
 
         CALL comp_vol(volCurr)
+        CALL comp_ctr(xCtr, yCtr, zCtr)
 
         IF (myid == 0) THEN
             DO i = minlevel, maxlevel
                 WRITE(*, '(A,A,E20.10,E20.10)') &
                     "ABSVOLERR, ", "RELVOLERR: ", &
                     ABS(volInit-volCurr), ABS(volInit-volCurr)/volInit
+                WRITE(*, '(A,A,A,E20.10,E20.10,E20.10)') &
+                    "xCtr, ", "yCtr, ", "zCtr: ", &
+                    xCtr, yCtr, zCtr
             END DO
         END IF
 
@@ -325,5 +329,107 @@ CONTAINS
         END DO
 
     END SUBROUTINE comp_vol_grd
+
+    !================================================================
+
+    SUBROUTINE comp_ctr(xCtr, yCtr, zCtr)
+    !----------------------------------------------------------------
+    !   What it does:
+    !
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        REAL(realk), INTENT(out) :: xCtr, yCtr, zCtr
+
+        ! Local variables
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
+        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:), grdMask(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk) :: volLoc, volXLoc, volYLoc, volZLoc
+        REAL(realk) :: volGrd, volXGrd, volYGrd, volZGrd
+        REAL(realk) :: vol, volX, volY, volZ
+
+        volLoc = 0.0_realk
+        volXLoc = 0.0_realk
+        volYLoc = 0.0_realk
+        volZLoc = 0.0_realk
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+            CALL get_mgdims(kk, jj, ii, igrid)
+            CALL get_bbox(minx, maxx, miny, maxy, minz, maxz, igrid)
+            CALL get_fieldptr(c, "C", igrid)
+            CALL get_fieldptr(grdMask, "GRDMASK", igrid)
+            CALL get_fieldptr(ddx, "DDX", igrid)
+            CALL get_fieldptr(ddy, "DDY", igrid)
+            CALL get_fieldptr(ddz, "DDZ", igrid)
+
+            CALL comp_ctr_grd(kk, jj, ii, c, grdMask, ddx, ddy, ddz, &
+                minx, miny, minz, volGrd, volXGrd, volYGrd, volZGrd)
+            volLoc = volLoc + volGrd
+            volXLoc = volXLoc + volXGrd
+            volYLoc = volYLoc + volYGrd
+            volZLoc = volZLoc + volZGrd
+        END DO
+
+        CALL MPI_Allreduce(volLoc, vol, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
+        CALL MPI_Allreduce(volXLoc, volX, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
+        CALL MPI_Allreduce(volYLoc, volY, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
+        CALL MPI_Allreduce(volZLoc, volZ, 1, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
+
+        xCtr = volX/vol
+        yCtr = volY/vol
+        zCtr = volZ/vol
+
+    END SUBROUTINE comp_ctr
+
+    !================================================================
+
+    SUBROUTINE comp_ctr_grd(kk, jj, ii, c, grdMask, ddx, ddy, ddz, &
+        minx, miny, minz, vol, volX, volY, volZ)
+    !----------------------------------------------------------------
+    !   What it does:
+    !
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: c(kk, jj, ii), grdMask(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: minx, miny, minz
+        REAL(realk), INTENT(out) :: vol, volX, volY, volZ
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: volCell
+        REAL(realk) :: xMi, yMi, zMi, x, y, z
+
+        vol = 0.0_realk
+        volX = 0.0_realk
+        volY = 0.0_realk
+        volZ = 0.0_realk
+        xMi = minx
+        DO i = 3, ii-2
+            x = xMi + 0.5_realk*ddx(i)
+            yMi = miny
+            DO j = 3, jj-2
+                y = yMi + 0.5_realk*ddy(j)
+                zMi = minz
+                DO k = 3, kk-2
+                    z = zMi + 0.5_realk*ddz(k)
+                    volCell = ddx(i)*ddy(j)*ddz(k)
+                    vol = vol + c(k,j,i)*volCell*grdMask(k,j,i)
+                    volX = volX + c(k,j,i)*volCell*grdMask(k,j,i)*x
+                    volY = volY + c(k,j,i)*volCell*grdMask(k,j,i)*y
+                    volZ = volZ + c(k,j,i)*volCell*grdMask(k,j,i)*z
+                    zMi = zMi + ddz(k)
+                END DO
+                yMi = yMi + ddy(j)
+            END DO
+            xMi = xMi + ddx(i)
+        END DO
+
+    END SUBROUTINE comp_ctr_grd
 
 END MODULE mph_chk_mod
