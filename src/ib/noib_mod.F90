@@ -169,7 +169,7 @@ CONTAINS
                             + aw(k,j,3)*(bp(k, j, 2)*bp(k, j, 3))
                     END DO
                 END  DO
-                aw(k,j,3) = 0.0
+                aw(:,:,3) = 0.0
             END IF
 
             ! Back/East
@@ -180,7 +180,7 @@ CONTAINS
                             + ae(k,j,ii-2)*(bp(k, j, ii-2)*bp(k, j, ii-1))
                     END DO
                 END  DO
-                ae(k,j,ii-2) = 0.0
+                ae(:,:,ii-2) = 0.0
             END IF
 
             ! Right/South
@@ -191,7 +191,7 @@ CONTAINS
                             + as(k,3,i)*(bp(k, 2, i)*bp(k, 3, i))
                     END DO
                 END  DO
-                as(k,3,i) = 0.0
+                as(:,3,:) = 0.0
             END IF
 
             ! Left/North
@@ -202,7 +202,7 @@ CONTAINS
                             + an(k,jj-2,i)*(bp(k, jj-2, i)*bp(k, jj-1, i))
                     END DO
                 END  DO
-                an(k,jj-2,i) = 0.0
+                an(:,jj-2,:) = 0.0
             END IF
 
             ! Bottom
@@ -213,7 +213,7 @@ CONTAINS
                             + ab(3,j,i)*(bp(2, j, i)*bp(3, j, i))
                     END DO
                 END  DO
-                ab(3,j,i) = 0.0
+                ab(3,:,:) = 0.0
             END IF
 
             ! Top
@@ -224,7 +224,7 @@ CONTAINS
                             + at(kk-2,j,i)*(bp(kk-2, j, i)*bp(kk-1, j, i))
                     END DO
                 END  DO
-                at(kk-2,j,i) = 0.0
+                at(kk-2,:,:) = 0.0
             END IF
         END DO
     END SUBROUTINE giteig

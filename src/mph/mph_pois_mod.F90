@@ -14,7 +14,7 @@
 MODULE mph_pois_mod
 
     USE precision_mod, ONLY: intk, realk
-    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims
+    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_mgbasb
     USE fields_mod, ONLY: get_fieldptr
         
     IMPLICIT NONE(type, external)
@@ -73,6 +73,7 @@ CONTAINS
                                             at(:,:,:), ab(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ap(:, :, :)
         REAL(realk), POINTER, CONTIGUOUS :: dBa(:, :, :), dLe(:, :, :), dTo(:, :, :)
+        INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
 
         DO n = 1, nmygrids
@@ -111,6 +112,14 @@ CONTAINS
                     ENDDO
                 ENDDO
             ENDDO
+
+            CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
+            IF (ANY(nfro == [2, 5, 6, 19])) aw(:, :, 3)    = 0.0_realk
+            IF (ANY(nbac == [2, 5, 6, 19])) ae(:, :, ii-2) = 0.0_realk
+            IF (ANY(nrgt == [2, 5, 6, 19])) as(:, 3, :)    = 0.0_realk
+            IF (ANY(nlft == [2, 5, 6, 19])) an(:, jj-2, :) = 0.0_realk
+            IF (ANY(nbot == [2, 5, 6, 19])) ab(3, :, :)    = 0.0_realk
+            IF (ANY(ntop == [2, 5, 6, 19])) at(kk-2, :, :) = 0.0_realk
 
             DO i = 3, ii-2
                 DO j = 3, jj-2

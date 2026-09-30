@@ -15,8 +15,13 @@ MODULE mph_test_mod
 
     USE err_mod, ONLY: err_abort
     USE precision_mod, ONLY: realk, intk, pi
-    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_bbox
+    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_bbox, minlevel, maxlevel
     USE fields_mod, ONLY: get_fieldptr
+    USE bound_flow_mod, ONLY: bound_flow
+    USE parent_mod, ONLY: parent
+    USE connect2_mod, ONLY: connect
+    USE field_mod, ONLY: field_t
+    USE fields_mod, ONLY: get_field
 
     USE mphcore_mod, ONLY: mphTst, mphInitErr, vofTol
     USE mph_plic_mod, ONLY: comp_c_stg, comp_ifc
@@ -247,7 +252,7 @@ CONTAINS
         CASE ( tstACylAd )
             CALL set_vel_c(0.016_realk, 0.016_realk, 0.0_realk, h=1)
         CASE ( tstOpCFl )
-            CALL set_vel_cha(120.0_realk, 1.0_realk)
+            CALL set_vel_cha(120.0_realk, 1.0_realk, "NONE")
         CASE DEFAULT
             CALL err_abort(mphInitErr, "no velocity field for this test.", __FILE__, __LINE__)
         END SELECT
@@ -598,7 +603,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE set_vel_cha(ReTau, h)
+    SUBROUTINE set_vel_cha(ReTau, h, flowStateFlag)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -606,13 +611,15 @@ CONTAINS
 
         ! Subroutine arguments
         REAL(realk), INTENT(in) :: ReTau, h
+        CHARACTER(len=4), INTENT(in) :: flowStateFlag
 
         ! Local variables
-        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: n, igrid, ilevel
         INTEGER(intk) :: kk, jj, ii
         REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
         REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ddy(:)
+        TYPE(field_t), POINTER :: u_f, v_f, w_f, p_f
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -621,14 +628,25 @@ CONTAINS
             CALL get_fieldptr(u, "U", igrid)
             CALL get_fieldptr(ddy, "DDY", igrid)
 
-            CALL set_vel_cha_grid(kk, jj, ii, u, ddy, miny, ReTau, h)
+            CALL set_vel_cha_grid(kk, jj, ii, u, ddy, miny, ReTau, h, flowStateFlag)
+        END DO
+
+        CALL get_field(u_f, "U")
+        CALL get_field(v_f, "V")
+        CALL get_field(w_f, "W")
+        CALL get_field(p_f, "P")
+
+        DO ilevel = minlevel, maxlevel
+            CALL parent(ilevel, u_f, v_f, w_f, p_f)
+            CALL bound_flow%bound(ilevel, u_f, v_f, w_f, p_f)
+            CALL connect(ilevel, 2, v1=u_f, v2=v_f, v3=w_f, s1=p_f, corners=.TRUE.)
         END DO
 
     END SUBROUTINE set_vel_cha
 
     !================================================================
 
-    SUBROUTINE set_vel_cha_grid(kk, jj, ii, u, ddy, miny, ReTau, h)
+    SUBROUTINE set_vel_cha_grid(kk, jj, ii, u, ddy, miny, ReTau, h, flowStateFlag)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -640,6 +658,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: ddy(jj)
         REAL(realk), INTENT(in) :: miny
         REAL(realk), INTENT(in) :: ReTau, h
+        CHARACTER(len=4), INTENT(in) :: flowStateFlag
 
         ! Local variables
         INTEGER(intk) :: j
@@ -649,21 +668,44 @@ CONTAINS
         uTau = ReTau*nu/h
 
         yMi = miny
-        DO j = 3, jj-2
-            y = MIN(yMi + 0.5_realk*ddy(j), h)
-            WRITE(*,*) y*uTau/nu
-            u(3:kk-2,j,2:ii-2) = uTau*reichardt(y*uTau/nu)
-            yMi = yMi + ddy(j)
-        END DO
+        IF ( flowStateFlag == "TURB" ) THEN
+            DO j = 3, jj-2
+                y = MIN(yMi + 0.5_realk*ddy(j), h)
+                u(3:kk-2,j,2:ii-2) = uTau*reichardt(y*uTau/nu)
+                yMi = yMi + ddy(j)
+            END DO
+        ELSE IF ( flowStateFlag == "LAMI" ) THEN
+            DO j = 3, jj-2
+                y = MIN(yMi + 0.5_realk*ddy(j), h)
+                u(3:kk-2,j,2:ii-2) = uTau*parabola(y*uTau/nu, ReTau)
+                yMi = yMi + ddy(j)
+            END DO
+        ELSE IF ( flowStateFlag == "NONE" ) THEN
+            u(3:kk-2,j,2:ii-2) = 0.0_realk
+        ELSE
+            CALL err_abort(mphInitErr, "unknown flow state.", __FILE__, __LINE__)
+        END IF
 
     CONTAINS
 
         PURE REAL(realk) FUNCTION reichardt(yPl) RESULT(uPl)
+        !------------------------------------------------------------
+        !   Source: H. Reichardt, „Vollständige Darstellung der 
+        !           turbulenten Geschwindigkeitsverteilung in glatten
+        !           Leitungen“, Z Angew Math Mech, Bd. 31, Nr. 7, 
+        !           S. 208–219, Jan. 1951, 
+        !           doi: 10.1002/zamm.19510310704.
+        !------------------------------------------------------------
             REAL(realk), INTENT(in) :: yPl
             REAL(realk), PARAMETER :: kappa = 0.41_realk, C = 7.8_realk
             uPl = LOG(1.0_realk + kappa*yPl)/kappa + &
                 C*(1.0_realk - EXP(-yPl/11.0_realk) - yPl/11.0_realk*EXP(-yPl/3.0_realk))
         END FUNCTION reichardt
+
+        PURE REAL(realk) FUNCTION parabola(yPl, ReTau) RESULT(uPl)
+            REAL(realk), INTENT(in) :: yPl, ReTau
+            uPl = yPl - 0.5_realk*yPl**2/ReTau
+        END FUNCTION parabola
 
     END SUBROUTINE set_vel_cha_grid
 
