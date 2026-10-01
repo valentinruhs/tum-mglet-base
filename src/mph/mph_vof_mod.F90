@@ -17,7 +17,7 @@ MODULE mph_vof_mod
     USE field_mod, ONLY: field_t
     USE fields_mod, ONLY: get_field, set_field, get_fieldptr
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_gradpxflag, &
-        minlevel, maxlevel
+        minlevel, maxlevel, get_mgbasb
     USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
     USE parent_mod, ONLY: parent
@@ -645,8 +645,10 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: g(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: gUv(:,:,:), gUw(:,:,:), gVw(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dBa(:,:,:), dLe(:,:,:), dTo(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:)
         REAL(realk), POINTER, CONTIGUOUS :: rddx(:), rddy(:), rddz(:)
+        INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
         IF ( skpDif ) RETURN
 
@@ -668,6 +670,9 @@ CONTAINS
             CALL get_fieldptr(dBa, "DBA", igrid)
             CALL get_fieldptr(dLe, "DLE", igrid)
             CALL get_fieldptr(dTo, "DTO", igrid)
+            CALL get_fieldptr(ddx, "DDX", igrid)
+            CALL get_fieldptr(ddy, "DDY", igrid)
+            CALL get_fieldptr(ddz, "DDZ", igrid)
             CALL get_fieldptr(rdx, "RDX", igrid)
             CALL get_fieldptr(rdy, "RDY", igrid)
             CALL get_fieldptr(rdz, "RDZ", igrid)
@@ -675,9 +680,13 @@ CONTAINS
             CALL get_fieldptr(rddy, "RDDY", igrid)
             CALL get_fieldptr(rddz, "RDDZ", igrid)
 
+            CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
             CALL diff_operator_grd(kk, jj, ii, u, v, w, &
                 g, gUv, gUw, gVw, dBa, dLe, dTo, &
                 rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
+            CALL wall_operator_grd(kk, jj, ii, nfro, nbac, nrgt, nlft, nbot, ntop, &
+                u, v, w, gUv, gUw, gVw, dBa, dLe, dTo, &
+                ddx, ddy, ddz, rdx, rdy, rdz, uo, vo, wo)
         END DO
 
     END SUBROUTINE diff_operator
@@ -763,6 +772,122 @@ CONTAINS
         END DO
 
     END SUBROUTINE diff_operator_grd
+
+    !================================================================
+
+    SUBROUTINE wall_operator_grd(kk, jj, ii, nfro, nbac, nrgt, nlft, nbot, ntop, &
+        u, v, w, gUv, gUw, gVw, dBa, dLe, dTo, &
+        ddx, ddy, ddz, rdx, rdy, rdz, uo, vo, wo)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Face by face wall correction (boundary code 5 = NOS). The
+    !   wall edge of the viscosity fields and of rd* lies between
+    !   ghost and first interior cell: index 2 at the lower faces,
+    !   index *-2 at the upper faces.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        INTEGER(intk), INTENT(in) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: gUv(kk, jj, ii), gUw(kk, jj, ii), gVw(kk, jj, ii)
+        REAL(realk), INTENT(in) :: dBa(kk, jj, ii), dLe(kk, jj, ii), dTo(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
+        REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+
+        ! Front
+        IF ( nfro == 5 ) THEN
+            i = 3
+            DO j = 2, jj-1
+                DO k = 2, kk-1
+                    vo(k,j,i) = vo(k,j,i) - swcle3d_one_mph(ddx(i), rdx(i-1), gUv(k,j,i-1), dLe(k,j,i), v(k,j,i))
+                    wo(k,j,i) = wo(k,j,i) - swcle3d_one_mph(ddx(i), rdx(i-1), gUw(k,j,i-1), dTo(k,j,i), w(k,j,i))
+                END DO
+            END DO
+        END IF
+
+        ! Back
+        IF ( nbac == 5 ) THEN
+            i = ii-2
+            DO j = 2, jj-1
+                DO k = 2, kk-1
+                    vo(k,j,i) = vo(k,j,i) - swcle3d_one_mph(ddx(i), rdx(i), gUv(k,j,i), dLe(k,j,i), v(k,j,i))
+                    wo(k,j,i) = wo(k,j,i) - swcle3d_one_mph(ddx(i), rdx(i), gUw(k,j,i), dTo(k,j,i), w(k,j,i))
+                END DO
+            END DO
+        END IF
+
+        ! Right
+        IF ( nrgt == 5 ) THEN
+            j = 3
+            DO i = 2, ii-1
+                DO k = 2, kk-1
+                    uo(k,j,i) = uo(k,j,i) - swcle3d_one_mph(ddy(j), rdy(j-1), gUv(k,j-1,i), dBa(k,j,i), u(k,j,i))
+                    wo(k,j,i) = wo(k,j,i) - swcle3d_one_mph(ddy(j), rdy(j-1), gVw(k,j-1,i), dTo(k,j,i), w(k,j,i))
+                END DO
+            END DO
+        END IF
+
+        ! Left
+        IF ( nlft == 5 ) THEN
+            j = jj-2
+            DO i = 2, ii-1
+                DO k = 2, kk-1
+                    uo(k,j,i) = uo(k,j,i) - swcle3d_one_mph(ddy(j), rdy(j), gUv(k,j,i), dBa(k,j,i), u(k,j,i))
+                    wo(k,j,i) = wo(k,j,i) - swcle3d_one_mph(ddy(j), rdy(j), gVw(k,j,i), dTo(k,j,i), w(k,j,i))
+                END DO
+            END DO
+        END IF
+
+        ! Bottom
+        IF ( nbot == 5 ) THEN
+            k = 3
+            DO i = 2, ii-1
+                DO j = 2, jj-1
+                    uo(k,j,i) = uo(k,j,i) - swcle3d_one_mph(ddz(k), rdz(k-1), gUw(k-1,j,i), dBa(k,j,i), u(k,j,i))
+                    vo(k,j,i) = vo(k,j,i) - swcle3d_one_mph(ddz(k), rdz(k-1), gVw(k-1,j,i), dLe(k,j,i), v(k,j,i))
+                END DO
+            END DO
+        END IF
+
+        ! Top
+        IF ( ntop == 5 ) THEN
+            k = kk-2
+            DO i = 2, ii-1
+                DO j = 2, jj-1
+                    uo(k,j,i) = uo(k,j,i) - swcle3d_one_mph(ddz(k), rdz(k), gUw(k,j,i), dBa(k,j,i), u(k,j,i))
+                    vo(k,j,i) = vo(k,j,i) - swcle3d_one_mph(ddz(k), rdz(k), gVw(k,j,i), dLe(k,j,i), v(k,j,i))
+                END DO
+            END DO
+        END IF
+
+    CONTAINS
+
+        PURE ELEMENTAL REAL(realk) FUNCTION swcle3d_one_mph(dd, rdw, gw, d, vel) RESULT(velo)
+        !----------------------------------------------------------------
+        !   What it does:
+        !   Missing part of the wall shear stress, divided by density and
+        !   wall-normal cell width. diff_operator_grd already applies
+        !   gw*u*rdw; the correct wall stress is gw*u/(0.5*dd).
+        !   Equidistant grid with mirrored ghost spacing: gw*u/dd**2/d.
+        !----------------------------------------------------------------
+            !$omp declare simd(swcle3d_one_mph)
+
+            ! Function arguments
+            REAL(realk), INTENT(in) :: dd   ! wall normal cell width
+            REAL(realk), INTENT(in) :: rdw  ! 1/centre distance across the wall
+            REAL(realk), INTENT(in) :: gw   ! viscosity at the wall edge
+            REAL(realk), INTENT(in) :: d    ! density at the velocity point
+            REAL(realk), INTENT(in) :: vel    ! velocity
+
+            velo = gw*vel*(2.0_realk/dd - rdw)/d/dd
+        END FUNCTION swcle3d_one_mph
+
+    END SUBROUTINE wall_operator_grd
 
     !================================================================
 

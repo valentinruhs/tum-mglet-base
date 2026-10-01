@@ -256,7 +256,7 @@ CONTAINS
         CASE ( tstACylAd )
             CALL set_vel_c(0.016_realk, 0.016_realk, 0.0_realk, h=1)
         CASE ( tstOpCFl )
-            CALL set_vel_cha(120.0_realk, 1.0_realk, "NONE")
+            CALL set_vel_cha(120.0_realk, 1.0_realk, "LAMI")
         CASE DEFAULT
             CALL err_abort(mphInitErr, "no velocity field for this test.", __FILE__, __LINE__)
         END SELECT
@@ -802,8 +802,8 @@ CONTAINS
         TYPE(shape_t), INTENT(in) :: s
 
         ! Local variables
-        INTEGER(intk) :: k, j, i
-        REAL(realk) :: x, y, xMi, yMi
+        INTEGER(intk) :: j
+        REAL(realk) :: y, yMi
 
         yMi = miny
         DO j = 3, jj-2
