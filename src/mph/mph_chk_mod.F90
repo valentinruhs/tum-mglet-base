@@ -114,7 +114,6 @@ CONTAINS
 
         ! Local variables
         REAL(realk) :: volCurr, xCtr, yCtr, zCtr
-        INTEGER(intk) :: i
 
         IF (.NOT. hasMph) RETURN
 
@@ -122,14 +121,12 @@ CONTAINS
         CALL comp_ctr(xCtr, yCtr, zCtr)
 
         IF (myid == 0) THEN
-            DO i = minlevel, maxlevel
-                WRITE(*, '(A,A,E20.10,E20.10)') &
-                    "ABSVOLERR, ", "RELVOLERR: ", &
-                    ABS(volInit-volCurr), ABS(volInit-volCurr)/volInit
-                WRITE(*, '(A,A,A,E20.10,E20.10,E20.10)') &
-                    "xCtr, ", "yCtr, ", "zCtr: ", &
-                    xCtr, yCtr, zCtr
-            END DO
+            WRITE(*, '(A,A,E20.10,E20.10)') &
+                "ABSVOLERR, ", "RELVOLERR: ", &
+                ABS(volInit-volCurr), ABS(volInit-volCurr)/volInit
+            WRITE(*, '(A,A,A,E20.10,E20.10,E20.10)') &
+                "xCtr, ", "yCtr, ", "zCtr: ", &
+                xCtr, yCtr, zCtr
         END IF
 
     END SUBROUTINE itinfo_mph

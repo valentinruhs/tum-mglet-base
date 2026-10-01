@@ -171,7 +171,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE comp_norm_vec(normx, normy, normz, kk, jj, ii, c, dx, dy, dz)
+    SUBROUTINE comp_norm_vec(normx, normy, normz, kk, jj, ii, c, isIfc, dx, dy, dz)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the normal vector components normx, normy and normz
@@ -188,7 +188,7 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(out) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
-        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c(kk, jj, ii), isIfc(kk, jj, ii)
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
 
         ! Local variables
@@ -198,9 +198,14 @@ CONTAINS
         REAL(realk) :: length
         REAL(realk) :: sumx, sumy, sumz
 
+        normx = 0.0_realk
+        normy = 0.0_realk
+        normz = 0.0_realk
         DO i = 2, ii-1
             DO j = 2, jj-1
                 DO k = 2, kk-1
+
+                    IF ( .NOT. isIfc(k,j,i) > 0.0_realk ) CYCLE
 
                     sumx = 0.0_realk
                     sumy = 0.0_realk
@@ -309,7 +314,7 @@ CONTAINS
         ! None
 
         CALL comp_isIfc_grd(kk, jj, ii, c, isIfc)
-        CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, c, dx, dy, dz)
+        CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, c, isIfc, dx, dy, dz)
         ! Fix for cells with no normal vector e.g. flotsam
         WHERE ( normx**2 + normy**2 + normz**2 < 0.5_realk ) isIfc = -1.0_realk
         CALL comp_alpha(alpha, kk, jj, ii, c, isIfc, ddx, ddy, ddz, normx, normy, normz)

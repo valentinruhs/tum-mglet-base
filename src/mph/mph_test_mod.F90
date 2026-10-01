@@ -22,12 +22,13 @@ MODULE mph_test_mod
     USE connect2_mod, ONLY: connect
     USE field_mod, ONLY: field_t
     USE fields_mod, ONLY: get_field
+    USE fort7_mod, ONLY: dcont
 
     USE mphcore_mod, ONLY: mphTst, mphInitErr, vofTol
     USE mph_plic_mod, ONLY: comp_c_stg, comp_ifc
     USE mph_plic_mod, ONLY: comp_c_loc
     USE mph_vof_mod, ONLY: rstr, prlg
-    USE mphcore_mod, ONLY: gmol1, rho1
+    USE mphcore_mod, ONLY: gmol1, rho1, rho2, grav
 
 
     IMPLICIT NONE(type, external)
@@ -120,11 +121,14 @@ CONTAINS
 
         circumf = circf_func(shape)
         area = area_func(shape)
-        CALL fill_c_dom(dist_func, shape)
+        IF ( .NOT. dcont ) CALL fill_c_dom(dist_func, shape)
         CALL rstr(fldName="C", flag="D")
         CALL prlg(fldName="C")
         CALL comp_ifc()
-        CALL init_vel()
+        IF ( .NOT. dcont ) CALL init_vel()
+        IF ( .NOT. dcont ) CALL init_pre(shape)
+        CALL rstr(fldName="P", flag="P")
+        CALL prlg(fldName="P")
 
     END SUBROUTINE init_mph_test
 
@@ -681,7 +685,7 @@ CONTAINS
                 yMi = yMi + ddy(j)
             END DO
         ELSE IF ( flowStateFlag == "NONE" ) THEN
-            u(3:kk-2,j,2:ii-2) = 0.0_realk
+            u = 0.0_realk
         ELSE
             CALL err_abort(mphInitErr, "unknown flow state.", __FILE__, __LINE__)
         END IF
@@ -726,6 +730,90 @@ CONTAINS
         CALL init_vel(time)
 
     END SUBROUTINE frc_vel_fld
+
+    !================================================================
+
+    SUBROUTINE init_pre(s)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        TYPE(shape_t), INTENT(in) :: s
+
+        ! Local variables
+        ! None
+
+        SELECT CASE ( tstId )
+        CASE ( tstOpCFl )
+            CALL set_pre_cha(s)
+        CASE DEFAULT
+            CONTINUE
+        END SELECT
+
+    END SUBROUTINE init_pre
+
+    !================================================================
+
+    SUBROUTINE set_pre_cha(s)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        TYPE(shape_t), INTENT(in) :: s
+
+        ! Local variables
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
+        REAL(realk), POINTER, CONTIGUOUS :: p(:,:,:), c(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddy(:)
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+            CALL get_mgdims(kk, jj, ii, igrid)
+            CALL get_bbox(minx, maxx, miny, maxy, minz, maxz, igrid)
+            CALL get_fieldptr(p, "P", igrid)
+            CALL get_fieldptr(c, "C", igrid)
+            CALL get_fieldptr(ddy, "DDY", igrid)
+
+            CALL set_pre_cha_grid(kk, jj, ii, p, c, ddy, miny, s)
+        END DO
+
+    END SUBROUTINE set_pre_cha
+
+    !================================================================
+
+    SUBROUTINE set_pre_cha_grid(kk, jj, ii, p, c, ddy, miny, s)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAl(realk), INTENT(inout) :: p(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddy(jj)
+        REAL(realk), INTENT(in) :: miny
+        TYPE(shape_t), INTENT(in) :: s
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: x, y, xMi, yMi
+
+        yMi = miny
+        DO j = 3, jj-2
+            y = yMi + 0.5_realk*ddy(j)
+            p(3:kk-2, j, 3:ii-2) = (c(3:kk-2, j, 3:ii-2)*(rho1 - rho2) + rho2)* &
+                grav(2)*(y - s%lvl)
+            yMi = yMi + ddy(j)
+        END DO
+
+    END SUBROUTINE set_pre_cha_grid
 
     !================================================================
 

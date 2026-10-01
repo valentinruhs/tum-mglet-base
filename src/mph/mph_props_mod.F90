@@ -24,9 +24,11 @@ MODULE mph_props_mod
     IMPLICIT NONE(type, external)
     PRIVATE
 
+    LOGICAL :: bldMatCoeff = .TRUE.
+
     PUBLIC :: init_mph_props, finish_mph_props, comp_prop, &
         comp_prop_face, comp_prop_face_stg, comp_d_stg, &
-        comp_props
+        comp_props, bldMatCoeff
 
 CONTAINS
 
@@ -552,6 +554,8 @@ CONTAINS
             CALL comp_prop_face_stg(kk, jj, ii, c, gUv, gUw, gVw, &
                 gmol1, gmol2, ddx, ddy, ddz, meanFlag="harm")
         END DO
+
+        bldMatCoeff = .TRUE.
 
     END SUBROUTINE comp_props
 

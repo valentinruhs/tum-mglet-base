@@ -7,6 +7,7 @@ MODULE pressuresolver_mod
     USE plog_mod
     USE mphcore_mod, ONLY: hasMph, rho1, rho2, skpPre
     USE mph_pois_mod, ONLY: comp_mat_coeff_mph
+    USE mph_props_mod, ONLY: bldMatCoeff
 
     IMPLICIT NONE (type, external)
     PRIVATE
@@ -345,9 +346,12 @@ CONTAINS
         IF ( hasMph ) THEN
             ! div(1/rho * grad(p)) = prefak * div(u) is the underlying equation
             prefak = 1.0_realk/dt
-            CALL comp_mat_coeff_mph()
-            CALL init_sip()
-            CALL init_sor()
+            IF ( bldMatCoeff ) THEN
+                CALL comp_mat_coeff_mph()
+                CALL init_sip()
+                IF (ityp == 1) CALL init_sor()
+                bldMatCoeff = .FALSE.
+            END IF
         ELSE
             ! laplace(dp) = prefak * div(u) is the underlying equation
             prefak = rho/dt

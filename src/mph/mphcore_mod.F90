@@ -20,7 +20,8 @@ MODULE mphcore_mod
     USE precision_mod, ONLY: intk, realk
     USE comms_mod, ONLY: myid
     USE err_mod, ONLY: errr
-    
+    USE fort7_mod, ONLY: dcont
+
     IMPLICIT NONE(type, external)
     PRIVATE
 
@@ -113,7 +114,7 @@ CONTAINS
             dread=.FALSE., required=.TRUE., dwrite=.FALSE., buffers=.TRUE.)
 
         CALL set_field("C", description=descC, &
-            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
+            dread=dcont, required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
         CALL set_field("CP", description=descCp, &
             dread=.FALSE., required=.TRUE., dwrite=.FALSE., buffers=.TRUE.)
         CALL set_field("D", description=descD, &

@@ -778,7 +778,8 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
-        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:), p(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: cS1(:,:,:), cS2(:,:,:), cS3(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: p(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: uo(:,:,:), vo(:,:,:), wo(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dBa(:,:,:), dLe(:,:,:), dTo(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:)
@@ -791,7 +792,9 @@ CONTAINS
 
             CALL get_mgdims(kk, jj, ii, igrid)
 
-            CALL get_fieldptr(c, "C", igrid)
+            CALL get_fieldptr(cS1, "CS1", igrid)
+            CALL get_fieldptr(cS2, "CS2", igrid)
+            CALL get_fieldptr(cS3, "CS3", igrid)
             CALL get_fieldptr(p, "P", igrid)
             CALL uo_f%get_ptr(uo, igrid)
             CALL vo_f%get_ptr(vo, igrid)
@@ -804,7 +807,7 @@ CONTAINS
             CALL get_fieldptr(rdz, "RDZ", igrid)
 
             CALL get_gradpxflag(gradpflag, igrid)
-            CALL pres_operator_grd(kk, jj, ii, c, p, dBa, dLe, dTo, &
+            CALL pres_operator_grd(kk, jj, ii, cS1, cS2, cS3, p, dBa, dLe, dTo, &
                 rdx, rdy, rdz, uo, vo, wo, gradpflag)
         END DO
 
@@ -812,7 +815,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE pres_operator_grd(kk, jj, ii, c, p, dBa, dLe, dTo, &
+    SUBROUTINE pres_operator_grd(kk, jj, ii, cS1, cS2, cS3, p, dBa, dLe, dTo, &
         rdx, rdy, rdz, uo, vo, wo, gradpflag)
     !----------------------------------------------------------------
     !   What it does:
@@ -821,7 +824,8 @@ CONTAINS
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAL(realk), INTENT(in) :: c(kk, jj, ii), p(kk, jj, ii)
+        REAL(realk), INTENT(in) :: cS1(kk, jj, ii), cS2(kk, jj, ii), cS3(kk, jj, ii)
+        REAL(realk), INTENT(in) :: p(kk, jj, ii)
         REAL(realk), INTENT(in) :: dBa(kk, jj, ii), dLe(kk, jj, ii), dTo(kk, jj, ii)
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
         REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
@@ -829,25 +833,13 @@ CONTAINS
 
         ! Local variables
         INTEGER(intk) :: i, j, k
-        REAL(realk) :: gpx(kk, jj, ii), gpy(kk, jj, ii), gpz(kk, jj, ii)
-
-        gpx = 0.0_realk
-        gpy = 0.0_realk
-        gpz = 0.0_realk
-        DO i = 2, ii-2
-            DO j = 2, jj-2
-                DO k = 2, kk-2
-                    gpx(k,j,i) = gradp(1)*gradpflag*MERGE(1.0_realk, 0.0_realk, c(k,j,i) > vofTol)
-                    gpy(k,j,i) = gradp(2)*gradpflag*MERGE(1.0_realk, 0.0_realk, c(k,j,i) > vofTol)
-                    gpz(k,j,i) = gradp(3)*gradpflag*MERGE(1.0_realk, 0.0_realk, c(k,j,i) > vofTol)
-                ENDDO
-            ENDDO
-        ENDDO
+        REAL(realk) :: gpx, gpy, gpz
 
         DO i = 2, ii-2
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    uo(k,j,i) = uo(k,j,i) - 1.0_realk/dBa(k,j,i)*((p(k,j,i+1) - p(k,j,i))*rdx(i) + gpx(k,j,i))
+                    gpx = gradp(1)*gradpflag*cS1(k, j, i)
+                    uo(k,j,i) = uo(k,j,i) - 1.0_realk/dBa(k,j,i)*((p(k,j,i+1) - p(k,j,i))*rdx(i) + gpx)
                 END DO
             END DO
         END DO
@@ -855,7 +847,8 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 2, jj-2
                 DO k = 3, kk-2
-                    vo(k,j,i) = vo(k,j,i) - 1.0_realk/dLe(k,j,i)*((p(k,j+1,i) - p(k,j,i))*rdy(j) + gpy(k,j,i))
+                    gpy = gradp(2)*gradpflag*cS2(k, j, i)
+                    vo(k,j,i) = vo(k,j,i) - 1.0_realk/dLe(k,j,i)*((p(k,j+1,i) - p(k,j,i))*rdy(j) + gpy)
                 END DO
             END DO
         END DO
@@ -863,7 +856,8 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 2, kk-2
-                    wo(k,j,i) = wo(k,j,i) - 1.0_realk/dTo(k,j,i)*((p(k+1,j,i) - p(k,j,i))*rdz(k) + gpz(k,j,i))
+                    gpz = gradp(3)*gradpflag*cS3(k, j, i)
+                    wo(k,j,i) = wo(k,j,i) - 1.0_realk/dTo(k,j,i)*((p(k+1,j,i) - p(k,j,i))*rdz(k) + gpz)
                 END DO
             END DO
         END DO
