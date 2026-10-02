@@ -17,12 +17,13 @@ MODULE mph_utils_mod
     USE precision_mod, ONLY: intk, realk
     USE mphcore_mod, ONLY: vofErr
     USE err_mod, ONLY: err_abort
+    USE grids_mod, ONLY: get_mgdims, get_mgbasb
 
     IMPLICIT NONE(type, external)
     PRIVATE
 
     PUBLIC :: init_mph_utils, finish_mph_utils, sel_ind, sel_ext, &
-        sel_vel, clp, int2char
+        sel_vel, clp, int2char, get_lp_mdf, get_lp_bnds
 
 CONTAINS
 
@@ -154,6 +155,81 @@ CONTAINS
         END SELECT
 
     END SUBROUTINE sel_vel
+
+    !================================================================
+
+    SUBROUTINE get_lp_mdf(igrid, nfro, nbac, nrgt, nlft, nbot, ntop, &
+        nfu, nbu, nrv, nlv, nbw, ntw)
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: igrid
+        INTEGER(intk), INTENT(out) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        INTEGER(intk), INTENT(out) :: nfu, nbu, nrv, nlv, nbw, ntw
+
+        ! Local variabels
+        ! None
+
+        CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
+
+        IF ( ANY([nfro, nbac, nrgt, nlft, nbot, ntop] == 3) ) THEN
+            CALL err_abort(vofErr, "OP1 not supported in multiphase solver.", __FILE__, __LINE__)
+        END IF
+
+        nfu = 0
+        nbu = 0
+        nrv = 0
+        nlv = 0
+        nbw = 0
+        ntw = 0
+
+        ! CON = 7
+        IF (nbac == 7) nbu = 1
+        IF (nlft == 7) nlv = 1
+        IF (ntop == 7) ntw = 1
+
+    END SUBROUTINE get_lp_mdf
+
+    !================================================================
+
+    SUBROUTINE get_lp_bnds(igrid, q, ista, iend, jsta, jend, ksta, kend)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Loop bounds of the unknowns of component q (0 = pressure
+    !   cell, 1/2/3 = u/v/w cell). Only the q-direction depends on
+    !   the boundary type (see get_lp_mdf).
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: igrid, q
+        INTEGER(intk), INTENT(out) :: ista, iend, jsta, jend, ksta, kend
+
+        ! Local variables
+        INTEGER(intk) :: kk, jj, ii
+        INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        INTEGER(intk) :: nfu, nbu, nrv, nlv, nbw, ntw
+
+        CALL get_mgdims(kk, jj, ii, igrid)
+        CALL get_lp_mdf(igrid, nfro, nbac, nrgt, nlft, nbot, ntop, &
+            nfu, nbu, nrv, nlv, nbw, ntw)
+
+        ista = 3 ; iend = ii-2
+        jsta = 3 ; jend = jj-2
+        ksta = 3 ; kend = kk-2
+
+        SELECT CASE ( q )
+        CASE ( 0 )
+            CONTINUE
+        CASE ( 1 )
+            ista = 3-nfu ; iend = ii-3+nbu
+        CASE ( 2 )
+            jsta = 3-nrv ; jend = jj-3+nlv
+        CASE ( 3 )
+            ksta = 3-nbw ; kend = kk-3+ntw
+        CASE DEFAULT
+            CALL err_abort(vofErr, "invalid component q.", __FILE__, __LINE__)
+        END SELECT
+
+    END SUBROUTINE get_lp_bnds
 
     !================================================================
 

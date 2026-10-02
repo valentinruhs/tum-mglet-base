@@ -256,7 +256,7 @@ CONTAINS
         CASE ( tstACylAd )
             CALL set_vel_c(0.016_realk, 0.016_realk, 0.0_realk, h=1)
         CASE ( tstOpCFl )
-            CALL set_vel_cha(120.0_realk, 1.0_realk, "LAMI")
+            CALL set_vel_cha(120.0_realk, 1.0_realk, 2.0_realk*pi, pi, "TURB")
         CASE DEFAULT
             CALL err_abort(mphInitErr, "no velocity field for this test.", __FILE__, __LINE__)
         END SELECT
@@ -607,32 +607,45 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE set_vel_cha(ReTau, h, flowStateFlag)
+    SUBROUTINE set_vel_cha(ReTau, h, lx, lz, flowStateFlag)
     !----------------------------------------------------------------
     !   What it does:
-    !   
+    !   Sets the initial velocity field of the open channel flow on
+    !   all grids. lx, lz are the (periodic) domain lengths in x and z.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        REAL(realk), INTENT(in) :: ReTau, h
+        REAL(realk), INTENT(in) :: ReTau, h, lx, lz
         CHARACTER(len=4), INTENT(in) :: flowStateFlag
 
         ! Local variables
         INTEGER(intk) :: n, igrid, ilevel
         INTEGER(intk) :: kk, jj, ii
+        INTEGER :: nSeed, s
+        INTEGER, ALLOCATABLE :: seed(:)
         REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
-        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: ddy(:)
+        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), w(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         TYPE(field_t), POINTER :: u_f, v_f, w_f, p_f
+
+        CALL RANDOM_SEED(size=nSeed)
+        ALLOCATE(seed(nSeed))
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
             CALL get_mgdims(kk, jj, ii, igrid)
             CALL get_bbox(minx, maxx, miny, maxy, minz, maxz, igrid)
             CALL get_fieldptr(u, "U", igrid)
+            CALL get_fieldptr(w, "W", igrid)
+            CALL get_fieldptr(ddx, "DDX", igrid)
             CALL get_fieldptr(ddy, "DDY", igrid)
+            CALL get_fieldptr(ddz, "DDZ", igrid)
 
-            CALL set_vel_cha_grid(kk, jj, ii, u, ddy, miny, ReTau, h, flowStateFlag)
+            seed = [(123457 + 7919*INT(igrid) + 104729*s, s = 1, nSeed)]
+            CALL RANDOM_SEED(put=seed)
+ 
+            CALL set_vel_cha_grid(kk, jj, ii, u, w, ddx, ddy, ddz, &
+                minx, miny, minz, ReTau, h, lx, lz, flowStateFlag)
         END DO
 
         CALL get_field(u_f, "U")
@@ -650,35 +663,82 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE set_vel_cha_grid(kk, jj, ii, u, ddy, miny, ReTau, h, flowStateFlag)
+    SUBROUTINE set_vel_cha_grid(kk, jj, ii, u, w, ddx, ddy, ddz, &
+            minx, miny, minz, ReTau, h, lx, lz, flowStateFlag)
     !----------------------------------------------------------------
     !   What it does:
     !   
+    !
+    !   Sources: W. Schoppa, F. Hussain, "Coherent structure generation
+    !            in near-wall turbulence", J. Fluid Mech. 453 (2002);
+    !            E. de Villiers, PhD thesis, Imperial College (2006),
+    !            utility perturbU.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
-        REAl(realk), INTENT(inout) :: u(kk, jj, ii)
-        REAL(realk), INTENT(in) :: ddy(jj)
-        REAL(realk), INTENT(in) :: miny
-        REAL(realk), INTENT(in) :: ReTau, h
+        REAL(realk), INTENT(inout) :: u(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: minx, miny, minz
+        REAL(realk), INTENT(in) :: ReTau, h, lx, lz
         CHARACTER(len=4), INTENT(in) :: flowStateFlag
 
+        ! Local parameters
+        REAL(realk), PARAMETER :: duPl = 11.2_realk    ! streak amplitude Delta u+_0
+        REAL(realk), PARAMETER :: epsPl = 0.072_realk  ! spanwise amplitude eps+
+        REAL(realk), PARAMETER :: yMaxPl = 30.0_realk  ! wall distance of streak maximum
+        REAL(realk), PARAMETER :: devAmp = 0.2_realk   ! random modulation amplitude
+        INTEGER(intk), PARAMETER :: nStr = 4           ! streak wavelengths in lz
+        INTEGER(intk), PARAMETER :: nWav = 2           ! w wavelengths in lx
+
         ! Local variables
-        INTEGER(intk) :: j
-        REAL(realk) :: y, yMi, uTau, nu
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: x, y, z, xMi, yMi, zMi, yPl
+        REAL(realk) :: uTau, nu, alphaPl, betaPl, r
 
         nu = gmol1/rho1
         uTau = ReTau*nu/h
 
-        yMi = miny
+        alphaPl = 2.0_realk*pi*REAL(nWav, realk)/lx * nu/uTau
+        betaPl = 2.0_realk*pi*REAL(nStr, realk)/lz * nu/uTau
+
         IF ( flowStateFlag == "TURB" ) THEN
-            DO j = 3, jj-2
-                y = MIN(yMi + 0.5_realk*ddy(j), h)
-                u(3:kk-2,j,2:ii-2) = uTau*reichardt(y*uTau/nu)
-                yMi = yMi + ddy(j)
+            DO i = 2, ii-2
+                yMi = miny
+                DO j = 3, jj-2
+                    y = MIN(yMi + 0.5_realk*ddy(j), h)
+                    yPl = y*uTau/nu
+                    zMi = minz
+                    DO k = 3, kk-2
+                        z = zMi + 0.5_realk*ddz(k)
+                        CALL RANDOM_NUMBER(r)
+                        u(k,j,i) = uTau*(reichardt(yPl)*0.0_realk &
+                            + (1.0_realk + devAmp*(2.0_realk*r - 1.0_realk)) &
+                            * uStreak(yPl, z*uTau/nu))
+                        zMi = zMi + ddz(k)
+                    END DO
+                    yMi = yMi + ddy(j)
+                END DO
             END DO
+
+            xMi = minx
+            DO i = 3, ii-2
+                x = xMi + 0.5_realk*ddx(i)
+                yMi = miny
+                DO j = 3, jj-2
+                    y = MIN(yMi + 0.5_realk*ddy(j), h)
+                    DO k = 2, kk-2
+                        CALL RANDOM_NUMBER(r)
+                        w(k,j,i) = uTau*(1.0_realk + devAmp*(2.0_realk*r - 1.0_realk)) &
+                            * wPert(x*uTau/nu, y*uTau/nu)
+                    END DO
+                    yMi = yMi + ddy(j)
+                END DO
+                xMi = xMi + ddx(i)
+            END DO
+
         ELSE IF ( flowStateFlag == "LAMI" ) THEN
+            yMi = miny
             DO j = 3, jj-2
                 y = MIN(yMi + 0.5_realk*ddy(j), h)
                 u(3:kk-2,j,2:ii-2) = uTau*parabola(y*uTau/nu, ReTau)
@@ -694,10 +754,10 @@ CONTAINS
 
         PURE REAL(realk) FUNCTION reichardt(yPl) RESULT(uPl)
         !------------------------------------------------------------
-        !   Source: H. Reichardt, „Vollständige Darstellung der 
+        !   Source: H. Reichardt, „Vollständige Darstellung der
         !           turbulenten Geschwindigkeitsverteilung in glatten
-        !           Leitungen“, Z Angew Math Mech, Bd. 31, Nr. 7, 
-        !           S. 208–219, Jan. 1951, 
+        !           Leitungen“, Z Angew Math Mech, Bd. 31, Nr. 7,
+        !           S. 208–219, Jan. 1951,
         !           doi: 10.1002/zamm.19510310704.
         !------------------------------------------------------------
             REAL(realk), INTENT(in) :: yPl
@@ -705,11 +765,28 @@ CONTAINS
             uPl = LOG(1.0_realk + kappa*yPl)/kappa + &
                 C*(1.0_realk - EXP(-yPl/11.0_realk) - yPl/11.0_realk*EXP(-yPl/3.0_realk))
         END FUNCTION reichardt
-
+ 
         PURE REAL(realk) FUNCTION parabola(yPl, ReTau) RESULT(uPl)
             REAL(realk), INTENT(in) :: yPl, ReTau
             uPl = yPl - 0.5_realk*yPl**2/ReTau
         END FUNCTION parabola
+ 
+        PURE REAL(realk) FUNCTION uStreak(yPl, zPl) RESULT(uPl)
+        !------------------------------------------------------------
+        !   
+        !------------------------------------------------------------
+            REAL(realk), INTENT(in) :: yPl, zPl
+            uPl = 0.5_realk*duPl*COS(betaPl*zPl)*(yPl/yMaxPl) &
+                * EXP(0.5_realk*(1.0_realk - (yPl/yMaxPl)**2))
+        END FUNCTION uStreak
+ 
+        PURE REAL(realk) FUNCTION wPert(xPl, yPl) RESULT(wPl)
+        !------------------------------------------------------------
+        !   
+        !------------------------------------------------------------
+            REAL(realk), INTENT(in) :: xPl, yPl
+            wPl = epsPl*SIN(alphaPl*xPl)*yPl*EXP(-0.5_realk*(yPl/yMaxPl)**2)
+        END FUNCTION wPert
 
     END SUBROUTINE set_vel_cha_grid
 

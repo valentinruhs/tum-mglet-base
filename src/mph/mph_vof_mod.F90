@@ -17,7 +17,7 @@ MODULE mph_vof_mod
     USE field_mod, ONLY: field_t
     USE fields_mod, ONLY: get_field, set_field, get_fieldptr
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_gradpxflag, &
-        minlevel, maxlevel, get_mgbasb
+        minlevel, maxlevel
     USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
     USE parent_mod, ONLY: parent
@@ -26,7 +26,7 @@ MODULE mph_vof_mod
 
     USE mphcore_mod, ONLY: rho1, rho2, gmol1, gmol2, grav, &
         skpAdv, skpDif, skpPre, skpExt, vofTol, advScm, donCen, vofErr
-    USE mph_utils_mod, ONLY: sel_ind, sel_ext, sel_vel, clp, int2char
+    USE mph_utils_mod, ONLY: sel_ind, sel_ext, sel_vel, clp, int2char, get_lp_mdf, get_lp_bnds
     USE mph_plic_mod, ONLY: comp_ifc, comp_c_stg, comp_isIfc_stg, comp_c_loc
     USE mph_props_mod, ONLY: comp_d_stg
     USE mph_bound_c_mod, ONLY: bound_c
@@ -156,6 +156,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
         REAl(realk), POINTER, CONTIGUOUS :: isIfc(:,:,:)
+        INTEGER(intk) :: ista, iend, jsta, jend, ksta, kend
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -177,8 +178,10 @@ CONTAINS
             CALL get_fieldptr(isIfc, "ISIFC", igrid)
 
             CALL sel_vel(l, up, vp, wp, vel)
+            CALL get_lp_bnds(igrid, 0, ista, iend, jsta, jend, ksta, kend)
             CALL comp_flx_grd(kk, jj, ii, l, c, vel, cFlx1, &
-                ddx, ddy, ddz, normx, normy, normz, alpha, isIfc, dt)
+                ddx, ddy, ddz, normx, normy, normz, alpha, isIfc, dt, &
+                ista, iend, jsta, jend, ksta, kend)
         END DO
 
     END SUBROUTINE comp_flx
@@ -186,7 +189,8 @@ CONTAINS
     !================================================================
 
     SUBROUTINE comp_flx_grd(kk, jj, ii, l, c, vel, cFlx1, &
-        ddx, ddy, ddz, normx, normy, normz, alpha, isIfc, dt)
+        ddx, ddy, ddz, normx, normy, normz, alpha, isIfc, dt, &
+        ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the volume fraction flxes depending on the current
@@ -205,6 +209,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
         REAL(realk), INTENT(in) :: isIfc(kk, jj, ii)
         REAL(realk), INTENT(in) :: dt
+        INTEGER(intk), INTENT(in) :: ista, iend, jsta, jend, ksta, kend
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -215,9 +220,9 @@ CONTAINS
 
         CALL sel_ind(l, il, jl, kl)
 
-        DO i = 2, ii-2
-            DO j = 2, jj-2
-                DO k = 2, kk-2
+        DO i = ista-il, iend
+            DO j = jsta-jl, jend
+                DO k = ksta-kl, kend
                     IF ( vel(k,j,i) > vofTol ) THEN
 
                         ! Compute face flx width and characteristic length
@@ -292,8 +297,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: dt
 
         ! Local variables
-        INTEGER(intk) :: n, igrid
-        INTEGER(intk) :: kk, jj, ii
+        INTEGER(intk) :: kk, jj, ii, n, igrid
         REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: advr(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: cFlx1(:,:,:), cFlx2(:,:,:)
@@ -301,12 +305,11 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
         REAl(realk), POINTER, CONTIGUOUS :: isIfc(:,:,:)
+        INTEGER(intk) :: ista, iend, jsta, jend, ksta, kend
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
-
             CALL get_mgdims(kk, jj, ii, igrid)
-
             CALL get_fieldptr(c, "C", igrid)
             CALL get_fieldptr(advr, "ADVR", igrid)
             CALL get_fieldptr(cFlx1, "CFLX1", igrid)
@@ -320,18 +323,19 @@ CONTAINS
             CALL get_fieldptr(alpha, "ALPHA", igrid)
             CALL get_fieldptr(isIfc, "ISIFC", igrid)
 
-            CALL comp_flx_stg_grd(kk, jj, ii, q, l, c, advr, &
-                cFlx1, cFlx2, ddx, ddy, ddz, &
-                normx, normy, normz, alpha, isIfc, dt)
+            CALL get_lp_bnds(igrid, q, ista, iend, jsta, jend, ksta, kend)
+            CALL comp_flx_stg_grd(kk, jj, ii, q, l, c, advr, cFlx1, cFlx2, &
+                ddx, ddy, ddz, normx, normy, normz, alpha, isIfc, dt, &
+                ista, iend, jsta, jend, ksta, kend)
         END DO
 
     END SUBROUTINE comp_flx_stg
 
     !================================================================
 
-    SUBROUTINE comp_flx_stg_grd(kk, jj, ii, q, l, c, advr, &
-        cFlx1, cFlx2, ddx, ddy, ddz, &
-        normx, normy, normz, alpha, isIfc, dt)
+    SUBROUTINE comp_flx_stg_grd(kk, jj, ii, q, l, c, advr, cFlx1, cFlx2, &
+        ddx, ddy, ddz, normx, normy, normz, alpha, isIfc, dt, &
+        ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
     !   What it does:
     !   Computes the volume fraction flxes depending on the current
@@ -350,6 +354,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
         REAL(realk), INTENT(in) :: isIfc(kk, jj, ii)
         REAL(realk), INTENT(in) :: dt
+        INTEGER(intk), INTENT(in) :: ista, iend, jsta, jend, ksta, kend
 
         ! Local variables
         INTEGER(intk) :: k, j, i, kl, jl, il, kq, jq, iq
@@ -359,14 +364,13 @@ CONTAINS
         REAL(realk) :: normlMi, normlPl, normqMi, normqPl, flxAlphaMi, flxAlphaPl
         REAL(realk) :: flxDimxMi, flxDimyMi, flxDimzMi, flxDimxPl, flxDimyPl, flxDimzPl, fracMi, fracPl
 
-
         CALL sel_ind(l, il, jl, kl)
         CALL sel_ind(q, iq, jq, kq)
 
         IF ( q == l ) THEN
-            DO i = 2, ii-2
-                DO j = 2, jj-2
-                    DO k = 2, kk-2
+            DO i = ista-il, iend
+                DO j = jsta-jl, jend
+                    DO k = ksta-kl, kend
                         IF ( ABS(advr(k,j,i)) < vofTol ) THEN
                             cFlx1(k,j,i) = 0.0_realk
                             cFlx2(k,j,i) = 0.0_realk
@@ -404,9 +408,9 @@ CONTAINS
                 END DO
             END DO
         ELSE
-            DO i = 2, ii-2
-                DO j = 2, jj-2
-                    DO k = 2, kk-2
+            DO i = ista-il, iend
+                DO j = jsta-jl, jend
+                    DO k = ksta-kl, kend
 
                     IF ( ABS(advr(k,j,i)) < vofTol ) THEN
                         cFlx1(k,j,i) = 0.0_realk
@@ -649,6 +653,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:)
         REAL(realk), POINTER, CONTIGUOUS :: rddx(:), rddy(:), rddz(:)
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        INTEGER(intk) :: nfu, nbu, nrv, nlv, nbw, ntw
 
         IF ( skpDif ) RETURN
 
@@ -680,13 +685,15 @@ CONTAINS
             CALL get_fieldptr(rddy, "RDDY", igrid)
             CALL get_fieldptr(rddz, "RDDZ", igrid)
 
-            CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
-            CALL diff_operator_grd(kk, jj, ii, u, v, w, &
-                g, gUv, gUw, gVw, dBa, dLe, dTo, &
-                rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo)
-            CALL wall_operator_grd(kk, jj, ii, nfro, nbac, nrgt, nlft, nbot, ntop, &
+            CALL get_lp_mdf(igrid, nfro, nbac, nrgt, nlft, nbot, ntop, &
+                nfu, nbu, nrv, nlv, nbw, ntw)
+            CALL swcle3d_grid(kk, jj, ii, nfro, nbac, nrgt, nlft, nbot, ntop, &
                 u, v, w, gUv, gUw, gVw, dBa, dLe, dTo, &
                 ddx, ddy, ddz, rdx, rdy, rdz, uo, vo, wo)
+            CALL diff_operator_grd(kk, jj, ii, u, v, w, &
+                g, gUv, gUw, gVw, dBa, dLe, dTo, &
+                rdx, rdy, rdz, rddx, rddy, rddz, uo, vo, wo, &
+                nfu, nbu, nrv, nlv, nbw, ntw)
         END DO
 
     END SUBROUTINE diff_operator
@@ -695,7 +702,7 @@ CONTAINS
 
     SUBROUTINE diff_operator_grd(kk, jj, ii, u, v, w, g, &
         gUv, gUw, gVw, dBa, dLe, dTo, rdx, rdy, rdz, &
-        rddx, rddy, rddz, uo, vo, wo)
+        rddx, rddy, rddz, uo, vo, wo, nfu, nbu, nrv, nlv, nbw, ntw)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -710,6 +717,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
         REAL(realk), INTENT(in) :: rddx(ii), rddy(jj), rddz(kk)
         REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
+        INTEGER(intk), INTENT(in) :: nfu, nbu, nrv, nlv, nbw, ntw
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -717,7 +725,7 @@ CONTAINS
         REAL(realk) :: tauYxPl, tauYxMi, tauYyPl, tauYyMi, tauYzPl, tauYzMi
         REAL(realk) :: tauZxPl, tauZxMi, tauZyPl, tauZyMi, tauZzPl, tauZzMi
 
-        DO i = 2, ii-2
+        DO i = 3-nfu, ii-3+nbu
             DO j = 3, jj-2
                 DO k = 3, kk-2
                     tauXxPl = g(k,j,i+1)*2.0_realk*(u(k,j,i+1) - u(k,j,i))*rddx(i+1)
@@ -736,7 +744,7 @@ CONTAINS
         END DO
 
         DO i = 3, ii-2
-            DO j = 2, jj-2
+            DO j = 3-nrv, jj-3+nlv
                 DO k = 3, kk-2
                     tauYxPl = gUv(k,j,i)*((u(k,j+1,i) - u(k,j,i))*rdy(j) + (v(k,j,i+1) - v(k,j,i))*rdx(i))
                     tauYxMi = gUv(k,j,i-1)*((u(k,j+1,i-1) - u(k,j,i-1))*rdy(j) + (v(k,j,i) - v(k,j,i-1))*rdx(i-1))
@@ -755,7 +763,7 @@ CONTAINS
 
         DO i = 3, ii-2
             DO j = 3, jj-2
-                DO k = 2, kk-2
+                DO k = 3-nbw, kk-3+ntw
                     tauZxPl = gUw(k,j,i)*((u(k+1,j,i) - u(k,j,i))*rdz(k) + (w(k,j,i+1) - w(k,j,i))*rdx(i))
                     tauZxMi = gUw(k,j,i-1)*((u(k+1,j,i-1) - u(k,j,i-1))*rdz(k) + (w(k,j,i) - w(k,j,i-1))*rdx(i-1))
                     tauZyPl = gVw(k,j,i)*((v(k+1,j,i) - v(k,j,i))*rdz(k) + (w(k,j+1,i) - w(k,j,i))*rdy(j))
@@ -775,7 +783,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE wall_operator_grd(kk, jj, ii, nfro, nbac, nrgt, nlft, nbot, ntop, &
+    SUBROUTINE swcle3d_grid(kk, jj, ii, nfro, nbac, nrgt, nlft, nbot, ntop, &
         u, v, w, gUv, gUw, gVw, dBa, dLe, dTo, &
         ddx, ddy, ddz, rdx, rdy, rdz, uo, vo, wo)
     !----------------------------------------------------------------
@@ -804,8 +812,8 @@ CONTAINS
             i = 3
             DO j = 2, jj-1
                 DO k = 2, kk-1
-                    vo(k,j,i) = vo(k,j,i) - swcle3d_one_mph(ddx(i), rdx(i-1), gUv(k,j,i-1), dLe(k,j,i), v(k,j,i))
-                    wo(k,j,i) = wo(k,j,i) - swcle3d_one_mph(ddx(i), rdx(i-1), gUw(k,j,i-1), dTo(k,j,i), w(k,j,i))
+                    vo(k,j,i) = vo(k,j,i) - wall_acc(gUv(k,j,i-1), dLe(k,j,i), ddx(i), v(k,j,i))
+                    wo(k,j,i) = wo(k,j,i) - wall_acc(gUw(k,j,i-1), dTo(k,j,i), ddx(i), w(k,j,i))
                 END DO
             END DO
         END IF
@@ -815,8 +823,8 @@ CONTAINS
             i = ii-2
             DO j = 2, jj-1
                 DO k = 2, kk-1
-                    vo(k,j,i) = vo(k,j,i) - swcle3d_one_mph(ddx(i), rdx(i), gUv(k,j,i), dLe(k,j,i), v(k,j,i))
-                    wo(k,j,i) = wo(k,j,i) - swcle3d_one_mph(ddx(i), rdx(i), gUw(k,j,i), dTo(k,j,i), w(k,j,i))
+                    vo(k,j,i) = vo(k,j,i) - wall_acc(gUv(k,j,i), dLe(k,j,i), ddx(i), v(k,j,i))
+                    wo(k,j,i) = wo(k,j,i) - wall_acc(gUw(k,j,i), dTo(k,j,i), ddx(i), w(k,j,i))
                 END DO
             END DO
         END IF
@@ -826,8 +834,8 @@ CONTAINS
             j = 3
             DO i = 2, ii-1
                 DO k = 2, kk-1
-                    uo(k,j,i) = uo(k,j,i) - swcle3d_one_mph(ddy(j), rdy(j-1), gUv(k,j-1,i), dBa(k,j,i), u(k,j,i))
-                    wo(k,j,i) = wo(k,j,i) - swcle3d_one_mph(ddy(j), rdy(j-1), gVw(k,j-1,i), dTo(k,j,i), w(k,j,i))
+                    uo(k,j,i) = uo(k,j,i) - wall_acc(gUv(k,j-1,i), dBa(k,j,i), ddy(j), u(k,j,i))
+                    wo(k,j,i) = wo(k,j,i) - wall_acc(gVw(k,j-1,i), dTo(k,j,i), ddy(j), w(k,j,i))
                 END DO
             END DO
         END IF
@@ -837,8 +845,8 @@ CONTAINS
             j = jj-2
             DO i = 2, ii-1
                 DO k = 2, kk-1
-                    uo(k,j,i) = uo(k,j,i) - swcle3d_one_mph(ddy(j), rdy(j), gUv(k,j,i), dBa(k,j,i), u(k,j,i))
-                    wo(k,j,i) = wo(k,j,i) - swcle3d_one_mph(ddy(j), rdy(j), gVw(k,j,i), dTo(k,j,i), w(k,j,i))
+                    uo(k,j,i) = uo(k,j,i) - wall_acc(gUv(k,j,i), dBa(k,j,i), ddy(j), u(k,j,i))
+                    wo(k,j,i) = wo(k,j,i) - wall_acc(gVw(k,j,i), dTo(k,j,i), ddy(j), w(k,j,i))
                 END DO
             END DO
         END IF
@@ -848,8 +856,8 @@ CONTAINS
             k = 3
             DO i = 2, ii-1
                 DO j = 2, jj-1
-                    uo(k,j,i) = uo(k,j,i) - swcle3d_one_mph(ddz(k), rdz(k-1), gUw(k-1,j,i), dBa(k,j,i), u(k,j,i))
-                    vo(k,j,i) = vo(k,j,i) - swcle3d_one_mph(ddz(k), rdz(k-1), gVw(k-1,j,i), dLe(k,j,i), v(k,j,i))
+                    uo(k,j,i) = uo(k,j,i) - wall_acc(gUw(k-1,j,i), dBa(k,j,i), ddz(k), u(k,j,i))
+                    vo(k,j,i) = vo(k,j,i) - wall_acc(gVw(k-1,j,i), dLe(k,j,i), ddz(k), v(k,j,i))
                 END DO
             END DO
         END IF
@@ -859,35 +867,24 @@ CONTAINS
             k = kk-2
             DO i = 2, ii-1
                 DO j = 2, jj-1
-                    uo(k,j,i) = uo(k,j,i) - swcle3d_one_mph(ddz(k), rdz(k), gUw(k,j,i), dBa(k,j,i), u(k,j,i))
-                    vo(k,j,i) = vo(k,j,i) - swcle3d_one_mph(ddz(k), rdz(k), gVw(k,j,i), dLe(k,j,i), v(k,j,i))
+                    uo(k,j,i) = uo(k,j,i) - wall_acc(gUw(k,j,i), dBa(k,j,i), ddz(k), u(k,j,i))
+                    vo(k,j,i) = vo(k,j,i) - wall_acc(gVw(k,j,i), dLe(k,j,i), ddz(k), v(k,j,i))
                 END DO
             END DO
         END IF
 
     CONTAINS
 
-        PURE ELEMENTAL REAL(realk) FUNCTION swcle3d_one_mph(dd, rdw, gw, d, vel) RESULT(velo)
-        !----------------------------------------------------------------
-        !   What it does:
-        !   Missing part of the wall shear stress, divided by density and
-        !   wall-normal cell width. diff_operator_grd already applies
-        !   gw*u*rdw; the correct wall stress is gw*u/(0.5*dd).
-        !   Equidistant grid with mirrored ghost spacing: gw*u/dd**2/d.
-        !----------------------------------------------------------------
-            !$omp declare simd(swcle3d_one_mph)
+        PURE ELEMENTAL REAL(realk) FUNCTION wall_acc(mu, d, dds, vel) RESULT(acc)
+        !------------------------------------------------------------
+        ! Equivalent to Werner-Wengle laminar sublayer case, but for
+        ! multi-phase fluid properties.
+        !------------------------------------------------------------
+            REAL(realk), INTENT(in) :: mu, d, dds, vel
+            acc = 2.0_realk*mu*vel/(d*dds*dds)
+        END FUNCTION wall_acc
 
-            ! Function arguments
-            REAL(realk), INTENT(in) :: dd   ! wall normal cell width
-            REAL(realk), INTENT(in) :: rdw  ! 1/centre distance across the wall
-            REAL(realk), INTENT(in) :: gw   ! viscosity at the wall edge
-            REAL(realk), INTENT(in) :: d    ! density at the velocity point
-            REAL(realk), INTENT(in) :: vel    ! velocity
-
-            velo = gw*vel*(2.0_realk/dd - rdw)/d/dd
-        END FUNCTION swcle3d_one_mph
-
-    END SUBROUTINE wall_operator_grd
+    END SUBROUTINE swcle3d_grid
 
     !================================================================
 
@@ -909,6 +906,8 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: dBa(:,:,:), dLe(:,:,:), dTo(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:)
         INTEGER(intk) :: gradpflag
+        INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        INTEGER(intk) :: nfu, nbu, nrv, nlv, nbw, ntw
 
         IF ( skpPre ) RETURN
 
@@ -932,8 +931,10 @@ CONTAINS
             CALL get_fieldptr(rdz, "RDZ", igrid)
 
             CALL get_gradpxflag(gradpflag, igrid)
+            CALL get_lp_mdf(igrid, nfro, nbac, nrgt, nlft, nbot, ntop, &
+                nfu, nbu, nrv, nlv, nbw, ntw)
             CALL pres_operator_grd(kk, jj, ii, cS1, cS2, cS3, p, dBa, dLe, dTo, &
-                rdx, rdy, rdz, uo, vo, wo, gradpflag)
+                rdx, rdy, rdz, uo, vo, wo, gradpflag, nfu, nbu, nrv, nlv, nbw, ntw)
         END DO
 
     END SUBROUTINE pres_operator
@@ -941,7 +942,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE pres_operator_grd(kk, jj, ii, cS1, cS2, cS3, p, dBa, dLe, dTo, &
-        rdx, rdy, rdz, uo, vo, wo, gradpflag)
+        rdx, rdy, rdz, uo, vo, wo, gradpflag, nfu, nbu, nrv, nlv, nbw, ntw)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -955,12 +956,13 @@ CONTAINS
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
         REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: gradpflag
+        INTEGER(intk), INTENT(in) :: nfu, nbu, nrv, nlv, nbw, ntw
 
         ! Local variables
         INTEGER(intk) :: i, j, k
         REAL(realk) :: gpx, gpy, gpz
 
-        DO i = 2, ii-2
+        DO i = 3-nfu, ii-3+nbu
             DO j = 3, jj-2
                 DO k = 3, kk-2
                     gpx = gradp(1)*gradpflag*cS1(k, j, i)
@@ -970,7 +972,7 @@ CONTAINS
         END DO
 
         DO i = 3, ii-2
-            DO j = 2, jj-2
+            DO j = 3-nrv, jj-3+nlv
                 DO k = 3, kk-2
                     gpy = gradp(2)*gradpflag*cS2(k, j, i)
                     vo(k,j,i) = vo(k,j,i) - 1.0_realk/dLe(k,j,i)*((p(k,j+1,i) - p(k,j,i))*rdy(j) + gpy)
@@ -980,7 +982,7 @@ CONTAINS
 
         DO i = 3, ii-2
             DO j = 3, jj-2
-                DO k = 2, kk-2
+                DO k = 3-nbw, kk-3+ntw
                     gpz = gradp(3)*gradpflag*cS3(k, j, i)
                     wo(k,j,i) = wo(k,j,i) - 1.0_realk/dTo(k,j,i)*((p(k+1,j,i) - p(k,j,i))*rdz(k) + gpz)
                 END DO
@@ -1004,7 +1006,8 @@ CONTAINS
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
         REAL(realk), POINTER, CONTIGUOUS :: uo(:,:,:), vo(:,:,:), wo(:,:,:)
-        
+        INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        INTEGER(intk) :: nfu, nbu, nrv, nlv, nbw, ntw
 
         IF ( skpExt ) RETURN
 
@@ -1017,14 +1020,18 @@ CONTAINS
             CALL vo_f%get_ptr(vo, igrid)
             CALL wo_f%get_ptr(wo, igrid)
 
-            CALL exte_operator_grd(kk, jj, ii, uo, vo, wo)
+            CALL get_lp_mdf(igrid, nfro, nbac, nrgt, nlft, nbot, ntop, &
+                nfu, nbu, nrv, nlv, nbw, ntw)
+            CALL exte_operator_grd(kk, jj, ii, uo, vo, wo, &
+                nfu, nbu, nrv, nlv, nbw, ntw)
         END DO
 
     END SUBROUTINE exte_operator
 
     !================================================================
 
-    SUBROUTINE exte_operator_grd(kk, jj, ii, uo, vo, wo)
+    SUBROUTINE exte_operator_grd(kk, jj, ii, uo, vo, wo, &
+        nfu, nbu, nrv, nlv, nbw, ntw)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -1033,11 +1040,12 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
+        INTEGER(intk), INTENT(in) :: nfu, nbu, nrv, nlv, nbw, ntw
 
         ! Local variables
         INTEGER(intk) :: i, j, k
 
-        DO i = 2, ii-2
+        DO i = 3-nfu, ii-3+nbu
             DO j = 3, jj-2
                 DO k = 3, kk-2
                     uo(k,j,i) = uo(k,j,i) + grav(1)
@@ -1046,7 +1054,7 @@ CONTAINS
         ENDDO
 
         DO i = 3, ii-2
-            DO j = 2, jj-2
+            DO j = 3-nrv, jj-3+nlv
                 DO k = 3, kk-2
                     vo(k,j,i) = vo(k,j,i) + grav(2)
                 ENDDO
@@ -1055,7 +1063,7 @@ CONTAINS
 
         DO i = 3, ii-2
             DO j = 3, jj-2
-                DO k = 2, kk-2
+                DO k = 3-nbw, kk-3+ntw
                     wo(k,j,i) = wo(k,j,i) + grav(3)
                 ENDDO
             ENDDO
@@ -1084,6 +1092,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: cFlx1(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        INTEGER(intk) :: ista, iend, jsta, jend, ksta, kend
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -1104,8 +1113,10 @@ CONTAINS
             CALL get_fieldptr(ddz, "DDZ", igrid)
 
             CALL sel_vel(l, up, vp, wp, vel)
+            CALL get_lp_bnds(igrid, 0, ista, iend, jsta, jend, ksta, kend)
             CALL adv_c_grd(kk, jj, ii, 0, l, c, cWy, vel, cFlx1, &
-                dx, dy, dz, ddx, ddy, ddz, dt)
+                dx, dy, dz, ddx, ddy, ddz, dt, &
+                ista, iend, jsta, jend, ksta, kend)
         END DO
 
     END SUBROUTINE adv_c
@@ -1133,6 +1144,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:), vel(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        INTEGER(intk) :: ista, iend, jsta, jend, ksta, kend
 
         cFldName = "CS"//int2Char(q)
         cWyFldName = "CWYS"//int2Char(q)
@@ -1158,8 +1170,9 @@ CONTAINS
             CALL get_fieldptr(ddy, "DDY", igrid)
             CALL get_fieldptr(ddz, "DDZ", igrid)
 
+            CALL get_lp_bnds(igrid, q, ista, iend, jsta, jend, ksta, kend)
             CALL adv_c_grd(kk, jj, ii, q, l, cSq, cWySq, advr, cFlx1, &
-                dx, dy, dz, ddx, ddy, ddz, dt)
+                dx, dy, dz, ddx, ddy, ddz, dt, ista, iend, jsta, jend, ksta, kend)
 
             ! Clip cS and correct mS by clipped amount
             CALL sel_vel(q, u, v, w, vel)
@@ -1172,7 +1185,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE adv_c_grd(kk, jj, ii, q, l, c, cWy, vel, cFlx1, &
-        dx, dy, dz, ddx, ddy, ddz, dt)
+        dx, dy, dz, ddx, ddy, ddz, dt, ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -1187,6 +1200,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dt
+        INTEGER(intk), INTENT(in) :: ista, iend, jsta, jend, ksta, kend
 
         ! Local variables
         INTEGER(intk) :: i, j, k
@@ -1197,9 +1211,9 @@ CONTAINS
         CALL sel_ind(l, il, jl, kl)
         CALL sel_ext(kk, jj, ii, q, l, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
 
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
+        DO i = ista, iend
+            DO j = jsta, jend
+                DO k = ksta, kend
                     dsCV = il*dsx(i) + jl*dsy(j) + kl*dsz(k)
                     div = ( vel(k,j,i) - vel(k-kl,j-jl,i-il) ) / dsCV
                     c(k,j,i) = c(k,j,i) &
@@ -1237,6 +1251,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: cFlx1(:,:,:), cFlx2(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        INTEGER(intk) :: ista, iend, jsta, jend, ksta, kend
 
         cWyFldName = "CWYS"//int2Char(q)
         mFldName = "MS"//int2Char(q)
@@ -1263,9 +1278,10 @@ CONTAINS
             CALL get_fieldptr(ddz, "DDZ", igrid)
 
             CALL sel_vel(q, u, v, w, vel)
+            CALL get_lp_bnds(igrid, q, ista, iend, jsta, jend, ksta, kend)
             CALL adv_m_grd(kk, jj, ii, q, l, cWySq, vel, &
                 advr, adve, mSq, cFlx1, cFlx2, dx, dy, dz, &
-                ddx, ddy, ddz, dt)
+                ddx, ddy, ddz, dt, ista, iend, jsta, jend, ksta, kend)
         END DO
 
     END SUBROUTINE adv_m_stg
@@ -1274,7 +1290,7 @@ CONTAINS
 
     SUBROUTINE adv_m_grd(kk, jj, ii, q, l, cWy, vel, &
         advr, adve, mom, cFlx1, cFlx2, dx, dy, dz, &
-        ddx, ddy, ddz, dt)
+        ddx, ddy, ddz, dt, ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
     !   What it does:
     !    
@@ -1290,6 +1306,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dt
+        INTEGER(intk), INTENT(in) :: ista, iend, jsta, jend, ksta, kend
 
         ! Local variables
         INTEGER(intk) :: i, j, k
@@ -1301,17 +1318,17 @@ CONTAINS
         CALL sel_ind(l, il, jl, kl)
         CALL sel_ext(kk, jj, ii, q, l, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
 
-        DO i = 2, ii-2
-            DO j = 2, jj-2
-                DO k = 2, kk-2
+        DO i = ista-il, iend
+            DO j = jsta-jl, jend
+                DO k = ksta-kl, kend
                     momFlx(k,j,i) = adve(k,j,i)*( rho1*cFlx1(k,j,i) + rho2*cFlx2(k,j,i) )
                 END DO
             END DO 
         END DO
 
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
+        DO i = ista, iend
+            DO j = jsta, jend
+                DO k = ksta, kend
                     dsCV = il*dsx(i) + jl*dsy(j) + kl*dsz(k)
                     div = ( advr(k,j,i) - advr(k-kl,j-jl,i-il) ) / dsCV
                     com = ( rho1*cWy(k,j,i) + rho2*( 1.0_realk - cWy(k,j,i) ) )*div
@@ -1702,6 +1719,7 @@ CONTAINS
         REAl(realk), POINTER, CONTIGUOUS :: isIfcVicSq(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dx(:), dy(:), dz(:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        INTEGER(intk) :: ista, iend, jsta, jend, ksta, kend
 
         isIfcVicFldName = "ISIFCVICS"//int2char(q)
 
@@ -1724,8 +1742,10 @@ CONTAINS
             CALL get_fieldptr(ddz, "DDZ", igrid)
 
             CALL sel_vel(q, u, v, w, vel)
+            CALL get_lp_bnds(igrid, q, ista, iend, jsta, jend, ksta, kend)
             CALL comp_adve_stg_grd(kk, jj, ii, q, l, vel, advr, adve, &
-                isIfcVicSq, dx, dy, dz, ddx, ddy, ddz, dt)
+                isIfcVicSq, dx, dy, dz, ddx, ddy, ddz, dt, &
+                ista, iend, jsta, jend, ksta, kend)
         END DO
 
     END SUBROUTINE comp_adve_stg
@@ -1733,7 +1753,8 @@ CONTAINS
     !================================================================
 
     SUBROUTINE comp_adve_stg_grd(kk, jj, ii, q, l, vel, advr, adve, &
-        isIfcVic, dx, dy, dz, ddx, ddy, ddz, dt)
+        isIfcVic, dx, dy, dz, ddx, ddy, ddz, dt, &
+        ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
     !   What it does:
     !   Selects interpolation scheme.
@@ -1748,16 +1769,19 @@ CONTAINS
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dt
+        INTEGER(intk), INTENT(in) :: ista, iend, jsta, jend, ksta, kend
 
         ! Local variables
         ! None
 
         IF ( advScm == "QUICK" ) THEN
             CALL comp_adve_stg_quick(kk, jj, ii, q, l, vel, advr, &
-                adve, isIfcVic, dx, dy, dz, ddx, ddy, ddz, dt)
+                adve, isIfcVic, dx, dy, dz, ddx, ddy, ddz, dt, &
+                ista, iend, jsta, jend, ksta, kend)
         ELSEIF ( advScm == "ENO" ) THEN
             CALL comp_adve_stg_eno(kk, jj, ii, q, l, vel, advr, &
-                adve, dx, dy, dz, ddx, ddy, ddz, dt)
+                adve, dx, dy, dz, ddx, ddy, ddz, dt, &
+                ista, iend, jsta, jend, ksta, kend)
         ELSE
             CALL err_abort(vofErr, "Unknown interpolation.", __FILE__, __LINE__)
         ENDIF
@@ -1767,7 +1791,8 @@ CONTAINS
     !================================================================
 
     SUBROUTINE comp_adve_stg_quick(kk, jj, ii, q, l, vel, &
-        advr, adve, isIfcVic, dx, dy, dz, ddx, ddy, ddz, dt)
+        advr, adve, isIfcVic, dx, dy, dz, ddx, ddy, ddz, dt, &
+        ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
     !   What it does:
     !   QUICK interpolation to compute the advected veloctiy
@@ -1808,6 +1833,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dt
+        INTEGER(intk), INTENT(in) :: ista, iend, jsta, jend, ksta, kend
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -1831,9 +1857,9 @@ CONTAINS
             dcx = ddx ; dcy = ddy ; dcz = ddz
         ENDIF
 
-        DO i = 2, ii-2
-            DO j = 2, jj-2
-                DO k = 2, kk-2
+        DO i = ista-il, iend
+            DO j = jsta-jl, jend
+                DO k = ksta-kl, kend
                     signInd(1) = MERGE(1.0_realk, 0.0_realk, advr(k,j,i) >= 0.0_realk)
                     signInd(2) = 1.0_realk - signInd(1)
                     iFacInd(1) = MERGE(1.0_realk, 0.0_realk, isIfcVic(k,j,i) > 0.0_realk)
@@ -1895,7 +1921,8 @@ CONTAINS
     !================================================================
 
     SUBROUTINE comp_adve_stg_eno(kk, jj, ii, q, l, vel, &
-        advr, adve, dx, dy, dz, ddx, ddy, ddz, dt)
+        advr, adve, dx, dy, dz, ddx, ddy, ddz, dt, &
+        ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
     !   What it does:
     !   ENO interpolation to compute the advected veloctiy
@@ -1930,6 +1957,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: dx(ii), dy(jj), dz(kk)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         REAL(realk), INTENT(in) :: dt
+        INTEGER(intk), INTENT(in) :: ista, iend, jsta, jend, ksta, kend
 
         ! Loval variables
         INTEGER(intk) :: k, j, i, kl, jl, il
@@ -1951,9 +1979,9 @@ CONTAINS
             dcx = ddx ; dcy = ddy ; dcz = ddz
         ENDIF
 
-        DO i = 2, ii-2
-            DO j = 2, jj-2
-                DO k = 2, kk-2
+        DO i = ista-il, iend
+            DO j = jsta-jl, jend
+                DO k = ksta-kl, kend
                     signInd(1) = MERGE(1.0_realk, 0.0_realk, advr(k,j,i) >= 0.0_realk)
                     signInd(2) = 1.0_realk - signInd(1)
 
@@ -2009,6 +2037,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: vel(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: advr(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        INTEGER(intk) :: ista, iend, jsta, jend, ksta, kend
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
@@ -2024,16 +2053,17 @@ CONTAINS
             CALL get_fieldptr(ddz, "DDZ", igrid)
 
             CALL sel_vel(l, up, vp, wp, vel)
-            CALL comp_advr_stg_grd(kk, jj, ii, q, l, vel, advr, &
-                ddx, ddy, ddz)
+            CALL get_lp_bnds(igrid, q, ista, iend, jsta, jend, ksta, kend)
+            CALL comp_advr_stg_grd(kk, jj, ii, q, l, vel, advr, ddx, ddy, ddz, &
+                ista, iend, jsta, jend, ksta, kend)
         END DO
 
     END SUBROUTINE comp_advr_stg
 
     !================================================================
 
-    SUBROUTINE comp_advr_stg_grd(kk, jj, ii, q, l, &
-        vel, advr, ddx, ddy, ddz)
+    SUBROUTINE comp_advr_stg_grd(kk, jj, ii, q, l, vel, advr, ddx, ddy, ddz, &
+        ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
     !   What it does:
     !   Linear interpolation to compute the advecting velocity
@@ -2052,26 +2082,28 @@ CONTAINS
         REAL(realk), INTENT(in) :: vel(kk, jj, ii)
         REAL(realk), INTENT(inout) :: advr(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        INTEGER(intk), INTENT(in) :: ista, iend, jsta, jend, ksta, kend
 
         ! Loval variables
         INTEGER(intk) :: k, j, i
-        INTEGER(intk) :: kq, jq, iq
+        INTEGER(intk) :: kl, jl, il, kq, jq, iq
         REAL(realk) :: ddnqMi, ddnqPl
 
+        CALL sel_ind(l, il, jl, kl)
         CALL sel_ind(q, iq, jq, kq)
 
         IF ( q == l ) THEN
-            DO i = 2, ii-2
-                DO j = 2, jj-2
-                    DO k = 2, kk-2
+            DO i = ista-il, iend
+                DO j = jsta-jl, jend
+                    DO k = ksta-kl, kend
                         advr(k,j,i) = 0.5_realk*(vel(k,j,i) + vel(k+kq,j+jq,i+iq))
                     ENDDO
                 ENDDO
             ENDDO
         ELSE
-            DO i = 2, ii-2
-                DO j = 2, jj-2
-                    DO k = 2, kk-2
+            DO i = ista-il, iend
+                DO j = jsta-jl, jend
+                    DO k = ksta-kl, kend
                         ddnqMi = iq*ddx(i) + jq*ddy(j) + kq*ddz(k)
                         ddnqPl = iq*ddx(i+iq) + jq*ddy(j+jq) + kq*ddz(k+kq)
                         advr(k,j,i) = (vel(k,j,i)*ddnqMi + vel(k+kq,j+jq,i+iq)*ddnqPl)/(ddnqMi + ddnqPl)
