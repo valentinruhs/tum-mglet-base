@@ -18,7 +18,6 @@ MODULE mph_vof_mod
     USE fields_mod, ONLY: get_field, set_field, get_fieldptr
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_gradpxflag, &
         minlevel, maxlevel
-    USE flowcore_mod, ONLY: gradp
     USE connect2_mod, ONLY: connect
     USE parent_mod, ONLY: parent
     USE ftoc_mod, ONLY: ftoc
@@ -888,7 +887,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE pres_operator(uo_f, vo_f, wo_f)
+    SUBROUTINE pres_operator(uo_f, vo_f, wo_f, gradp)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -896,6 +895,7 @@ CONTAINS
 
         ! Subroutine arguments
         TYPE(field_t), INTENT(inout) :: uo_f, vo_f, wo_f
+        REAL(realk), INTENT(in) :: gradp(3)
 
         ! Local variables
         INTEGER(intk) :: n, igrid
@@ -934,7 +934,7 @@ CONTAINS
             CALL get_lp_mdf(igrid, nfro, nbac, nrgt, nlft, nbot, ntop, &
                 nfu, nbu, nrv, nlv, nbw, ntw)
             CALL pres_operator_grd(kk, jj, ii, cS1, cS2, cS3, p, dBa, dLe, dTo, &
-                rdx, rdy, rdz, uo, vo, wo, gradpflag, nfu, nbu, nrv, nlv, nbw, ntw)
+                rdx, rdy, rdz, uo, vo, wo, gradpflag, gradp, nfu, nbu, nrv, nlv, nbw, ntw)
         END DO
 
     END SUBROUTINE pres_operator
@@ -942,7 +942,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE pres_operator_grd(kk, jj, ii, cS1, cS2, cS3, p, dBa, dLe, dTo, &
-        rdx, rdy, rdz, uo, vo, wo, gradpflag, nfu, nbu, nrv, nlv, nbw, ntw)
+        rdx, rdy, rdz, uo, vo, wo, gradpflag, gradp, nfu, nbu, nrv, nlv, nbw, ntw)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -956,6 +956,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
         REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: gradpflag
+        REAL(realk), INTENT(in) :: gradp(3)
         INTEGER(intk), INTENT(in) :: nfu, nbu, nrv, nlv, nbw, ntw
 
         ! Local variables

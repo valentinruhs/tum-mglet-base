@@ -86,7 +86,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE mph_step(uo_f, vo_f, wo_f, dt, irk, itstep, timeph)
+    SUBROUTINE mph_step(uo_f, vo_f, wo_f, dt, irk, itstep, timeph, gradp)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -96,6 +96,7 @@ CONTAINS
         TYPE(field_t), INTENT(inout) :: uo_f, vo_f, wo_f
         REAL(realk), INTENT(in) :: dt, timeph
         INTEGER(intk), INTENT(in) :: irk, itstep
+        REAL(realk), INTENT(in) :: gradp(3)
 
         IF ( irk == 1 ) THEN
             IF ( frcVelFld ) CALL frc_vel_fld(timeph + 0.5_realk*dt)
@@ -105,7 +106,7 @@ CONTAINS
         END IF
 
         CALL diff_operator(uo_f, vo_f, wo_f)
-        CALL pres_operator(uo_f, vo_f, wo_f)
+        CALL pres_operator(uo_f, vo_f, wo_f, gradp)
         CALL exte_operator(uo_f, vo_f, wo_f)
 
     END SUBROUTINE mph_step

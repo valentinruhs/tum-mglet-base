@@ -17,9 +17,6 @@ MODULE mph_test_mod
     USE precision_mod, ONLY: realk, intk, pi
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_bbox, minlevel, maxlevel
     USE fields_mod, ONLY: get_fieldptr
-    USE bound_flow_mod, ONLY: bound_flow
-    USE parent_mod, ONLY: parent
-    USE connect2_mod, ONLY: connect
     USE field_mod, ONLY: field_t
     USE fields_mod, ONLY: get_field
     USE fort7_mod, ONLY: dcont
@@ -41,7 +38,8 @@ MODULE mph_test_mod
     INTEGER(intk), PROTECTED :: tstId
     REAL(realk), PROTECTED :: circumf, area
 
-    PUBLIC :: init_mph_test, finish_mph_test, frc_vel_fld, isRevTst, comp_abs_res, circumf, area, shape, frcVelFld
+    PUBLIC :: init_mph_test, finish_mph_test, frc_vel_fld, isRevTst, comp_abs_res, circumf, &
+        area, shape, frcVelFld
 
     TYPE :: shape_t
         INTEGER(intk) :: shp = shpCircle
@@ -126,7 +124,7 @@ CONTAINS
         CALL prlg(fldName="C")
         CALL comp_ifc()
         IF ( .NOT. dcont ) CALL init_vel()
-        IF ( .NOT. dcont ) CALL init_pre(shape)
+        IF ( .NOT. dcont ) CALL init_pre()
         CALL rstr(fldName="P", flag="P")
         CALL prlg(fldName="P")
 
@@ -619,14 +617,13 @@ CONTAINS
         CHARACTER(len=4), INTENT(in) :: flowStateFlag
 
         ! Local variables
-        INTEGER(intk) :: n, igrid, ilevel
+        INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
         INTEGER :: nSeed, s
         INTEGER, ALLOCATABLE :: seed(:)
         REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
         REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), w(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
-        TYPE(field_t), POINTER :: u_f, v_f, w_f, p_f
 
         CALL RANDOM_SEED(size=nSeed)
         ALLOCATE(seed(nSeed))
@@ -646,17 +643,6 @@ CONTAINS
  
             CALL set_vel_cha_grid(kk, jj, ii, u, w, ddx, ddy, ddz, &
                 minx, miny, minz, ReTau, h, lx, lz, flowStateFlag)
-        END DO
-
-        CALL get_field(u_f, "U")
-        CALL get_field(v_f, "V")
-        CALL get_field(w_f, "W")
-        CALL get_field(p_f, "P")
-
-        DO ilevel = minlevel, maxlevel
-            CALL parent(ilevel, u_f, v_f, w_f, p_f)
-            CALL bound_flow%bound(ilevel, u_f, v_f, w_f, p_f)
-            CALL connect(ilevel, 2, v1=u_f, v2=v_f, v3=w_f, s1=p_f, corners=.TRUE.)
         END DO
 
     END SUBROUTINE set_vel_cha
@@ -810,21 +796,21 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE init_pre(s)
+    SUBROUTINE init_pre()
     !----------------------------------------------------------------
     !   What it does:
     !   
     !----------------------------------------------------------------
 
         ! Subroutine arguments
-        TYPE(shape_t), INTENT(in) :: s
+        ! None
 
         ! Local variables
         ! None
 
         SELECT CASE ( tstId )
         CASE ( tstOpCFl )
-            CALL set_pre_cha(s)
+            CALL set_pre_cha(shape)
         CASE DEFAULT
             CONTINUE
         END SELECT

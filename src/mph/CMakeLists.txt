@@ -19,6 +19,5 @@ target_include_directories(mph
 target_link_libraries(mph
     PRIVATE core
     PRIVATE ib
-    PRIVATE flow
     PRIVATE ${MPI_Fortran_LIBRARIES}
 )

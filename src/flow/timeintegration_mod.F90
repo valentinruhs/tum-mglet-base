@@ -37,6 +37,7 @@ CONTAINS
         TYPE(field_t), POINTER :: u, v, w, ut, vt, wt, pwu, pwv, pww, p, g
         TYPE(field_t), POINTER :: du, dv, dw
         TYPE(field_t) :: uo, vo, wo
+        LOGICAL :: firstCall = .TRUE.
 
         ! Just return if no flow is to be solved
         IF (.NOT. solve_flow) RETURN
@@ -47,6 +48,19 @@ CONTAINS
         CALL get_field(w, "W")
         CALL get_field(p, "P")
         CALL get_field(g, "G")
+
+        ! Fill initial ghost-layers in the multi-phase case. Performed here,
+        ! so that the mph routines don't have to use bound_flow. That's a 
+        ! work-around -> first itinfo_flow prints wrong divergence and 
+        ! timeintegrate_scalar uses empty ghost-layers in the multi-phase case.
+        IF (firstCall .AND. hasMph) THEN
+            DO ilevel = minlevel, maxlevel
+                CALL parent(ilevel, u, v, w, p)
+                CALL bound_flow%bound(ilevel, u, v, w, p)
+                CALL connect(ilevel, 2, v1=u, v2=v, v3=w, s1=p, corners=.TRUE.)
+            END DO
+            firstCall = .FALSE.
+        END IF
 
         ! In all implemented RK schemes FRHS is 0.0 for IRK 1, this means
         ! that the method itself takes care of "initializing" these fields
@@ -94,22 +108,19 @@ CONTAINS
         END IF
 
         IF ( hasMph ) THEN
-            CALL mph_step(uo, vo, wo, dt, irk, itstep, timeph)
-            CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
-            CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
-            CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
+            CALL mph_step(uo, vo, wo, dt, irk, itstep, timeph, gradp)
         ELSE
             ! TSTLE4 zeroize uo, vo, wo before use internally
             CALL tstle4(uo, vo, wo, pwu, pwv, pww, ut, vt, wt, p, g)
             CALL boussinesqterm(uo, vo, wo)
             CALL coriolisterm(uo, vo, wo)
-
-            ! dU_j = A_j*dU_(j-1) + dt*uo
-            ! U_j = U_(j-1) + B_j*dU_j
-            CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
-            CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
-            CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
         END IF
+
+        ! dU_j = A_j*dU_(j-1) + dt*uo
+        ! U_j = U_(j-1) + B_j*dU_j
+        CALL rkstep(u%arr, du%arr, uo%arr, frhs, dt*fu)
+        CALL rkstep(v%arr, dv%arr, vo%arr, frhs, dt*fu)
+        CALL rkstep(w%arr, dw%arr, wo%arr, frhs, dt*fu)
 
         IF (ib%type == "GHOSTCELL") THEN
             ! Equivalent to old "cop3dzero"
