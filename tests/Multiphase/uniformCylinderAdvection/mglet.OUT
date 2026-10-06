@@ -1,0 +1,120 @@
+
+M G L E T - Multi Grid Large Eddy Turbulence
+
+MPI INFORMATION:
+    Processes:     1
+    Serial IO:     F
+    MPI version:   Open MPI v4.1.6, package: Debian OpenMPI, ident: 4.1.6, repo rev: v4.1.6, Sep 30, 2023 
+
+IEEE aritmetic flags:
+    Underflow:     gradual
+    FPE traps:     divide_by_zero invalid overflow
+
+BUILD INFORMATION:
+    Date:          Oct  6 2026
+    Time:          09:54:15
+    Compiler:      GCC version 13.3.0
+    Options:       -cpp -I /usr/lib/x86_64-linux-gnu/fortran/gfortran-mod-15/openmpi -I /usr/lib/x86_64-linux-gnu/openmpi/lib -I /usr/local/hdf5/include -I /usr/include -imultiarch x86_64-linux-gnu -D _MGLET_DOUBLE_PRECISION_=1 -D _MGLET_IFK64_=1 -D NDEBUG -mtune=generic -march=x86-64 -g -O3 -O3 -Wall -Wextra -Wpedantic -Werror -Wno-maybe-uninitialized -Wno-unused-dummy-argument -Wno-uninitialized -std=f2018 -fPIC -fimplicit-none -ffpe-trap=invalid,zero,overflow -fopenmp-simd -ffree-line-length-none -finit-real=zero -J ../../modules -fpre-include=/usr/include/finclude/x86_64-linux-gnu/math-vector-fortran.h
+    OpenMP:        disabled
+
+COMPILED PRECISION:
+    REAL:          8 bytes
+    INTEGER:       4 bytes
+    INTEGER(ifk):  8 bytes
+
+JOB INFORMATION:
+    Date:          2026-10-06
+    Time:          10:57:53
+
+HDF5 collective IO: T
+
+GRIDS PER LEVEL AND PROCESS:
+==================================
+ Level:           1      2    Sum
+----------------------------------
+ Rank     0:      4     24     28
+----------------------------------
+ Sum:             4     24     28
+==================================
+
+ARRAY DIMENSIONS:
+    idim3d:        10752
+    idim2d:        1792
+    idim1d:        224
+
+Read gridspacing arrays in  0.003 seconds
+
+CONNECT STATISTICS:
+    Faces:             136    with geometry:     136
+    Lines:             320    with geometry:     320
+    Corners:           224    with geometry:     224
+
+Using 'noib' immersed boundary method
+
+Initial volume is: 0.31411E-01
+
+NO SCALAR
+
+ENABLING SNAPSHOTS:
+    file:   snapshots.h5
+    itsamp:             125
+    tstart:       0.0000000
+    nfields:               9
+        U               
+        V               
+        W               
+        P               
+        C               
+        NORMX           
+        NORMY           
+        NORMZ           
+        ALPHA           
+
+ITSTEP, WTIME, DELTA:        0           0.000           0.000
+ITTOT, TIME, DT:             0      0.00000000      1.0000E-01
+LEVEL:  1 IPC=   0 DIVMAX=   0.0000E+00 CFLMAX=   0.02560
+LEVEL:  2 IPC=   0 DIVMAX=   0.0000E+00 CFLMAX=   0.05120
+
+ITSTEP, WTIME, DELTA:      125           3.846           0.031
+ITTOT, TIME, DT:           125     12.50000000      1.0000E-01
+LEVEL:  1 IPC=  50 DIVMAX=   4.0836E-13 CFLMAX=   0.02560
+LEVEL:  2 IPC=  50 DIVMAX=   2.1334E-15 CFLMAX=   0.05120
+ABSVOLERR, RELVOLERR:     0.0000000000E+00    0.0000000000E+00
+xCtr, yCtr, zCtr:     0.4073857614E+00    0.4073659887E+00    0.5000000000E+00
+
+Writing snapshot at ittot = 125
+
+ITSTEP, WTIME, DELTA:      250           8.151           0.034
+ITTOT, TIME, DT:           250     25.00000000      1.0000E-01
+LEVEL:  1 IPC= 100 DIVMAX=   2.1246E-13 CFLMAX=   0.02560
+LEVEL:  2 IPC= 100 DIVMAX=   2.0211E-16 CFLMAX=   0.05120
+ABSVOLERR, RELVOLERR:     0.1387778781E-16    0.4418105847E-15
+xCtr, yCtr, zCtr:     0.6146494921E+00    0.6146412860E+00    0.5000000000E+00
+
+Writing snapshot at ittot = 250
+
+ITSTEP, WTIME, DELTA:      375          12.456           0.034
+ITTOT, TIME, DT:           375     37.50000000      1.0000E-01
+LEVEL:  1 IPC= 150 DIVMAX=   3.1241E-13 CFLMAX=   0.02560
+LEVEL:  2 IPC= 150 DIVMAX=   1.0056E-16 CFLMAX=   0.05120
+ABSVOLERR, RELVOLERR:     0.0000000000E+00    0.0000000000E+00
+xCtr, yCtr, zCtr:     0.8222897172E+00    0.8222562746E+00    0.5000000000E+00
+
+Writing snapshot at ittot = 375
+
+STOP SIMULATION, MTSTEP REACHED          375          375
+
+Opening file fields.h5 with mode w
+
+Final volume is: 0.31411E-01
+Absolute volume error: 0.00000E+00
+Relative volume error: 0.00000E+00
+E_{l=1,B=1} initial: 0.37470E-02
+E_{l=1,B=L} initial: 0.59635E-02
+E_{l=1,B=1}: 0.12569E+00
+E_{l=1,B=L}: 0.20003E+00
+
+Wrote all fields in  0.007 seconds
+
+MGLET FINISHED SUCCESSFULLY!
+

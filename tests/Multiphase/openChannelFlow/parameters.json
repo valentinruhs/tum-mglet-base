@@ -1,12 +1,12 @@
 {
     "time": {
         "dt": 0.001,
-        "mtstep": 10,
+        "mtstep": 100,
 	"itinfo": 1,
 	"read": false
     },
     "io": {
-        "grids": "grids.h5",
+        "grids": "gridsRefi.h5",
         "infile": "fields_in.h5",
         "outfile": "fields.h5"
     },
@@ -20,7 +20,7 @@
 	"gradp": [-1.0, 0.0, 0.0],
         "pressuresolver": {
             "type": "sip",
-            "epcorr": 1.0E-12,
+            "epcorr": 1.0E-8,
             "nouter": 90,
             "ninner": 50,
 	    "loglevel": 2
@@ -32,7 +32,7 @@
     
     "multiphase": {
 	"test": "Open Channel Flow",
-	"skipAdvection": false,
+	"skipAdvection": true,
    	"skipDiffusion": false,
     	"skipPressure": false,
     	"skipExternal": false,

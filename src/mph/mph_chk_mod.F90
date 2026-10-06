@@ -83,8 +83,11 @@ CONTAINS
 
         CALL comp_vol(volInit)
         CALL comp_L_norm_err(L1Init, L2Init)
-        WRITE(*,'(A,E11.5)') "Initial volume is: ", volInit
-        WRITE(*, '()')
+
+        IF (myid == 0) THEN
+            WRITE(*,'(A,E11.5)') "Initial volume is: ", volInit
+            WRITE(*, '()')
+        END IF
 
     END SUBROUTINE init_mph_chk
 

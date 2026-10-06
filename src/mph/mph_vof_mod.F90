@@ -16,7 +16,7 @@ MODULE mph_vof_mod
     USE precision_mod, ONLY: intk, realk
     USE field_mod, ONLY: field_t
     USE fields_mod, ONLY: get_field, set_field, get_fieldptr
-    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_gradpxflag, &
+    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, &
         minlevel, maxlevel
     USE connect2_mod, ONLY: connect
     USE parent_mod, ONLY: parent
@@ -28,7 +28,7 @@ MODULE mph_vof_mod
     USE mph_utils_mod, ONLY: sel_ind, sel_ext, sel_vel, clp, int2char, get_lp_mdf, get_lp_bnds
     USE mph_plic_mod, ONLY: comp_ifc, comp_c_stg, comp_isIfc_stg, comp_c_loc
     USE mph_props_mod, ONLY: comp_d_stg
-    USE mph_bound_c_mod, ONLY: bound_c
+    USE mph_bound_c_mod, ONLY: bound_c, bound_stg
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -559,9 +559,9 @@ CONTAINS
 
         ! Initialize stg. grid cS(.), dS(.), mS(.), cWyS(.)
         DO q = 1, 3
-            IF ( skpAdv ) CYCLE
             CALL comp_c_stg(q)
             CALL comp_d_stg(q)
+            IF ( skpAdv ) CYCLE
             CALL comp_m_stg(q)
             CALL comp_cWy_stg(q)
         END DO
@@ -619,10 +619,12 @@ CONTAINS
             END IF
 
             ! Update u, v, w with mS(.) and dS(.)
-            DO q = 1, 3
-                IF ( skpAdv ) CYCLE
-                CALL upd_vel_stg(q)
-            END DO
+            IF ( .NOT. skpAdv ) THEN
+                DO q = 1, 3
+                    CALL upd_vel_stg(q)
+                END DO
+                CALL prlg_stg(fldName1="U", fldName2="V", fldName3="W")
+            END IF
 
             CALL comp_ifc()
         END DO
@@ -811,8 +813,10 @@ CONTAINS
             i = 3
             DO j = 2, jj-1
                 DO k = 2, kk-1
-                    vo(k,j,i) = vo(k,j,i) - wall_acc(gUv(k,j,i-1), dLe(k,j,i), ddx(i), v(k,j,i))
-                    wo(k,j,i) = wo(k,j,i) - wall_acc(gUw(k,j,i-1), dTo(k,j,i), ddx(i), w(k,j,i))
+                    vo(k,j,i) = vo(k,j,i) - wall_acc(gUv(k,j,i-1), dLe(k,j,i), &
+                        ddx(i), rdx(i-1), v(k,j,i), v(k,j,i-1))
+                    wo(k,j,i) = wo(k,j,i) - wall_acc(gUw(k,j,i-1), dTo(k,j,i), &
+                        ddx(i), rdx(i-1), w(k,j,i), w(k,j,i-1))
                 END DO
             END DO
         END IF
@@ -822,8 +826,10 @@ CONTAINS
             i = ii-2
             DO j = 2, jj-1
                 DO k = 2, kk-1
-                    vo(k,j,i) = vo(k,j,i) - wall_acc(gUv(k,j,i), dLe(k,j,i), ddx(i), v(k,j,i))
-                    wo(k,j,i) = wo(k,j,i) - wall_acc(gUw(k,j,i), dTo(k,j,i), ddx(i), w(k,j,i))
+                    vo(k,j,i) = vo(k,j,i) - wall_acc(gUv(k,j,i), dLe(k,j,i), &
+                        ddx(i), rdx(i), v(k,j,i), v(k,j,i+1))
+                    wo(k,j,i) = wo(k,j,i) - wall_acc(gUw(k,j,i), dTo(k,j,i), &
+                        ddx(i), rdx(i), w(k,j,i), w(k,j,i+1))
                 END DO
             END DO
         END IF
@@ -833,8 +839,10 @@ CONTAINS
             j = 3
             DO i = 2, ii-1
                 DO k = 2, kk-1
-                    uo(k,j,i) = uo(k,j,i) - wall_acc(gUv(k,j-1,i), dBa(k,j,i), ddy(j), u(k,j,i))
-                    wo(k,j,i) = wo(k,j,i) - wall_acc(gVw(k,j-1,i), dTo(k,j,i), ddy(j), w(k,j,i))
+                    uo(k,j,i) = uo(k,j,i) - wall_acc(gUv(k,j-1,i), dBa(k,j,i), &
+                        ddy(j), rdy(j-1), u(k,j,i), u(k,j-1,i))
+                    wo(k,j,i) = wo(k,j,i) - wall_acc(gVw(k,j-1,i), dTo(k,j,i), &
+                        ddy(j), rdy(j-1), w(k,j,i), w(k,j-1,i))
                 END DO
             END DO
         END IF
@@ -844,8 +852,10 @@ CONTAINS
             j = jj-2
             DO i = 2, ii-1
                 DO k = 2, kk-1
-                    uo(k,j,i) = uo(k,j,i) - wall_acc(gUv(k,j,i), dBa(k,j,i), ddy(j), u(k,j,i))
-                    wo(k,j,i) = wo(k,j,i) - wall_acc(gVw(k,j,i), dTo(k,j,i), ddy(j), w(k,j,i))
+                    uo(k,j,i) = uo(k,j,i) - wall_acc(gUv(k,j,i), dBa(k,j,i), &
+                        ddy(j), rdy(j), u(k,j,i), u(k,j+1,i))
+                    wo(k,j,i) = wo(k,j,i) - wall_acc(gVw(k,j,i), dTo(k,j,i), &
+                        ddy(j), rdy(j), w(k,j,i), w(k,j+1,i))
                 END DO
             END DO
         END IF
@@ -855,8 +865,10 @@ CONTAINS
             k = 3
             DO i = 2, ii-1
                 DO j = 2, jj-1
-                    uo(k,j,i) = uo(k,j,i) - wall_acc(gUw(k-1,j,i), dBa(k,j,i), ddz(k), u(k,j,i))
-                    vo(k,j,i) = vo(k,j,i) - wall_acc(gVw(k-1,j,i), dLe(k,j,i), ddz(k), v(k,j,i))
+                    uo(k,j,i) = uo(k,j,i) - wall_acc(gUw(k-1,j,i), dBa(k,j,i), &
+                        ddz(k), rdz(k-1), u(k,j,i), u(k-1,j,i))
+                    vo(k,j,i) = vo(k,j,i) - wall_acc(gVw(k-1,j,i), dLe(k,j,i), &
+                        ddz(k), rdz(k-1), v(k,j,i), v(k-1,j,i))
                 END DO
             END DO
         END IF
@@ -866,21 +878,23 @@ CONTAINS
             k = kk-2
             DO i = 2, ii-1
                 DO j = 2, jj-1
-                    uo(k,j,i) = uo(k,j,i) - wall_acc(gUw(k,j,i), dBa(k,j,i), ddz(k), u(k,j,i))
-                    vo(k,j,i) = vo(k,j,i) - wall_acc(gVw(k,j,i), dLe(k,j,i), ddz(k), v(k,j,i))
+                    uo(k,j,i) = uo(k,j,i) - wall_acc(gUw(k,j,i), dBa(k,j,i), &
+                        ddz(k), rdz(k), u(k,j,i), u(k+1,j,i))
+                    vo(k,j,i) = vo(k,j,i) - wall_acc(gVw(k,j,i), dLe(k,j,i), &
+                        ddz(k), rdz(k), v(k,j,i), v(k+1,j,i))
                 END DO
             END DO
         END IF
 
     CONTAINS
 
-        PURE ELEMENTAL REAL(realk) FUNCTION wall_acc(mu, d, dds, vel) RESULT(acc)
+        PURE ELEMENTAL REAL(realk) FUNCTION wall_acc(mu, d, dds, rds, vel, velGst) RESULT(acc)
         !------------------------------------------------------------
         ! Equivalent to Werner-Wengle laminar sublayer case, but for
         ! multi-phase fluid properties.
         !------------------------------------------------------------
-            REAL(realk), INTENT(in) :: mu, d, dds, vel
-            acc = 2.0_realk*mu*vel/(d*dds*dds)
+            REAL(realk), INTENT(in) :: mu, d, dds, rds, vel, velGst
+            acc = (2.0_realk*mu*vel/dds - mu*(vel - velGst)*rds)/(d*dds)
         END FUNCTION wall_acc
 
     END SUBROUTINE swcle3d_grid
@@ -905,7 +919,6 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: uo(:,:,:), vo(:,:,:), wo(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dBa(:,:,:), dLe(:,:,:), dTo(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: rdx(:), rdy(:), rdz(:)
-        INTEGER(intk) :: gradpflag
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
         INTEGER(intk) :: nfu, nbu, nrv, nlv, nbw, ntw
 
@@ -930,11 +943,10 @@ CONTAINS
             CALL get_fieldptr(rdy, "RDY", igrid)
             CALL get_fieldptr(rdz, "RDZ", igrid)
 
-            CALL get_gradpxflag(gradpflag, igrid)
             CALL get_lp_mdf(igrid, nfro, nbac, nrgt, nlft, nbot, ntop, &
                 nfu, nbu, nrv, nlv, nbw, ntw)
             CALL pres_operator_grd(kk, jj, ii, cS1, cS2, cS3, p, dBa, dLe, dTo, &
-                rdx, rdy, rdz, uo, vo, wo, gradpflag, gradp, nfu, nbu, nrv, nlv, nbw, ntw)
+                rdx, rdy, rdz, uo, vo, wo, gradp, nfu, nbu, nrv, nlv, nbw, ntw)
         END DO
 
     END SUBROUTINE pres_operator
@@ -942,7 +954,7 @@ CONTAINS
     !================================================================
 
     SUBROUTINE pres_operator_grd(kk, jj, ii, cS1, cS2, cS3, p, dBa, dLe, dTo, &
-        rdx, rdy, rdz, uo, vo, wo, gradpflag, gradp, nfu, nbu, nrv, nlv, nbw, ntw)
+        rdx, rdy, rdz, uo, vo, wo, gradp, nfu, nbu, nrv, nlv, nbw, ntw)
     !----------------------------------------------------------------
     !   What it does:
     !   
@@ -955,7 +967,6 @@ CONTAINS
         REAL(realk), INTENT(in) :: dBa(kk, jj, ii), dLe(kk, jj, ii), dTo(kk, jj, ii)
         REAL(realk), INTENT(in) :: rdx(ii), rdy(jj), rdz(kk)
         REAL(realk), INTENT(inout) :: uo(kk, jj, ii), vo(kk, jj, ii), wo(kk, jj, ii)
-        INTEGER(intk), INTENT(in) :: gradpflag
         REAL(realk), INTENT(in) :: gradp(3)
         INTEGER(intk), INTENT(in) :: nfu, nbu, nrv, nlv, nbw, ntw
 
@@ -966,7 +977,7 @@ CONTAINS
         DO i = 3-nfu, ii-3+nbu
             DO j = 3, jj-2
                 DO k = 3, kk-2
-                    gpx = gradp(1)*gradpflag*cS1(k, j, i)
+                    gpx = gradp(1)*cS1(k, j, i)
                     uo(k,j,i) = uo(k,j,i) - 1.0_realk/dBa(k,j,i)*((p(k,j,i+1) - p(k,j,i))*rdx(i) + gpx)
                 END DO
             END DO
@@ -975,7 +986,7 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3-nrv, jj-3+nlv
                 DO k = 3, kk-2
-                    gpy = gradp(2)*gradpflag*cS2(k, j, i)
+                    gpy = gradp(2)*cS2(k, j, i)
                     vo(k,j,i) = vo(k,j,i) - 1.0_realk/dLe(k,j,i)*((p(k,j+1,i) - p(k,j,i))*rdy(j) + gpy)
                 END DO
             END DO
@@ -984,7 +995,7 @@ CONTAINS
         DO i = 3, ii-2
             DO j = 3, jj-2
                 DO k = 3-nbw, kk-3+ntw
-                    gpz = gradp(3)*gradpflag*cS3(k, j, i)
+                    gpz = gradp(3)*cS3(k, j, i)
                     wo(k,j,i) = wo(k,j,i) - 1.0_realk/dTo(k,j,i)*((p(k+1,j,i) - p(k,j,i))*rdz(k) + gpz)
                 END DO
             END DO
@@ -1410,63 +1421,75 @@ CONTAINS
     SUBROUTINE upd_vel_stg(q)
     !----------------------------------------------------------------
     !   What it does:
-    !   
+    !   Updates velocity component q from the advected staggered
+    !   momentum and density, vel = mS(q)/dS(q). Only the unknowns
+    !   owned by the grid are updated, i.e. the same loop bounds as
+    !   in adv_m_stg (see get_lp_bnds). Faces on walls and refinement
+    !   boundaries as well as ghost layers are not touched here; the
+    !   refinement boundaries and ghost layers are filled afterwards
+    !   by prlg_stg("U", "V", "W") in adve_operator.
     !----------------------------------------------------------------
-
+ 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: q
-
+ 
         ! Local variables
         CHARACTER(len=3) :: dFldName, mFldName
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
+        INTEGER(intk) :: ista, iend, jsta, jend, ksta, kend
         REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: vel(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dSq(:,:,:), mSq(:,:,:)
-
-        dFldName = "DS"//int2Char(q)
-        mFldName = "MS"//int2Char(q)
-
+ 
+        dFldName = "DS"//int2char(q)
+        mFldName = "MS"//int2char(q)
+ 
         DO n = 1, nmygrids
             igrid = mygrids(n)
-
+ 
             CALL get_mgdims(kk, jj, ii, igrid)
-
+ 
             CALL get_fieldptr(dSq, dFldName, igrid)
+            CALL get_fieldptr(mSq, mFldName, igrid)
             CALL get_fieldptr(u, "U", igrid)
             CALL get_fieldptr(v, "V", igrid)
             CALL get_fieldptr(w, "W", igrid)
-            CALL get_fieldptr(mSq, mFldName, igrid)
-
-            CALL upd_vel_stg_grd(kk, jj, ii, q, dSq, u, v, w, mSq)
+ 
+            CALL sel_vel(q, u, v, w, vel)
+            CALL get_lp_bnds(igrid, q, ista, iend, jsta, jend, ksta, kend)
+            CALL upd_vel_stg_grd(kk, jj, ii, dSq, mSq, vel, &
+                ista, iend, jsta, jend, ksta, kend)
         END DO
-
+ 
     END SUBROUTINE upd_vel_stg
-
+ 
     !================================================================
-
-    SUBROUTINE upd_vel_stg_grd(kk, jj, ii, q, dSq, u, v, w, mSq)
+ 
+    SUBROUTINE upd_vel_stg_grd(kk, jj, ii, dSq, mSq, vel, &
+        ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
     !   What it does:
-    !   
+    !   vel = mS/dS on the unknowns owned by the grid.
     !----------------------------------------------------------------
-
+ 
         ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: kk, jj, ii, q
-        REAL(realk), INTENT(in) :: dSq(kk, jj, ii)
-        REAL(realk), INTENT(inout) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
-        REAL(realk), INTENT(in) :: mSq(kk, jj, ii)
-
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: dSq(kk, jj, ii), mSq(kk, jj, ii)
+        REAL(realk), INTENT(inout) :: vel(kk, jj, ii)
+        INTEGER(intk), INTENT(in) :: ista, iend, jsta, jend, ksta, kend
+ 
         ! Local variables
-        ! None
-
-        IF (q == 1) THEN
-            u = mSq/dSq
-        ELSEIF (q == 2) THEN
-            v = mSq/dSq
-        ELSEIF (q == 3) THEN
-            w = mSq/dSq
-        ENDIF
-
+        INTEGER(intk) :: i, j, k
+ 
+        DO i = ista, iend
+            DO j = jsta, jend
+                DO k = ksta, kend
+                    vel(k, j, i) = mSq(k, j, i)/dSq(k, j, i)
+                END DO
+            END DO
+        END DO
+ 
     END SUBROUTINE upd_vel_stg_grd
 
     !================================================================
@@ -1677,7 +1700,9 @@ CONTAINS
     SUBROUTINE prlg_stg(fldName1, fldName2, fldName3)
     !----------------------------------------------------------------
     !   What it does:
-    !   
+    !   Prolongation of a staggered triple to the boundaries of the
+    !   finer grids: parent fills the face buffers, bound_stg writes
+    !   them into PAR faces/ghost layers, connect fills CON layers.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1693,6 +1718,7 @@ CONTAINS
 
         DO ilevel = minlevel, maxlevel
             CALL parent(ilevel, v1=fld1_p, v2=fld2_p, v3=fld3_p)
+            CALL bound_stg%bound(ilevel, f1=fld1_p, f2=fld2_p, f3=fld3_p)
             CALL connect(ilevel, 2, v1=fld1_p, v2=fld2_p, v3=fld3_p, corners=.TRUE.)
         END DO
 
