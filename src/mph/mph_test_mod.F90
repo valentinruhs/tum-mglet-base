@@ -105,7 +105,7 @@ CONTAINS
         CASE ( "Abrupt Cylinder Advection" )
             tstId = tstACylAd
             shape = shape_t(shp=shpCircle, &
-                xc=0.2_realk, yc=0.2_realk, ra=0.1_realk)
+                xc=0.2_realk, yc=0.2_realk, ra=0.125_realk)
             frcVelFld = .FALSE.
             isRevTst = .FALSE.
 
@@ -254,7 +254,7 @@ CONTAINS
         CASE ( tstUCylAd )
             CALL set_vel_uni(0.016_realk, 0.016_realk, 0.0_realk)
         CASE ( tstACylAd )
-            CALL set_vel_c(0.016_realk, 0.016_realk, 0.0_realk, h=1)
+            CALL set_vel_c(1.0_realk/64.0_realk, 1.0_realk/64.0_realk, 0.0_realk, h=1)
         CASE ( tstOpCFl )
             CALL set_vel_cha(120.0_realk, 1.0_realk, 2.0_realk*pi, pi, "TURB")
         CASE DEFAULT
@@ -416,7 +416,7 @@ CONTAINS
             DO j = 3, jj-2
                 DO k = 3, kk-2
                     IF ( cS1(k,j,i) > vofTol ) THEN
-                        u(k-h:k+h,j-h:j+h,i-h:i+h) = cS1(k-h:k+h,j-h:j+h,i-h:i+h)*uc
+                        u(k-h:k+h,j-h:j+h,i-h:i+h) = uc
                     END IF
                 END DO
             END DO
@@ -426,7 +426,7 @@ CONTAINS
             DO j = 2, jj-2
                 DO k = 3, kk-2
                     IF ( cS2(k,j,i) > vofTol ) THEN
-                        v(k-h:k+h,j-h:j+h,i-h:i+h) = cS2(k-h:k+h,j-h:j+h,i-h:i+h)*vc
+                        v(k-h:k+h,j-h:j+h,i-h:i+h) = vc
                     END IF
                 END DO
             END DO
@@ -436,7 +436,7 @@ CONTAINS
             DO j = 3, jj-2
                 DO k = 2, kk-2
                     IF ( cS3(k,j,i) > vofTol ) THEN
-                        w(k-h:k+h,j-h:j+h,i-h:i+h) = cS3(k-h:k+h,j-h:j+h,i-h:i+h)*wc
+                        w(k-h:k+h,j-h:j+h,i-h:i+h) = wc
                     END IF
                 END DO
             END DO
@@ -502,7 +502,7 @@ CONTAINS
             DO j = 2, jj-2
                 y = yMi + 0.5_realk*ddy(j)
 
-                psi(j,i) = 1.0_realk/pi*COS(pi*t/2.0_realk)* &
+                psi(j,i) = 1.0_realk/pi*COS(pi*t/8.0_realk)* &
                     SIN(pi*x)**2 * SIN(pi*y)**2
 
                 yMi = yMi + ddy(j)
@@ -712,7 +712,7 @@ CONTAINS
                     DO k = 3, kk-2
                         z = zMi + 0.5_realk*ddz(k)
                         CALL RANDOM_NUMBER(r)
-                        u(k,j,i) = uTau*(reichardt(yPl)*0.0_realk &
+                        u(k,j,i) = uTau*(reichardt(yPl) &
                             + (1.0_realk + devAmp*(2.0_realk*r - 1.0_realk)) &
                             * uStreak(yPl, z*uTau/nu))
                         zMi = zMi + ddz(k)

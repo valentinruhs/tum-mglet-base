@@ -1,9 +1,8 @@
 {
     "time": {
         "dt": 0.1,
-        "mtstep": 625,
-	"itinfo": 10,
-        "tstat": 10.0,
+        "mtstep": 0,
+	"itinfo": 125,
 	"read": false
     },
     "io": {
@@ -39,12 +38,17 @@
     	"vofTolerance": 1.0E-12,
     	"volTolerance": 1.0E-8,
     	"advectionScheme": "QUICK",
-    	"donatingCentered": false,
+    	"donatingCentered": true,
     	"finalCheck": true,
-	"rho1" : 1000.0,
+	"rho1" : 1000000.0,
 	"rho2" : 1.0,
-	"gmol1" : 0.001,
-	"gmol2" : 0.001,
+	"gmol1" : 0.1,
+	"gmol2" : 0.002,
 	"gravity" : [0.0, 0.0, 0.0]
-    }   
+    },
+    "snapshots": {
+        "itsamp": 125,
+        "tstart": 0.0,
+        "fields": ["U", "V", "W", "P", "C", "NORMX", "NORMY", "NORMZ", "ALPHA"]
+        }
 }

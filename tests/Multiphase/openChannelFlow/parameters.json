@@ -3,7 +3,6 @@
         "dt": 0.001,
         "mtstep": 10,
 	"itinfo": 1,
-        "tstat": 10.0,
 	"read": false
     },
     "io": {

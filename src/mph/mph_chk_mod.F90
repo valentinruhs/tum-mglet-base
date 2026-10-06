@@ -25,6 +25,7 @@ MODULE mph_chk_mod
 
     USE mphcore_mod, ONLY: finChk, volTol, vofTol, hasMph
     USE mph_test_mod, ONLY: comp_abs_res, circumf, area, shape
+    USE mphcore_mod, ONLY: gmol1, rho1, mphTst
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -113,7 +114,7 @@ CONTAINS
         ! None
 
         ! Local variables
-        REAL(realk) :: volCurr, xCtr, yCtr, zCtr
+        REAL(realk) :: volCurr, xCtr, yCtr, zCtr, ub, reTauI, vv, ww
 
         IF (.NOT. hasMph) RETURN
 
@@ -127,6 +128,12 @@ CONTAINS
             WRITE(*, '(A,A,A,E20.10,E20.10,E20.10)') &
                 "xCtr, ", "yCtr, ", "zCtr: ", &
                 xCtr, yCtr, zCtr
+        END IF
+
+        IF ( mphTst == "Open Channel Flow" ) THEN
+            CALL comp_cha_mon(ub, reTauI, vv, ww)
+            IF (myid == 0) WRITE(*, '(A,4E16.7)') &
+                "uBulk, reTau, vv, ww: ", ub, reTauI, vv, ww
         END IF
 
     END SUBROUTINE itinfo_mph
@@ -430,5 +437,110 @@ CONTAINS
         END DO
 
     END SUBROUTINE comp_ctr_grd
+
+    !================================================================
+
+    SUBROUTINE comp_cha_mon(ub, reTauI, vv, ww)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Monitor quantities of the open channel flow (water phase):
+    !   ub     - bulk velocity
+    !   reTauI - instantaneous Re_tau from plane-averaged wall shear
+    !   vv, ww - volume-averaged <v^2>, <w^2> (zero-mean components,
+    !            i.e. directly fluctuation energy)
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        REAL(realk), INTENT(out) :: ub, reTauI, vv, ww
+
+        ! Local variables
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
+        REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:), grdMask(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk) :: sLoc(6), sGlo(6), nu, h, tauW
+
+        sLoc = 0.0_realk
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+            CALL get_mgdims(kk, jj, ii, igrid)
+            CALL get_bbox(minx, maxx, miny, maxy, minz, maxz, igrid)
+            CALL get_fieldptr(u, "U", igrid)
+            CALL get_fieldptr(v, "V", igrid)
+            CALL get_fieldptr(w, "W", igrid)
+            CALL get_fieldptr(c, "C", igrid)
+            CALL get_fieldptr(grdMask, "GRDMASK", igrid)
+            CALL get_fieldptr(ddx, "DDX", igrid)
+            CALL get_fieldptr(ddy, "DDY", igrid)
+            CALL get_fieldptr(ddz, "DDZ", igrid)
+
+            CALL comp_cha_mon_grd(kk, jj, ii, u, v, w, c, grdMask, &
+                ddx, ddy, ddz, ABS(miny) < 1.0E-10_realk, sLoc)
+        END DO
+
+        CALL MPI_Allreduce(sLoc, sGlo, 6, mglet_mpi_real, MPI_SUM, MPI_COMM_WORLD)
+
+        nu = gmol1/rho1
+        h = shape%lvl
+        ub = sGlo(1)/sGlo(2)
+        vv = sGlo(3)/sGlo(2)
+        ww = sGlo(4)/sGlo(2)
+        tauW = nu*sGlo(5)/sGlo(6)
+        reTauI = SQRT(ABS(tauW))*h/nu
+
+    END SUBROUTINE comp_cha_mon
+
+    !================================================================
+
+    SUBROUTINE comp_cha_mon_grd(kk, jj, ii, u, v, w, c, grdMask, &
+            ddx, ddy, ddz, atWall, s)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   Grid-local sums for comp_cha_mon. Velocities are interpolated
+    !   to cell centres and weighted with C, so only water counts.
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii
+        REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c(kk, jj, ii), grdMask(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        LOGICAL, INTENT(in) :: atWall
+        REAL(realk), INTENT(inout) :: s(6)
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        REAL(realk) :: dV, dA, uc, vc, wc
+
+        DO i = 3, ii-2
+            DO j = 3, jj-2
+                DO k = 3, kk-2
+                    dV = c(k,j,i)*grdMask(k,j,i)*ddx(i)*ddy(j)*ddz(k)
+                    uc = 0.5_realk*(u(k,j,i-1) + u(k,j,i))
+                    vc = 0.5_realk*(v(k,j-1,i) + v(k,j,i))
+                    wc = 0.5_realk*(w(k-1,j,i) + w(k,j,i))
+                    s(1) = s(1) + uc*dV
+                    s(2) = s(2) + dV
+                    s(3) = s(3) + vc**2*dV
+                    s(4) = s(4) + wc**2*dV
+                END DO
+            END DO
+        END DO
+
+        IF ( atWall ) THEN
+            j = 3
+            DO i = 3, ii-2
+                DO k = 3, kk-2
+                    dA = grdMask(k,j,i)*ddx(i)*ddz(k)
+                    uc = 0.5_realk*(u(k,j,i-1) + u(k,j,i))
+                    s(5) = s(5) + uc/(0.5_realk*ddy(j))*dA
+                    s(6) = s(6) + dA
+                END DO
+            END DO
+        END IF
+
+    END SUBROUTINE comp_cha_mon_grd
 
 END MODULE mph_chk_mod

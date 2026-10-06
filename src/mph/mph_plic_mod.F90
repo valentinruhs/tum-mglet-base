@@ -56,20 +56,13 @@ CONTAINS
             dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
         CALL set_field("ALPHA", description=descAlpha, &
             dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
-        CALL set_field("ISIFC", description=descIsIfc, &
-            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
-        CALL set_field("ISIFCS1", description=descIsIfc, &
-            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
-        CALL set_field("ISIFCS2", description=descIsIfc, &
-            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
-        CALL set_field("ISIFCS3", description=descIsIfc, &
-            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
-        CALL set_field("ISIFCVICS1", description=descIsIfcVic, &
-            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
-        CALL set_field("ISIFCVICS2", description=descIsIfcVic, &
-            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
-        CALL set_field("ISIFCVICS3", description=descIsIfcVic, &
-            dread=.FALSE., required=.TRUE., dwrite=.TRUE., buffers=.TRUE.)
+        CALL set_field("ISIFC", description=descIsIfc, buffers=.TRUE.)
+        CALL set_field("ISIFCS1", description=descIsIfc, buffers=.TRUE.)
+        CALL set_field("ISIFCS2", description=descIsIfc, buffers=.TRUE.)
+        CALL set_field("ISIFCS3", description=descIsIfc, buffers=.TRUE.)
+        CALL set_field("ISIFCVICS1", description=descIsIfcVic, buffers=.TRUE.)
+        CALL set_field("ISIFCVICS2", description=descIsIfcVic, buffers=.TRUE.)
+        CALL set_field("ISIFCVICS3", description=descIsIfcVic, buffers=.TRUE.)
 
     END SUBROUTINE init_mph_plic
 
