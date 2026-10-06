@@ -15,10 +15,8 @@ MODULE mph_test_mod
 
     USE err_mod, ONLY: err_abort
     USE precision_mod, ONLY: realk, intk, pi
-    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_bbox, minlevel, maxlevel
+    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_bbox
     USE fields_mod, ONLY: get_fieldptr
-    USE field_mod, ONLY: field_t
-    USE fields_mod, ONLY: get_field
     USE fort7_mod, ONLY: dcont
 
     USE mphcore_mod, ONLY: mphTst, mphInitErr, vofTol
