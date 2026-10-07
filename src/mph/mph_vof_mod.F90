@@ -228,7 +228,9 @@ CONTAINS
                         flxWidth = abs( vel(k,j,i) )*dt
                         dds = il*ddx(i) + jl*ddy(j) + kl*ddz(k)
                         IF ( flxWidth > (1.0_realk + 1.0E-12_realk)*dds ) THEN
-                            CALL err_abort(vofErr, "flxWidth > cellWidth.", __FILE__, __LINE__)
+                            WRITE(*,'(A,1I2,3I4,4ES12.4)') "VOFCFL l,k,j,i,advr,dds,c,cfl: ", l, &
+                                k, j, i, vel(k,j,i), dds, c(k+kl,j+jl,i+il), flxWidth/dds
+                            CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
                         ENDIF
 
                         IF ( isIfc(k,j,i) > 0.0_realk ) THEN
@@ -255,7 +257,9 @@ CONTAINS
                         flxWidth = abs( vel(k,j,i) )*dt
                         dds = il*ddx(i+il) + jl*ddy(j+jl) + kl*ddz(k+kl)
                         IF ( flxWidth > (1.0_realk + 1.0E-12_realk)*dds ) THEN
-                            CALL err_abort(vofErr, "flxWidth > cellWidth.", __FILE__, __LINE__)
+                            WRITE(*,'(A,1I2,3I4,4ES12.4)') "VOFCFL l,k,j,i,advr,dds,c,cfl: ", l, &
+                                k, j, i, vel(k,j,i), dds, c(k+kl,j+jl,i+il), flxWidth/dds
+                            CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
                         ENDIF
 
                         IF ( isIfc(k+kl,j+jl,i+il) > 0.0_realk ) THEN
@@ -384,7 +388,9 @@ CONTAINS
                         flxWidth = ABS( advr(k,j,i) )*dt
 
                         IF ( flxWidth > 0.5_realk*ddsDon ) THEN
-                            CALL err_abort(vofErr, "flxWidth > 0.5*cellWidt.", __FILE__, __LINE__)
+                            WRITE(*,'(A,2I2,3I4,4ES12.4)') "VOFCFL q,l,k,j,i,advr,dds,c,cfl: ", q, l, &
+                                k, j, i, advr(k,j,i), ddsDon, c(k+kl,j+jl,i+il), flxWidth/ddsDon
+                            CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
                         ENDIF
 
                         IF ( isIfc(k+kl,j+jl,i+il) > 0.0_realk ) THEN
@@ -432,8 +438,10 @@ CONTAINS
                     ddslPl = il*ddx(iDonPl) + jl*ddy(jDonPl) + kl*ddz(kDonPl)
 
                     IF ( flxWidth > 0.5_realk*ddslMi .OR. flxWidth > 0.5_realk*ddslPl ) THEN
-                        CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
-                    ENDIF
+                            WRITE(*,'(A,2I2,3I4,4ES12.4)') "VOFCFL q,l,k,j,i,advr,dds,c,cfl: ", q, l, &
+                                k, j, i, advr(k,j,i), ddsDon, c(k+kl,j+jl,i+il), flxWidth/ddsDon
+                            CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
+                        ENDIF
 
                     ddsqMi = iq*ddx(iDonMi) + jq*ddy(jDonMi) + kq*ddz(kDonMi)
                     ddsqPl = iq*ddx(iDonPl) + jq*ddy(jDonPl) + kq*ddz(kDonPl)
