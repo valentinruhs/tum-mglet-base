@@ -18,6 +18,7 @@ MODULE mph_vof_mod
     USE fields_mod, ONLY: set_field, get_fieldptr
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims
     USE err_mod, ONLY: err_abort
+    USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: ERROR_UNIT
 
     USE mphcore_mod, ONLY: rho1, rho2, gmol1, gmol2, grav, &
         skpAdv, skpDif, skpPre, skpExt, vofTol, advScm, donCen, vofErr
@@ -223,9 +224,10 @@ CONTAINS
                         flxWidth = abs( vel(k,j,i) )*dt
                         dds = il*ddx(i) + jl*ddy(j) + kl*ddz(k)
                         IF ( flxWidth > (1.0_realk + 1.0E-12_realk)*dds ) THEN
-                            WRITE(*,'(A,1I2,3I4,4ES12.4)') "VOFCFL l,k,j,i,advr,dds,c,cfl: ", l, &
+                            WRITE(ERROR_UNIT,'(A,1I2,3I4,4ES12.4)') "VOFCFL l,k,j,i,advr,dds,c,cfl: ", l, &
                                 k, j, i, vel(k,j,i), dds, c(k+kl,j+jl,i+il), flxWidth/dds
-                            CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
+                            FLUSH(ERROR_UNIT)
+                            CALL err_abort(vofErr, "flxWidth > cellWidth.", __FILE__, __LINE__)
                         ENDIF
 
                         IF ( isIfc(k,j,i) > 0.0_realk ) THEN
@@ -252,9 +254,10 @@ CONTAINS
                         flxWidth = abs( vel(k,j,i) )*dt
                         dds = il*ddx(i+il) + jl*ddy(j+jl) + kl*ddz(k+kl)
                         IF ( flxWidth > (1.0_realk + 1.0E-12_realk)*dds ) THEN
-                            WRITE(*,'(A,1I2,3I4,4ES12.4)') "VOFCFL l,k,j,i,advr,dds,c,cfl: ", l, &
+                            WRITE(ERROR_UNIT,'(A,1I2,3I4,4ES12.4)') "VOFCFL l,k,j,i,advr,dds,c,cfl: ", l, &
                                 k, j, i, vel(k,j,i), dds, c(k+kl,j+jl,i+il), flxWidth/dds
-                            CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
+                            FLUSH(ERROR_UNIT)
+                            CALL err_abort(vofErr, "flxWidth > cellWidth.", __FILE__, __LINE__)
                         ENDIF
 
                         IF ( isIfc(k+kl,j+jl,i+il) > 0.0_realk ) THEN
@@ -383,8 +386,9 @@ CONTAINS
                         flxWidth = ABS( advr(k,j,i) )*dt
 
                         IF ( flxWidth > 0.5_realk*ddsDon ) THEN
-                            WRITE(*,'(A,2I2,3I4,4ES12.4)') "VOFCFL q,l,k,j,i,advr,dds,c,cfl: ", q, l, &
+                            WRITE(ERROR_UNIT,'(A,2I2,3I4,4ES12.4)') "VOFCFL q,l,k,j,i,advr,dds,c,cfl: ", q, l, &
                                 k, j, i, advr(k,j,i), ddsDon, c(k+kl,j+jl,i+il), flxWidth/ddsDon
+                            FLUSH(ERROR_UNIT)
                             CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
                         ENDIF
 
@@ -433,8 +437,9 @@ CONTAINS
                     ddslPl = il*ddx(iDonPl) + jl*ddy(jDonPl) + kl*ddz(kDonPl)
 
                     IF ( flxWidth > 0.5_realk*ddslMi .OR. flxWidth > 0.5_realk*ddslPl ) THEN
-                            WRITE(*,'(A,2I2,3I4,4ES12.4)') "VOFCFL q,l,k,j,i,advr,dds,c,cfl: ", q, l, &
+                            WRITE(ERROR_UNIT,'(A,2I2,3I4,4ES12.4)') "VOFCFL q,l,k,j,i,advr,dds,c,cfl: ", q, l, &
                                 k, j, i, advr(k,j,i), ddslMi, c(k+kl,j+jl,i+il), flxWidth/ddslMi
+                            FLUSH(ERROR_UNIT)
                             CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
                         ENDIF
 

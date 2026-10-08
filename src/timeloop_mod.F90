@@ -300,7 +300,6 @@ CONTAINS
             istepchk = istepchk + 1
             IF (istepchk >= itcheck .AND. itcheck > 0) THEN
                 CALL can_checkpoint_plugins(allow_checkpoint)
-                WRITE(*,*) allow_checkpoint
                 IF (allow_checkpoint) THEN
                     IF (myid == 0) WRITE(*, '("Writing checkpoint...")')
                     CALL checkpoint_fields()
