@@ -56,7 +56,7 @@ CONTAINS
 
     SUBROUTINE start_and_stop(ista, isto, jsta, jsto, &
             ksta, ksto, ctyp, igrid)
-        USE core_mod, ONLY: get_mgdims
+        USE core_mod, ONLY: get_mgdims, get_mgbasb
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(out) :: ista, isto, jsta, jsto, ksta, ksto
@@ -66,6 +66,7 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: ii, jj, kk
         INTEGER(intk) :: istart, iend, jstart, jend, kstart, kend
+        INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
         ! Loop ranges are DO i = istart, ii-iend
         ! returned as DO i = ista, isto, 2
@@ -91,7 +92,7 @@ CONTAINS
             jend = 3
             kstart = 2
             kend = 2
-        CASE ("E", "F", "P", "R", "S", 'I', 'T', 'A', 'B', 'C', 'D')
+        CASE ("E", "F", "P", "R", "S", 'I', 'T', 'D')
             istart = 3
             iend = 3
             jstart = 3
@@ -105,6 +106,30 @@ CONTAINS
             jend = 2
             kstart = 2
             kend = 2
+        CASE ("A")
+            CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
+            istart = 3
+            iend = MERGE(3, 5, nbac == 7)   ! CON back: owned face incl., PAR: excl.
+            jstart = 3
+            jend = 3
+            kstart = 3
+            kend = 3
+        CASE ("B")
+            CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
+            istart = 3
+            iend = 3
+            jstart = 3
+            jend = MERGE(3, 5, nlft == 7)   ! CON back: owned face incl., PAR: excl.
+            kstart = 3
+            kend = 3
+        CASE ("C")
+            CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
+            istart = 3
+            iend = 3
+            jstart = 3
+            jend = 3
+            kstart = 3
+            kend = MERGE(3, 5, ntop == 7)   ! CON back: owned face incl., PAR: excl.
         CASE DEFAULT
             CALL errr(__FILE__, __LINE__)
         END SELECT
@@ -323,33 +348,36 @@ CONTAINS
         INTEGER(intk) :: i, j, k, icount
         INTEGER(intk) :: istart, istop, jstart, jstop, kstart, kstop
         REAL(realk) :: sum_pv, sum_v
-        REAL(realk), POINTER, CONTIGUOUS :: dx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: dx(:), ddx(:), ddy(:), ddz(:)
 
         CALL this%start_and_stop(istart, istop, jstart, jstop, &
             kstart, kstop, ctyp, igrid)
 
         CALL get_fieldptr(dx, "DX", igrid)
+        CALL get_fieldptr(ddx, "DDX", igrid)
         CALL get_fieldptr(ddy, "DDY", igrid)
         CALL get_fieldptr(ddz, "DDZ", igrid)
 
+        ! Weights in the staggered direction: ddx(i)/2, dx(i+1), ddx(i+3)/2
+        ! (overlap of the fine staggered cells with the coarse staggered cell)
         icount = 0
         DO i = istart, istop, 2
             DO j = jstart, jstop, 2
                 DO k = kstart, kstop, 2
-                    sum_pv = ff(k, j, i)*ddz(k)*ddy(j)*dx(i)/2.0_realk &
+                    sum_pv = ff(k, j, i)*ddz(k)*ddy(j)*ddx(i)/2.0_realk &
                         + ff(k, j, i+1)*ddz(k)*ddy(j)*dx(i+1) &
-                        + ff(k, j, i+2)*ddz(k)*ddy(j)*dx(i+2)/2.0_realk &
-                        + ff(k, j+1, i)*ddz(k)*ddy(j+1)*dx(i)/2.0_realk &
+                        + ff(k, j, i+2)*ddz(k)*ddy(j)*ddx(i+3)/2.0_realk &
+                        + ff(k, j+1, i)*ddz(k)*ddy(j+1)*ddx(i)/2.0_realk &
                         + ff(k, j+1, i+1)*ddz(k)*ddy(j+1)*dx(i+1) &
-                        + ff(k, j+1, i+2)*ddz(k)*ddy(j+1)*dx(i+2)/2.0_realk &
-                        + ff(k+1, j, i)*ddz(k+1)*ddy(j)*dx(i)/2.0_realk &
+                        + ff(k, j+1, i+2)*ddz(k)*ddy(j+1)*ddx(i+3)/2.0_realk &
+                        + ff(k+1, j, i)*ddz(k+1)*ddy(j)*ddx(i)/2.0_realk &
                         + ff(k+1, j, i+1)*ddz(k+1)*ddy(j)*dx(i+1) &
-                        + ff(k+1, j, i+2)*ddz(k+1)*ddy(j)*dx(i+2)/2.0_realk &
-                        + ff(k+1, j+1, i)*ddz(k+1)*ddy(j+1)*dx(i)/2.0_realk &
+                        + ff(k+1, j, i+2)*ddz(k+1)*ddy(j)*ddx(i+3)/2.0_realk &
+                        + ff(k+1, j+1, i)*ddz(k+1)*ddy(j+1)*ddx(i)/2.0_realk &
                         + ff(k+1, j+1, i+1)*ddz(k+1)*ddy(j+1)*dx(i+1) &
-                        + ff(k+1, j+1, i+2)*ddz(k+1)*ddy(j+1)*dx(i+2)/2.0_realk
+                        + ff(k+1, j+1, i+2)*ddz(k+1)*ddy(j+1)*ddx(i+3)/2.0_realk
 
-                    sum_v = (dx(i)/2.0_realk + dx(i+1) + dx(i+2)/2.0_realk) &
+                    sum_v = (ddx(i)/2.0_realk + dx(i+1) + ddx(i+3)/2.0_realk) &
                         *(ddy(j) + ddy(j+1)) &
                         *(ddz(k) + ddz(k+1))
 
@@ -374,34 +402,37 @@ CONTAINS
         INTEGER(intk) :: i, j, k, icount
         INTEGER(intk) :: istart, istop, jstart, jstop, kstart, kstop
         REAL(realk) :: sum_pv, sum_v
-        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), dy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), dy(:), ddy(:), ddz(:)
 
         CALL this%start_and_stop(istart, istop, jstart, jstop, &
             kstart, kstop, ctyp, igrid)
 
         CALL get_fieldptr(ddx, "DDX", igrid)
         CALL get_fieldptr(dy, "DY", igrid)
+        CALL get_fieldptr(ddy, "DDY", igrid)
         CALL get_fieldptr(ddz, "DDZ", igrid)
 
+        ! Weights in the staggered direction: ddy(j)/2, dy(j+1), ddy(j+3)/2
+        ! (overlap of the fine staggered cells with the coarse staggered cell)
         icount = 0
         DO i = istart, istop, 2
             DO j = jstart, jstop, 2
                 DO k = kstart, kstop, 2
-                    sum_pv = ff(k, j, i)*ddz(k)*dy(j)/2.0_realk*ddx(i) &
+                    sum_pv = ff(k, j, i)*ddz(k)*ddy(j)/2.0_realk*ddx(i) &
                         + ff(k, j+1, i)*ddz(k)*dy(j+1)*ddx(i) &
-                        + ff(k, j+2, i)*ddz(k)*dy(j+2)/2.0_realk*ddx(i) &
-                        + ff(k, j, i+1)*ddz(k)*dy(j)/2.0_realk*ddx(i+1) &
+                        + ff(k, j+2, i)*ddz(k)*ddy(j+3)/2.0_realk*ddx(i) &
+                        + ff(k, j, i+1)*ddz(k)*ddy(j)/2.0_realk*ddx(i+1) &
                         + ff(k, j+1, i+1)*ddz(k)*dy(j+1)*ddx(i+1) &
-                        + ff(k, j+2, i+1)*ddz(k)*dy(j+2)/2.0_realk*ddx(i+1) &
-                        + ff(k+1, j, i)*ddz(k+1)*dy(j)/2.0_realk*ddx(i) &
+                        + ff(k, j+2, i+1)*ddz(k)*ddy(j+3)/2.0_realk*ddx(i+1) &
+                        + ff(k+1, j, i)*ddz(k+1)*ddy(j)/2.0_realk*ddx(i) &
                         + ff(k+1, j+1, i)*ddz(k+1)*dy(j+1)*ddx(i) &
-                        + ff(k+1, j+2, i)*ddz(k+1)*dy(j+2)/2.0_realk*ddx(i) &
-                        + ff(k+1, j, i+1)*ddz(k+1)*dy(j)/2.0_realk*ddx(i+1) &
+                        + ff(k+1, j+2, i)*ddz(k+1)*ddy(j+3)/2.0_realk*ddx(i) &
+                        + ff(k+1, j, i+1)*ddz(k+1)*ddy(j)/2.0_realk*ddx(i+1) &
                         + ff(k+1, j+1, i+1)*ddz(k+1)*dy(j+1)*ddx(i+1) &
-                        + ff(k+1, j+2, i+1)*ddz(k+1)*dy(j+2)/2.0_realk*ddx(i+1)
+                        + ff(k+1, j+2, i+1)*ddz(k+1)*ddy(j+3)/2.0_realk*ddx(i+1)
 
                     sum_v = (ddx(i) + ddx(i+1)) &
-                        *(dy(j)/2.0_realk + dy(j+1) + dy(j+2)/2.0_realk) &
+                        *(ddy(j)/2.0_realk + dy(j+1) + ddy(j+3)/2.0_realk) &
                         *(ddz(k) + ddz(k+1))
 
                     icount = icount + 1
@@ -425,7 +456,7 @@ CONTAINS
         INTEGER(intk) :: i, j, k, icount
         INTEGER(intk) :: istart, istop, jstart, jstop, kstart, kstop
         REAL(realk) :: sum_pv, sum_v
-        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), dz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), dz(:), ddz(:)
 
         CALL this%start_and_stop(istart, istop, jstart, jstop, &
             kstart, kstop, ctyp, igrid)
@@ -433,27 +464,30 @@ CONTAINS
         CALL get_fieldptr(ddx, "DDX", igrid)
         CALL get_fieldptr(ddy, "DDY", igrid)
         CALL get_fieldptr(dz, "DZ", igrid)
+        CALL get_fieldptr(ddz, "DDZ", igrid)
 
+        ! Weights in the staggered direction: ddz(k)/2, dz(k+1), ddz(k+3)/2
+        ! (overlap of the fine staggered cells with the coarse staggered cell)
         icount = 0
         DO i = istart, istop, 2
             DO j = jstart, jstop, 2
                 DO k = kstart, kstop, 2
-                    sum_pv = ff(k, j, i)*dz(k)/2.0_realk*ddy(j)*ddx(i) &
+                    sum_pv = ff(k, j, i)*ddz(k)/2.0_realk*ddy(j)*ddx(i) &
                         + ff(k+1, j, i)*dz(k+1)*ddy(j)*ddx(i) &
-                        + ff(k+2, j, i)*dz(k+2)/2.0_realk*ddy(j)*ddx(i) &
-                        + ff(k, j, i+1)*dz(k)/2.0_realk*ddy(j)*ddx(i+1) &
+                        + ff(k+2, j, i)*ddz(k+3)/2.0_realk*ddy(j)*ddx(i) &
+                        + ff(k, j, i+1)*ddz(k)/2.0_realk*ddy(j)*ddx(i+1) &
                         + ff(k+1, j, i+1)*dz(k+1)*ddy(j)*ddx(i+1) &
-                        + ff(k+2, j, i+1)*dz(k+2)/2.0_realk*ddy(j)*ddx(i+1) &
-                        + ff(k, j+1, i)*dz(k)/2.0_realk*ddy(j+1)*ddx(i) &
+                        + ff(k+2, j, i+1)*ddz(k+3)/2.0_realk*ddy(j)*ddx(i+1) &
+                        + ff(k, j+1, i)*ddz(k)/2.0_realk*ddy(j+1)*ddx(i) &
                         + ff(k+1, j+1, i)*dz(k+1)*ddy(j+1)*ddx(i) &
-                        + ff(k+2, j+1, i)*dz(k+2)/2.0_realk*ddy(j+1)*ddx(i) &
-                        + ff(k, j+1, i+1)*dz(k)/2.0_realk*ddy(j+1)*ddx(i+1) &
+                        + ff(k+2, j+1, i)*ddz(k+3)/2.0_realk*ddy(j+1)*ddx(i) &
+                        + ff(k, j+1, i+1)*ddz(k)/2.0_realk*ddy(j+1)*ddx(i+1) &
                         + ff(k+1, j+1, i+1)*dz(k+1)*ddy(j+1)*ddx(i+1) &
-                        + ff(k+2, j+1, i+1)*dz(k+2)/2.0_realk*ddy(j+1)*ddx(i+1)
+                        + ff(k+2, j+1, i+1)*ddz(k+3)/2.0_realk*ddy(j+1)*ddx(i+1)
 
                     sum_v = (ddx(i) + ddx(i+1)) &
                         *(ddy(j) + ddy(j+1)) &
-                        *(dz(k)/2.0_realk + dz(k+1) + dz(k+2)/2.0_realk)
+                        *(ddz(k)/2.0_realk + dz(k+1) + ddz(k+3)/2.0_realk)
 
                     icount = icount + 1
                     sendbuf(icount) = sum_pv/sum_v

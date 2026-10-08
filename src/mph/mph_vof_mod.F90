@@ -15,12 +15,8 @@ MODULE mph_vof_mod
 
     USE precision_mod, ONLY: intk, realk
     USE field_mod, ONLY: field_t
-    USE fields_mod, ONLY: get_field, set_field, get_fieldptr
-    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, &
-        minlevel, maxlevel
-    USE connect2_mod, ONLY: connect
-    USE parent_mod, ONLY: parent
-    USE ftoc_mod, ONLY: ftoc
+    USE fields_mod, ONLY: set_field, get_fieldptr
+    USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims
     USE err_mod, ONLY: err_abort
 
     USE mphcore_mod, ONLY: rho1, rho2, gmol1, gmol2, grav, &
@@ -28,14 +24,13 @@ MODULE mph_vof_mod
     USE mph_utils_mod, ONLY: sel_ind, sel_ext, sel_vel, clp, int2char, get_lp_mdf, get_lp_bnds
     USE mph_plic_mod, ONLY: comp_ifc, comp_c_stg, comp_isIfc_stg, comp_c_loc
     USE mph_props_mod, ONLY: comp_d_stg
-    USE mph_bound_c_mod, ONLY: bound_c, bound_stg
+    USE mph_xfer_mod, ONLY: rstr, rstr_stg, prlg, prlg_stg
 
     IMPLICIT NONE(type, external)
     PRIVATE
 
     PUBLIC :: init_mph_vof, finish_mph_vof, cpy_flds, &
-        adve_operator, diff_operator, pres_operator, exte_operator, &
-        rstr, prlg
+        adve_operator, diff_operator, pres_operator, exte_operator
 
 CONTAINS
 
@@ -439,7 +434,7 @@ CONTAINS
 
                     IF ( flxWidth > 0.5_realk*ddslMi .OR. flxWidth > 0.5_realk*ddslPl ) THEN
                             WRITE(*,'(A,2I2,3I4,4ES12.4)') "VOFCFL q,l,k,j,i,advr,dds,c,cfl: ", q, l, &
-                                k, j, i, advr(k,j,i), ddsDon, c(k+kl,j+jl,i+il), flxWidth/ddsDon
+                                k, j, i, advr(k,j,i), ddslMi, c(k+kl,j+jl,i+il), flxWidth/ddslMi
                             CALL err_abort(vofErr, "flxWidth > 0.5*cellWidth.", __FILE__, __LINE__)
                         ENDIF
 
@@ -562,7 +557,6 @@ CONTAINS
         INTEGER(intk) :: q, advSeq(3), dirLoop, l
 
         ! Initialize alpha, norm(.), cWy
-        CALL comp_ifc()
         CALL comp_cWy()
 
         ! Initialize stg. grid cS(.), dS(.), mS(.), cWyS(.)
@@ -575,7 +569,6 @@ CONTAINS
         END DO
 
         ! Restriction
-        CALL rstr(fldName="C", flag="D")
         DO q = 1, 3
             IF ( skpAdv ) CYCLE
             CALL rstr_stg(q=q, fldName="CS")
@@ -584,11 +577,13 @@ CONTAINS
         END DO
 
         ! Prologation
-        CALL prlg(fldName="C")
         IF ( .NOT. skpAdv ) THEN
             CALL prlg_stg(fldName1="CS1", fldName2="CS2", fldName3="CS3")
             CALL prlg_stg(fldName1="DS1", fldName2="DS2", fldName3="DS3")
             CALL prlg_stg(fldName1="MS1", fldName2="MS2", fldName3="MS3")
+            ! PAR ghosts of U (ino, 2nd tangential layer) are not set by
+            ! bound_flow, but QUICK reads them in the first split
+            CALL prlg_stg(fldName1="U", fldName2="V", fldName3="W")
         END IF
 
         CALL def_adv_seq(itstep, advSeq)
@@ -896,13 +891,13 @@ CONTAINS
 
     CONTAINS
 
-        PURE ELEMENTAL REAL(realk) FUNCTION wall_acc(mu, d, dds, rds, vel, velGst) RESULT(acc)
+        PURE ELEMENTAL REAL(realk) FUNCTION wall_acc(mu, d, dds, rds, vel, velGhost) RESULT(acc)
         !------------------------------------------------------------
         ! Equivalent to Werner-Wengle laminar sublayer case, but for
         ! multi-phase fluid properties.
         !------------------------------------------------------------
-            REAL(realk), INTENT(in) :: mu, d, dds, rds, vel, velGst
-            acc = (2.0_realk*mu*vel/dds - mu*(vel - velGst)*rds)/(d*dds)
+            REAL(realk), INTENT(in) :: mu, d, dds, rds, vel, velGhost
+            acc = (2.0_realk*mu*vel/dds - mu*(vel - velGhost)*rds)/(d*dds)
         END FUNCTION wall_acc
 
     END SUBROUTINE swcle3d_grid
@@ -1606,131 +1601,6 @@ CONTAINS
         END DO
 
     END SUBROUTINE comp_cWy_grd
-
-    !================================================================
-
-    SUBROUTINE rstr(fldName, flag)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        CHARACTER(len=*), INTENT(in) :: fldName
-        CHARACTER(len=*), INTENT(in) :: flag
-
-        ! Local variables
-        TYPE(field_t), POINTER :: fld_p
-
-        CALL get_field(fld_p, fldName)
-        CALL rstr_grd(fld_p, flag)
-
-    END SUBROUTINE rstr
-
-    !================================================================
-
-    SUBROUTINE rstr_stg(q, fldName)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        INTEGER(intk), INTENT(in) :: q
-        CHARACTER(len=*), INTENT(in) :: fldName
-
-        ! Local variables
-        CHARACTER(len=3) :: name
-        CHARACTER(len=1) :: flag
-        TYPE(field_t), POINTER :: fld_p
-
-        name = fldName//int2Char(q)
-
-        SELECT CASE ( q )
-        CASE ( 1 ); flag = "A"
-        CASE ( 2 ); flag = "B"
-        CASE ( 3 ); flag = "C"
-        END SELECT
-
-        CALL get_field(fld_p, name)
-        CALL rstr_grd(fld_p, flag)
-
-    END SUBROUTINE rstr_stg
-
-    !================================================================
-
-    SUBROUTINE rstr_grd(fld_p, flag)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        TYPE(field_t), POINTER :: fld_p
-        CHARACTER(len=*), INTENT(in) :: flag
-
-        ! Local variables
-        INTEGER(intk) :: ilevel
-
-        DO ilevel = maxlevel, minlevel, -1
-            CALL ftoc(ilevel, fld_p%arr, fld_p%arr, flag)
-        END DO
-
-    END SUBROUTINE rstr_grd
-
-    !================================================================
-
-    SUBROUTINE prlg(fldName)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        CHARACTER(len=*), INTENT(in) :: fldName
-
-        ! Local variables
-        TYPE(field_t), POINTER :: fld_p
-        INTEGER(intk) :: ilevel
-
-        CALL get_field(fld_p, fldName)
-
-        DO ilevel = minlevel, maxlevel
-            CALL parent(ilevel, s1=fld_p)
-            CALL bound_c%bound(ilevel, f1=fld_p)
-            CALL connect(ilevel, 2, s1=fld_p, corners=.TRUE.)
-        END DO
-
-    END SUBROUTINE prlg
-
-    !================================================================
-
-    SUBROUTINE prlg_stg(fldName1, fldName2, fldName3)
-    !----------------------------------------------------------------
-    !   What it does:
-    !   Prolongation of a staggered triple to the boundaries of the
-    !   finer grids: parent fills the face buffers, bound_stg writes
-    !   them into PAR faces/ghost layers, connect fills CON layers.
-    !----------------------------------------------------------------
-
-        ! Subroutine arguments
-        CHARACTER(len=*), INTENT(in) :: fldName1, fldName2, fldName3
-
-        ! Local variables
-        TYPE(field_t), POINTER :: fld1_p, fld2_p, fld3_p
-        INTEGER(intk) :: ilevel
-
-        CALL get_field(fld1_p, fldName1)
-        CALL get_field(fld2_p, fldName2)
-        CALL get_field(fld3_p, fldName3)
-
-        DO ilevel = minlevel, maxlevel
-            CALL parent(ilevel, v1=fld1_p, v2=fld2_p, v3=fld3_p)
-            CALL bound_stg%bound(ilevel, f1=fld1_p, f2=fld2_p, f3=fld3_p)
-            CALL connect(ilevel, 2, v1=fld1_p, v2=fld2_p, v3=fld3_p, corners=.TRUE.)
-        END DO
-
-    END SUBROUTINE prlg_stg
 
     !================================================================
 

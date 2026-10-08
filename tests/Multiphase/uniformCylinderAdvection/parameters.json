@@ -1,7 +1,7 @@
 {
     "time": {
         "dt": 0.1,
-        "mtstep": 375,
+        "mtstep": 625,
 	"itinfo": 125,
 	"read": false
     },

@@ -22,8 +22,8 @@ MODULE mph_test_mod
     USE mphcore_mod, ONLY: mphTst, mphInitErr, vofTol
     USE mph_plic_mod, ONLY: comp_c_stg, comp_ifc
     USE mph_plic_mod, ONLY: comp_c_loc
-    USE mph_vof_mod, ONLY: rstr, prlg
     USE mphcore_mod, ONLY: gmol1, rho1, rho2, grav
+    USE mph_xfer_mod, ONLY: rstr, prlg
 
 
     IMPLICIT NONE(type, external)
@@ -101,7 +101,7 @@ CONTAINS
         CASE ( "Abrupt Cylinder Advection" )
             tstId = tstACylAd
             shape = shape_t(shp=shpCircle, &
-                xc=0.2_realk, yc=0.2_realk, ra=0.125_realk)
+                xc=0.5_realk, yc=0.5_realk, ra=0.2_realk)
             frcVelFld = .FALSE.
             isRevTst = .FALSE.
 
@@ -250,7 +250,7 @@ CONTAINS
         CASE ( tstUCylAd )
             CALL set_vel_uni(0.016_realk, 0.016_realk, 0.0_realk)
         CASE ( tstACylAd )
-            CALL set_vel_c(1.0_realk/64.0_realk, 1.0_realk/64.0_realk, 0.0_realk, h=1)
+            CALL set_vel_c(1.0_realk, 1.0_realk, 0.0_realk, h=1)
         CASE ( tstOpCFl )
             CALL set_vel_cha(120.0_realk, 1.0_realk, 2.0_realk*pi, pi, "TURB")
         CASE DEFAULT

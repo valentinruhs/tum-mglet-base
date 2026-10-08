@@ -26,6 +26,7 @@ MODULE mph_plic_mod
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims
     USE mphcore_mod, ONLY: vofTol
     USE fields_mod, ONLY: set_field, get_fieldptr
+    USE mph_xfer_mod, ONLY: cnct
 
     IMPLICIT NONE(type, external)
     PRIVATE 
@@ -115,6 +116,8 @@ CONTAINS
             CALL comp_isIfc_grd(kk, jj, ii, cSq, isIfcSq, isIfcVicSq)
         END DO
 
+        CALL cnct(isIfcVicFldName)
+
     END SUBROUTINE comp_isIfc_stg
 
     !================================================================
@@ -150,15 +153,17 @@ CONTAINS
 
         vic = 2
         isIfcVic = -1.0_realk
-        DO i = 3, ii-2
-            DO j = 3, jj-2
-                DO k = 3, kk-2
+        DO i = 1, ii
+            DO j = 1, jj
+                DO k = 1, kk
                     IF ( isIfc(k,j,i) > 0.0_realk ) THEN
-                        isIfcVic(k-vic:k+vic,j-vic:j+vic,i-vic:i+vic) = 1.0_realk
-                    ENDIF
-                ENDDO
-            ENDDO
-        ENDDO
+                        isIfcVic(MAX(1,k-vic):MIN(kk,k+vic), &
+                                 MAX(1,j-vic):MIN(jj,j+vic), &
+                                 MAX(1,i-vic):MIN(ii,i+vic)) = 1.0_realk
+                    END IF
+                END DO
+            END DO
+        END DO
 
     END SUBROUTINE comp_isIfc_grd
 
