@@ -19,6 +19,7 @@ MODULE mph_vof_mod
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims
     USE err_mod, ONLY: err_abort
     USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: ERROR_UNIT
+    USE bound_flow_mod, ONLY: bound_flow
 
     USE mphcore_mod, ONLY: rho1, rho2, gmol1, gmol2, grav, &
         skpAdv, skpDif, skpPre, skpExt, vofTol, advScm, donCen, vofErr
@@ -26,6 +27,7 @@ MODULE mph_vof_mod
     USE mph_plic_mod, ONLY: comp_ifc, comp_c_stg, comp_isIfc_stg, comp_c_loc
     USE mph_props_mod, ONLY: comp_d_stg
     USE mph_xfer_mod, ONLY: rstr, rstr_stg, prlg, prlg_stg, cnct
+    USE mph_bound_mod, ONLY: bound_stg
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -583,12 +585,9 @@ CONTAINS
 
         ! Prologation
         IF ( .NOT. skpAdv ) THEN
-            CALL prlg_stg(fldName1="CS1", fldName2="CS2", fldName3="CS3")
-            CALL prlg_stg(fldName1="DS1", fldName2="DS2", fldName3="DS3")
-            CALL prlg_stg(fldName1="MS1", fldName2="MS2", fldName3="MS3")
-            ! PAR ghosts of U (ino, 2nd tangential layer) are not set by
-            ! bound_flow, but QUICK reads them in the first split
-            CALL prlg_stg(fldName1="U", fldName2="V", fldName3="W")
+            CALL prlg_stg(fldName1="CS1", fldName2="CS2", fldName3="CS3", bnd=bound_stg)
+            CALL prlg_stg(fldName1="DS1", fldName2="DS2", fldName3="DS3", bnd=bound_stg)
+            CALL prlg_stg(fldName1="U", fldName2="V", fldName3="W", bnd=bound_flow)
         END IF
 
         CALL def_adv_seq(itstep, advSeq)
@@ -622,13 +621,12 @@ CONTAINS
             END DO
 
             IF ( .NOT. skpAdv ) THEN
-                CALL prlg_stg(fldName1="CS1", fldName2="CS2", fldName3="CS3")
-                CALL prlg_stg(fldName1="DS1", fldName2="DS2", fldName3="DS3")
-                CALL prlg_stg(fldName1="MS1", fldName2="MS2", fldName3="MS3")
+                CALL prlg_stg(fldName1="CS1", fldName2="CS2", fldName3="CS3", bnd=bound_stg)
+                CALL prlg_stg(fldName1="DS1", fldName2="DS2", fldName3="DS3", bnd=bound_stg)
                 DO q = 1, 3
                     CALL upd_vel_stg(q)
                 END DO
-                CALL prlg_stg(fldName1="U", fldName2="V", fldName3="W")
+                CALL prlg_stg(fldName1="U", fldName2="V", fldName3="W", bnd=bound_flow)
             END IF
         END DO
 

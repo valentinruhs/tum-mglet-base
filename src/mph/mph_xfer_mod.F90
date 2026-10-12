@@ -20,10 +20,12 @@ MODULE mph_xfer_mod
     USE ftoc_mod, ONLY: ftoc
     USE field_mod, ONLY: field_t
     USE fields_mod, ONLY: get_field, set_field
+    USE bound_flow_mod, ONLY: bound_flow
+    USE bound_mod, ONLY: bound_t
 
-    USE mph_bound_c_mod, ONLY: bound_c, bound_stg
     USE mph_utils_mod, ONLY: int2char
     USE mph_plic_mod, ONLY: comp_hlf_frc
+    USE mph_bound_mod, ONLY: bound_c, bound_stg
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -149,7 +151,7 @@ CONTAINS
 
     !================================================================
 
-    SUBROUTINE prlg_stg(fldName1, fldName2, fldName3)
+    SUBROUTINE prlg_stg(fldName1, fldName2, fldName3, bnd)
     !----------------------------------------------------------------
     !   What it does:
     !   Prolongation of a staggered triple to the boundaries of the
@@ -159,6 +161,7 @@ CONTAINS
 
         ! Subroutine arguments
         CHARACTER(len=*), INTENT(in) :: fldName1, fldName2, fldName3
+        CLASS(bound_t), INTENT(inout) :: bnd
 
         ! Local variables
         TYPE(field_t), POINTER :: fld1_p, fld2_p, fld3_p
@@ -170,7 +173,7 @@ CONTAINS
 
         DO ilevel = minlevel, maxlevel
             CALL parent(ilevel, v1=fld1_p, v2=fld2_p, v3=fld3_p)
-            CALL bound_stg%bound(ilevel, f1=fld1_p, f2=fld2_p, f3=fld3_p)
+            CALL bnd%bound(ilevel, f1=fld1_p, f2=fld2_p, f3=fld3_p)
             CALL connect(ilevel, 2, v1=fld1_p, v2=fld2_p, v3=fld3_p, corners=.TRUE.)
         END DO
 

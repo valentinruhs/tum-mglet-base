@@ -27,7 +27,7 @@ MODULE mph_mod
     USE mph_utils_mod, ONLY: init_mph_utils, finish_mph_utils
     USE mph_test_mod, ONLY: init_mph_test, finish_mph_test, frc_vel_fld, frcVelFld
     USE mph_pois_mod, ONLY: init_mph_pois, finish_mph_pois
-    USE mph_chk_mod, ONLY: init_mph_chk, finish_mph_chk, final_chk
+    USE mph_chk_mod, ONLY: init_mph_chk, finish_mph_chk, final_chk, chk_ifc_par
     USE mph_xfer_mod, ONLY: init_mph_xfer, finish_mph_xfer
 
     IMPLICIT NONE(type, external)
@@ -105,6 +105,7 @@ CONTAINS
             IF ( frcVelFld ) CALL frc_vel_fld(timeph + 0.5_realk*dt)
             CALL cpy_flds()
             CALL adve_operator(dt, itstep)
+            CALL chk_ifc_par()
             CALL comp_props()
         END IF
 

@@ -1,12 +1,12 @@
 {
     "time": {
-        "dt": 0.1,
-        "mtstep": 625,
-	"itinfo": 125,
+        "dt": 0.01,
+        "mtstep": 30,
+	"itinfo": 10,
 	"read": false
     },
     "io": {
-        "grids": "gridsFtoF.h5",
+        "grids": "grids.h5",
         "infile": "fields_in.h5",
         "outfile": "fields.h5"
     },
@@ -39,6 +39,7 @@
     	"volTolerance": 1.0E-8,
     	"advectionScheme": "QUICK",
     	"donatingCentered": true,
+	"parentInterfaceBand": 4,
     	"finalCheck": true,
 	"rho1" : 1000000.0,
 	"rho2" : 1.0,

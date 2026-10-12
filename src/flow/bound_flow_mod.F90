@@ -1,6 +1,7 @@
 MODULE bound_flow_mod
     USE core_mod
     USE flowcore_mod
+    USE mphcore_mod, ONLY: hasMph
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -30,7 +31,7 @@ CONTAINS
 
         ! Local variables
         INTEGER(intk) :: kk, jj, ii
-        INTEGER(intk) :: k, j, i2, i3, i4, istag1, istag2, dir, nop1
+        INTEGER(intk) :: k, j, i1, i2, i3, i4, istag1, istag2, istag3, dir, nop1
         REAL(realk) :: umagsqr, sbu, sbv, sbw, pinf(1)
         REAL(realk) :: sb11, sb12, sb13, sb14, fak, ubfine
         REAL(realk) :: flag, vi, wi
@@ -70,19 +71,23 @@ CONTAINS
         SELECT CASE (iface)
         CASE (1)
             ! Front
+            i1 = 1
             i2 = 2
             i3 = 3
             i4 = 4
             istag1 = 1
             istag2 = 2
+            istag3 = 3
             dir = -1
         CASE (2)
             ! Back
+            i1 = ii
             i2 = ii - 1
             i3 = ii - 2
             i4 = ii - 3
             istag1 = ii - 1
             istag2 = ii - 2
+            istag3 = ii - 3
             dir = 1
         CASE DEFAULT
             CALL errr(__FILE__, __LINE__)
@@ -149,6 +154,19 @@ CONTAINS
                 END DO
             END DO
 
+            IF ( hasMph ) THEN
+                DO j = 2, jj-1
+                    DO k = 2, kk-1
+                        ! Second ghost layer on the same line.
+                        ! IB not tested vor mph -> commented
+                        v(k, j, i1) = (2.0*vbuf(k, j, 1) - v(k, j, i2))
+                            ! *sbv + (1.0-sbv)*v(k, j, i1)
+                        w(k, j, i1) = (2.0*wbuf(k, j, 1) - w(k, j, i2))
+                            ! *sbw + (1.0-sbw)*w(k, j, i1)
+                    END DO
+                END DO
+            END IF
+
             ! Wall-normal velocity component
             DO j = 3, jj-2, 2
                 DO k = 3, kk-2, 2
@@ -214,6 +232,15 @@ CONTAINS
                         + (1.0-sb14)*u(k+1, j+1, istag2)*sbu
                 END DO
             END DO
+
+            IF ( hasMph ) THEN
+                ! Second ghost layer on the same line.
+                DO j = 3, jj-2
+                    DO k = 3, kk-2
+                        u(k, j, istag1) = 2.0*u(k, j, istag2) - u(k, j, istag3)
+                    END DO
+                END DO
+            END IF
         END SELECT
 
         ! Pressure is optional, when called from setpointvalues for instance,
@@ -264,7 +291,7 @@ CONTAINS
 
         ! Local variables
         INTEGER(intk) :: kk, jj, ii
-        INTEGER(intk) :: k, i, j2, j3, j4, jstag1, jstag2, dir, nop1
+        INTEGER(intk) :: k, i, j1, j2, j3, j4, jstag1, jstag2, jstag3, dir, nop1
         REAL(realk) :: umagsqr, sbu, sbv, sbw, pinf(1)
         REAL(realk) :: sb11, sb12, sb13, sb14, fak, vbfine
         REAL(realk) :: flag, ui, wi
@@ -304,19 +331,23 @@ CONTAINS
         SELECT CASE (iface)
         CASE (3)
             ! Right
+            j1 = 1
             j2 = 2
             j3 = 3
             j4 = 4
             jstag1 = 1
             jstag2 = 2
+            jstag3 = 3
             dir = -1
         CASE (4)
             ! Left
+            j1 = jj
             j2 = jj - 1
             j3 = jj - 2
             j4 = jj - 3
             jstag1 = jj - 1
             jstag2 = jj - 2
+            jstag3 = jj - 3
             dir = 1
         CASE DEFAULT
             CALL errr(__FILE__, __LINE__)
@@ -385,6 +416,19 @@ CONTAINS
                 END DO
             END DO
 
+            IF ( hasMph ) THEN
+                DO i = 2, ii-1
+                    DO k = 2, kk-1
+                        ! Second ghost layer on the same line.
+                        ! IB not tested vor mph -> commented
+                        u(k, j1, i) = (2.0*ubuf(k, 1, i) - u(k, j2, i))
+                            ! *sbv + (1.0-sb)*v(k, j, i1)
+                        w(k, j1, i) = (2.0*wbuf(k, 1, i) - w(k, j2, i))
+                            ! *sbw + (1.0-sbw)*w(k, j, i1)
+                    END DO
+                END DO
+            END IF
+
             ! Wall-normal velocity component
             DO i = 3, ii-2, 2
                 DO k = 3, kk-2, 2
@@ -450,6 +494,15 @@ CONTAINS
                         + v(k+1, jstag2, i+1)*(1.-sb14)*sbv
                 END DO
             END DO
+
+            IF ( hasMph ) THEN
+                ! Second ghost layer on the same line.
+                DO i = 3, ii-2
+                    DO k = 3, kk-2
+                        v(k, jstag1, i) = 2.0*v(k, jstag2, i) - v(k, jstag3, i)
+                    END DO
+                END DO
+            END IF
         END SELECT
 
         ! Pressure is optional, when called from setpointvalues for instance,
@@ -500,7 +553,7 @@ CONTAINS
 
         ! Local variables
         INTEGER(intk) :: kk, jj, ii
-        INTEGER(intk) :: j, i, k2, k3, k4, kstag1, kstag2, dir, nop1
+        INTEGER(intk) :: j, i, k1, k2, k3, k4, kstag1, kstag2, kstag3, dir, nop1
         REAL(realk) :: umagsqr, sbu, sbv, sbw, pinf(1)
         REAL(realk) :: sb11, sb12, sb13, sb14, fak, wbfine
         REAL(realk) :: flag, ui, vi
@@ -540,19 +593,23 @@ CONTAINS
         SELECT CASE (iface)
         CASE (5)
             ! Bottom
+            k1 = 1
             k2 = 2
             k3 = 3
             k4 = 4
             kstag1 = 1
             kstag2 = 2
+            kstag3 = 3
             dir = -1
         CASE (6)
             ! Top
+            k1 = kk
             k2 = kk - 1
             k3 = kk - 2
             k4 = kk - 3
             kstag1 = kk - 1
             kstag2 = kk - 2
+            kstag3 = kk - 3
             dir = 1
         CASE DEFAULT
             CALL errr(__FILE__, __LINE__)
@@ -619,6 +676,19 @@ CONTAINS
                 END DO
             END DO
 
+            IF ( hasMph ) THEN
+                DO i = 2, ii-1
+                    DO j = 2, jj-1
+                        ! Second ghost layer on the same line.
+                        ! IB not tested vor mph -> commented
+                        u(k1, j, i) = (2.0*ubuf(1, j, i) - u(k2, j, i))
+                            ! *sbv + (1.0-sb)*v(k, j, i1)
+                        v(k1, j, i) = (2.0*vbuf(1, j, i) - v(k2, j, i))
+                            ! *sbw + (1.0-sbw)*w(k, j, i1)
+                    END DO
+                END DO
+            END IF
+
             ! Wall-normal velocity component
             DO i = 3, ii-2, 2
                 DO j = 3, jj-2, 2
@@ -684,6 +754,15 @@ CONTAINS
                         + w(kstag2, j+1, i+1)*(1.0-sb14)*sbw
                 END DO
             END DO
+
+            IF ( hasMph ) THEN
+                ! Second ghost layer on the same line.
+                DO i = 3, ii-2
+                    DO j = 3, jj-2
+                        w(kstag1, j, i) = 2.0*w(kstag2, j, i) - w(kstag3, j, i)
+                    END DO
+                END DO
+            END IF
         END SELECT
 
         ! Pressure is optional, when called from setpointvalues for instance,

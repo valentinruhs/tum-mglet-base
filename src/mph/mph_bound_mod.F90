@@ -1,4 +1,4 @@
-MODULE mph_bound_c_mod
+MODULE mph_bound_mod
 
     USE precision_mod, ONLY: realk, intk
     USE grids_mod, ONLY: get_mgdims
@@ -9,10 +9,10 @@ MODULE mph_bound_c_mod
     IMPLICIT NONE(type, external)
     PRIVATE
 
-    ! Bound operation on cell-centred VOF scalars (C)
-    !   FIX, NOS, SLI: zero-gradient copy
-    !   PAR:           injection of the coarse value from the
-    !                  parent buffer into both ghost layers
+    ! Bound operation on cell-centred VOF scalar
+    ! FIX, NOS, SLI: zero-gradient
+    ! PAR: injection of the coarse value from the parent 
+    !      buffer into both ghost layers
     TYPE, EXTENDS(bound_t) :: bound_c_t
     CONTAINS
         PROCEDURE, NOPASS :: front => bfront
@@ -24,12 +24,11 @@ MODULE mph_bound_c_mod
     END TYPE bound_c_t
     TYPE(bound_c_t) :: bound_c
 
-    ! Bound operation on staggered triples (CS1..3, DS1..3, MS1..3,
-    ! U, V, W). f1/f2/f3 are staggered in x/y/z. Only PAR is handled:
-    !   normal component:      PAR face and outer face = coarse face
-    !                          value (as bound_flow does for u)
-    !   tangential components: both ghost layers = coarse value of the
-    !                          first coarse cell outside (injection)
+    ! Bound operation on staggered VOF triples
+    ! normal component: PAR face and outer face = coarse face
+    !                   value (as bound_flow does for u)
+    ! tangential components: both ghost layers = coarse value of the
+    !                        first coarse cell outside (injection)
     TYPE, EXTENDS(bound_t) :: bound_stg_t
     CONTAINS
         PROCEDURE, NOPASS :: front => sfront
@@ -410,4 +409,4 @@ CONTAINS
 
     END SUBROUTINE sbottom
 
-END MODULE mph_bound_c_mod
+END MODULE mph_bound_mod

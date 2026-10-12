@@ -15,7 +15,8 @@ MODULE mph_chk_mod
 
     USE MPI_f08
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, iparent, &
-        idprocofgrd, iposition, jposition, kposition, ngrid, get_bbox
+        idprocofgrd, iposition, jposition, kposition, ngrid, get_bbox, &
+        get_mgbasb
     USE comms_mod, ONLY: myid
     USE precision_mod, ONLY: intk, realk, mglet_mpi_real
     USE fields_mod, ONLY: get_fieldptr, set_field
@@ -25,14 +26,15 @@ MODULE mph_chk_mod
 
     USE mphcore_mod, ONLY: finChk, volTol, vofTol, hasMph
     USE mph_test_mod, ONLY: comp_abs_res, circumf, area, shape
-    USE mphcore_mod, ONLY: gmol1, rho1, mphTst
+    USE mphcore_mod, ONLY: gmol1, rho1, mphTst, vofErr, parIfcBand
 
     IMPLICIT NONE(type, external)
     PRIVATE
 
     REAL(realk) :: volInit, L1Init, L2Init
 
-    PUBLIC :: init_mph_chk, finish_mph_chk, comp_vol, final_chk, itinfo_mph
+    PUBLIC :: init_mph_chk, finish_mph_chk, comp_vol, final_chk, itinfo_mph, &
+        chk_ifc_par
 
 CONTAINS
 
@@ -88,6 +90,8 @@ CONTAINS
             WRITE(*,'(A,E11.5)') "Initial volume is: ", volInit
             WRITE(*, '()')
         END IF
+
+        CALL chk_ifc_par()
 
     END SUBROUTINE init_mph_chk
 
@@ -189,7 +193,7 @@ CONTAINS
         INTEGER(intk) :: n, igrid
         INTEGER(intk) :: kk, jj, ii
         REAL(realk) :: minx, maxx, miny, maxy, minz, maxz
-        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:), grdMask(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:)
@@ -203,6 +207,7 @@ CONTAINS
             CALL get_mgdims(kk, jj, ii, igrid)
             CALL get_bbox(minx, maxx, miny, maxy, minz, maxz, igrid)
             CALL get_fieldptr(c, "C", igrid)
+            CALL get_fieldptr(grdMask, "GRDMASK", igrid)
             CALL get_fieldptr(ddx, "DDX", igrid)
             CALL get_fieldptr(ddy, "DDY", igrid)
             CALL get_fieldptr(ddz, "DDZ", igrid)
@@ -213,7 +218,8 @@ CONTAINS
             CALL get_fieldptr(isIfc, "ISIFC", igrid)
 
             CALL comp_L_norm_err_grd(kk, jj, ii, minx, miny, minz, c, &
-                normx, normy, normz, alpha, isIfc, ddx, ddy, ddz, L1Grd, L2Grd)
+                grdMask, normx, normy, normz, alpha, isIfc, ddx, ddy, ddz, &
+                L1Grd, L2Grd)
             L1Loc = L1Loc + L1Grd
             L2Loc = L2Loc + L2Grd
         END DO
@@ -229,7 +235,8 @@ CONTAINS
     !================================================================
 
     SUBROUTINE comp_L_norm_err_grd(kk, jj, ii, minx, miny, minz, c, &
-        normx, normy, normz, alpha, isIfc, ddx, ddy, ddz, L1, L2)
+         grdMask, normx, normy, normz, alpha, isIfc, ddx, ddy, ddz, &
+         L1, L2)
     !----------------------------------------------------------------
     !   What it does:
     !
@@ -238,7 +245,7 @@ CONTAINS
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: minx, miny, minz
-        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(in) :: c(kk, jj, ii), grdMask(kk, jj, ii)
         REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
         REAL(realk), INTENT(in) :: alpha(kk, jj, ii), isIfc(kk, jj, ii)
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
@@ -261,7 +268,7 @@ CONTAINS
                     absRes = comp_abs_res(xMi, yMi, zMi, ddx(i), ddy(j), ddz(k), &
                         normx(k,j,i), normy(k,j,i), normz(k,j,i), alpha(k,j,i), &
                         c(k,j,i), isIfc(k,j,i), shape)
-                    eps = absRes/vol
+                    eps = grdMask(k,j,i)*absRes/vol
                     L1 = L1 + eps*vol
                     L2 = L2 + eps**2*vol
                 zMi = zMi + ddz(k)
@@ -545,5 +552,50 @@ CONTAINS
         END IF
 
     END SUBROUTINE comp_cha_mon_grd
+
+    !================================================================
+
+    SUBROUTINE chk_ifc_par()
+    !----------------------------------------------------------------
+    !   What it does:
+    !   no interface cell within
+    !   the 2 ghost layers + parIfcBand interior cells of a PAR face.
+    !   PAR ghosts carry the adjacent coarse cell, so the coarse side
+    !   is checked as well.
+    !----------------------------------------------------------------
+
+        ! Local variables
+        INTEGER(intk) :: n, igrid, kk, jj, ii, nb
+        INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
+        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:)
+        LOGICAL :: badLoc, badGlo
+
+        nb = 2 + parIfcBand
+        badLoc = .FALSE.
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+            CALL get_mgdims(kk, jj, ii, igrid)
+            CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
+            CALL get_fieldptr(c, "C", igrid)
+            IF (nfro == 8) badLoc = badLoc .OR. chkIfcBand(c(:, :, 1:nb))
+            IF (nbac == 8) badLoc = badLoc .OR. chkIfcBand(c(:, :, ii-nb+1:ii))
+            IF (nrgt == 8) badLoc = badLoc .OR. chkIfcBand(c(:, 1:nb, :))
+            IF (nlft == 8) badLoc = badLoc .OR. chkIfcBand(c(:, jj-nb+1:jj, :))
+            IF (nbot == 8) badLoc = badLoc .OR. chkIfcBand(c(1:nb, :, :))
+            IF (ntop == 8) badLoc = badLoc .OR. chkIfcBand(c(kk-nb+1:kk, :, :))
+        END DO
+
+        CALL MPI_Allreduce(badLoc, badGlo, 1, MPI_LOGICAL, MPI_LOR, MPI_COMM_WORLD)
+        IF (badGlo) CALL err_abort(vofErr, &
+            "Interface close to PAR face.", __FILE__, __LINE__)
+
+    CONTAINS
+
+        LOGICAL FUNCTION chkIfcBand(cb)
+            REAL(realk), INTENT(in) :: cb(:, :, :)
+            chkIfcBand = ANY(cb > vofTol .AND. cb < 1.0_realk - vofTol)
+        END FUNCTION chkIfcBand
+
+    END SUBROUTINE chk_ifc_par
 
 END MODULE mph_chk_mod
