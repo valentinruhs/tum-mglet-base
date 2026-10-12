@@ -19,9 +19,11 @@ MODULE mph_xfer_mod
     USE parent_mod, ONLY: parent
     USE ftoc_mod, ONLY: ftoc
     USE field_mod, ONLY: field_t
-    USE fields_mod, ONLY: get_field
+    USE fields_mod, ONLY: get_field, set_field
+
     USE mph_bound_c_mod, ONLY: bound_c, bound_stg
     USE mph_utils_mod, ONLY: int2char
+    USE mph_plic_mod, ONLY: comp_hlf_frc
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -39,7 +41,8 @@ CONTAINS
         ! Local variables
         ! None
 
-        CONTINUE
+        CALL set_field("HLFFRCMI")
+        CALL set_field("HLFFRCPL")
 
     END SUBROUTINE init_mph_xfer
 
@@ -107,8 +110,13 @@ CONTAINS
         END SELECT
 
         CALL get_field(fld_p, name)
+        ! perform connect first, the far right cells are restricted
+        ! using CON values form ghost cells
         DO ilevel = maxlevel, minlevel, -1
             CALL connect(ilevel, 2, s1=fld_p)
+        END DO
+        CALL comp_hlf_frc(q, name)
+        DO ilevel = maxlevel, minlevel, -1
             CALL ftoc(ilevel, fld_p%arr, fld_p%arr, flag)
         END DO
 

@@ -25,7 +25,7 @@ MODULE mph_vof_mod
     USE mph_utils_mod, ONLY: sel_ind, sel_ext, sel_vel, clp, int2char, get_lp_mdf, get_lp_bnds
     USE mph_plic_mod, ONLY: comp_ifc, comp_c_stg, comp_isIfc_stg, comp_c_loc
     USE mph_props_mod, ONLY: comp_d_stg
-    USE mph_xfer_mod, ONLY: rstr, rstr_stg, prlg, prlg_stg
+    USE mph_xfer_mod, ONLY: rstr, rstr_stg, prlg, prlg_stg, cnct
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -594,23 +594,26 @@ CONTAINS
         CALL def_adv_seq(itstep, advSeq)
         DO dirLoop = 1, 3
             l = advSeq(dirLoop)
-                ! Advect stg. grid mS(.), cS(.), dS(.)
-                DO q = 1, 3
-                    IF ( skpAdv ) CYCLE
-                    CALL comp_isIfc_stg(q)
-                    CALL comp_advr_stg(q, l)
-                    CALL comp_adve_stg(q, l, dt)
-                    CALL comp_flx_stg(q, l, dt)
-                    CALL adv_m_stg(q, l, dt)
-                    CALL adv_c_stg(q, l, dt)
-                    CALL comp_d_stg(q)
-                END DO
-                ! Advect main grid c
-                CALL comp_flx(l, dt)
-                CALL adv_c(l, dt)
+            ! Advect stg. grid mS(.), cS(.), dS(.)
+            DO q = 1, 3
+                IF ( skpAdv ) CYCLE
+                CALL comp_isIfc_stg(q)
+                CALL cnct("ISIFCVICS"//int2char(q))
+                CALL comp_advr_stg(q, l)
+                CALL comp_adve_stg(q, l, dt)
+                CALL comp_flx_stg(q, l, dt)
+                CALL adv_m_stg(q, l, dt)
+                CALL adv_c_stg(q, l, dt)
+                CALL comp_d_stg(q)
+            END DO
+            ! Advect main grid c
+            CALL comp_flx(l, dt)
+            CALL adv_c(l, dt)
 
-            ! Restriction
             CALL rstr(fldName="C", flag="D")
+            CALL prlg(fldName="C")
+            CALL comp_ifc()
+
             DO q = 1, 3
                 IF ( skpAdv ) CYCLE
                 CALL rstr_stg(q=q, fldName="CS")
@@ -618,23 +621,15 @@ CONTAINS
                 CALL rstr_stg(q=q, fldName="MS")
             END DO
 
-            ! Prologation
-            CALL prlg(fldName="C")
             IF ( .NOT. skpAdv ) THEN
                 CALL prlg_stg(fldName1="CS1", fldName2="CS2", fldName3="CS3")
                 CALL prlg_stg(fldName1="DS1", fldName2="DS2", fldName3="DS3")
                 CALL prlg_stg(fldName1="MS1", fldName2="MS2", fldName3="MS3")
-            END IF
-
-            ! Update u, v, w with mS(.) and dS(.)
-            IF ( .NOT. skpAdv ) THEN
                 DO q = 1, 3
                     CALL upd_vel_stg(q)
                 END DO
                 CALL prlg_stg(fldName1="U", fldName2="V", fldName3="W")
             END IF
-
-            CALL comp_ifc()
         END DO
 
     END SUBROUTINE adve_operator

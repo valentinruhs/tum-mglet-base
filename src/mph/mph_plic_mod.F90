@@ -22,17 +22,17 @@
 MODULE mph_plic_mod
 
     USE precision_mod, ONLY: intk, realk
-    USE mph_utils_mod, ONLY: sel_ind, int2char
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims
-    USE mphcore_mod, ONLY: vofTol
     USE fields_mod, ONLY: set_field, get_fieldptr
-    USE mph_xfer_mod, ONLY: cnct
+
+    USE mph_utils_mod, ONLY: sel_ind, int2char
+    USE mphcore_mod, ONLY: vofTol, rho1, rho2
 
     IMPLICIT NONE(type, external)
     PRIVATE 
 
-    PUBLIC :: init_mph_plic, finish_mph_plic, &
-        comp_ifc, comp_c_stg, comp_isIfc_stg, comp_c_loc
+    PUBLIC :: init_mph_plic, finish_mph_plic, comp_ifc, comp_c_stg, &
+        comp_isIfc_stg, comp_c_loc, comp_hlf_frc
 
 CONTAINS
 
@@ -115,8 +115,6 @@ CONTAINS
 
             CALL comp_isIfc_grd(kk, jj, ii, cSq, isIfcSq, isIfcVicSq)
         END DO
-
-        CALL cnct(isIfcVicFldName)
 
     END SUBROUTINE comp_isIfc_stg
 
@@ -463,6 +461,139 @@ CONTAINS
         ENDDO
 
     END SUBROUTINE comp_c_stg_grd
+
+    !================================================================
+
+    SUBROUTINE comp_hlf_frc(q, name)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: q
+        CHARACTER(len=3), INTENT(in) :: name
+
+        ! Local variables
+        CHARACTER(len=3) :: dFldName, mFldName
+        INTEGER(intk) :: n, igrid
+        INTEGER(intk) :: kk, jj, ii
+        REAL(realk), POINTER, CONTIGUOUS :: c(:,:,:), hlfFrcMi(:,:,:), hlfFrcPl(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
+        REAL(realk), POINTER, CONTIGUOUS :: normx(:,:,:), normy(:,:,:), normz(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: alpha(:,:,:), isIfc(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: dSq(:,:,:), mSq(:,:,:)
+
+        dFldName = "DS"//int2char(q)
+        mFldName = "MS"//int2char(q)
+
+        DO n = 1, nmygrids
+            igrid = mygrids(n)
+
+            CALL get_mgdims(kk, jj, ii, igrid)
+
+            CALL get_fieldptr(c, "C", igrid)
+            CALL get_fieldptr(hlfFrcMi, "HLFFRCMI", igrid)
+            CALL get_fieldptr(hlfFrcPl, "HLFFRCPL", igrid)
+            CALL get_fieldptr(ddx, "DDX", igrid)
+            CALL get_fieldptr(ddy, "DDY", igrid)
+            CALL get_fieldptr(ddz, "DDZ", igrid)
+            CALL get_fieldptr(normx, "NORMX", igrid)
+            CALL get_fieldptr(normy, "NORMY", igrid)
+            CALL get_fieldptr(normz, "NORMZ", igrid)
+            CALL get_fieldptr(alpha, "ALPHA", igrid)
+            CALL get_fieldptr(isIfc, "ISIFC", igrid)
+            CALL get_fieldptr(dSq, dFldName, igrid)
+            CALL get_fieldptr(mSq, mFldName, igrid)
+
+            CALL comp_hlf_frc_grd(kk, jj, ii, q, c, hlfFrcMi, hlfFrcPl, &
+                ddx, ddy, ddz, normx, normy, normz, alpha, isIfc)
+
+            IF ( name == "DS"//int2char(q) ) THEN
+                hlfFrcMi = rho2 + (rho1 - rho2)*hlfFrcMi
+                hlfFrcPl = rho2 + (rho1 - rho2)*hlfFrcPl
+            ELSE IF ( name == "MS"//int2char(q) ) THEN
+                hlfFrcMi = rho2 + (rho1 - rho2)*hlfFrcMi
+                hlfFrcPl = rho2 + (rho1 - rho2)*hlfFrcPl
+                hlfFrcMi = mSq/dSq*hlfFrcMi
+                hlfFrcPl = mSq/dSq*hlfFrcPl
+            END IF
+        END DO
+
+    END SUBROUTINE comp_hlf_frc
+
+    !================================================================
+
+    SUBROUTINE comp_hlf_frc_grd(kk, jj, ii, q, c, hlfFrcMi, hlfFrcPl, &
+        ddx, ddy, ddz, normx, normy, normz, alpha, isIfc)
+    !----------------------------------------------------------------
+    !   What it does:
+    !   
+    !----------------------------------------------------------------
+
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(in) :: kk, jj, ii, q
+        REAL(realk), INTENT(in) :: c(kk, jj, ii)
+        REAL(realk), INTENT(out) :: hlfFrcMi(kk, jj, ii), hlfFrcPl(kk, jj, ii)
+        REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
+        REAL(realk), INTENT(in) :: normx(kk, jj, ii), normy(kk, jj, ii), normz(kk, jj, ii)
+        REAL(realk), INTENT(in) :: alpha(kk, jj, ii)
+        REAL(realk), INTENT(in) :: isIfc(kk, jj, ii)
+
+        ! Local variables
+        INTEGER(intk) :: k, j, i
+        INTEGER(intk) :: kq, jq, iq
+        REAL(realk) :: alphaOffset
+        REAL(realk) :: alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi, ddsMi
+        REAL(realk) :: alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl, ddsPl
+
+
+        hlfFrcMi = 0.0_realk
+        hlfFrcPl = 0.0_realk
+
+        CALL sel_ind(q, iq, jq, kq)
+
+        DO i = 2, ii-1
+            DO j = 2, jj-1
+                DO k = 2, kk-1
+                    alphaOffset = ( iq * normx(k,j,i) * ddx(i) + jq * normy(k,j,i) * ddy(j) + kq * normz(k,j,i) * ddz(k) ) / 2.0_realk
+
+                    alphaMi = alpha(k,j,i) - alphaOffset
+                    ddxMi = ( 1.0_realk - iq ) * ddx(i) + iq * ddx(i) / 2.0_realk
+                    ddyMi = ( 1.0_realk - jq ) * ddy(j) + jq * ddy(j) / 2.0_realk
+                    ddzMi = ( 1.0_realk - kq ) * ddz(k) + kq * ddz(k) / 2.0_realk
+                    normxMi = normx(k,j,i)
+                    normyMi = normy(k,j,i)
+                    normzMi = normz(k,j,i)
+                    ddsMi = iq * ddxMi + jq * ddyMi + kq * ddzMi
+
+                    alphaPl = alpha(k+kq,j+jq,i+iq)
+                    ddxPl = ( 1.0_realk - iq ) * ddx(i+iq) + iq * ddx(i+iq) / 2.0_realk
+                    ddyPl = ( 1.0_realk - jq ) * ddy(j+jq) + jq * ddy(j+jq) / 2.0_realk
+                    ddzPl = ( 1.0_realk - kq ) * ddz(k+kq) + kq * ddz(k+kq) / 2.0_realk
+                    normxPl = normx(k+kq,j+jq,i+iq)
+                    normyPl = normy(k+kq,j+jq,i+iq)
+                    normzPl = normz(k+kq,j+jq,i+iq)
+                    ddsPl = iq * ddxPl + jq * ddyPl + kq * ddzPl
+
+                    IF ( isIfc(k,j,i) > 0.0_realk .AND. isIfc(k+kq,j+jq,i+iq) > 0.0_realk ) THEN
+                        CALL comp_c_loc(hlfFrcMi(k,j,i), alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
+                        CALL comp_c_loc(hlfFrcPl(k,j,i), alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
+                    ELSE IF ( isIfc(k,j,i) > 0.0_realk .AND. isIfc(k+kq,j+jq,i+iq) < 0.0_realk ) THEN
+                        CALL comp_c_loc(hlfFrcMi(k,j,i), alphaMi, ddxMi, ddyMi, ddzMi, normxMi, normyMi, normzMi)
+                        hlfFrcPl(k,j,i) = c(k+kq,j+jq,i+iq)
+                    ELSE IF ( isIfc(k,j,i) < 0.0_realk .AND. isIfc(k+kq,j+jq,i+iq) > 0.0_realk ) THEN
+                        hlfFrcMi(k,j,i) = c(k,j,i)
+                        CALL comp_c_loc(hlfFrcPl(k,j,i), alphaPl, ddxPl, ddyPl, ddzPl, normxPl, normyPl, normzPl)
+                    ELSE
+                        hlfFrcMi(k,j,i) = c(k,j,i)
+                        hlfFrcPl(k,j,i) = c(k+kq,j+jq,i+iq)
+                    ENDIF
+                ENDDO
+            ENDDO
+        ENDDO
+
+    END SUBROUTINE comp_hlf_frc_grd
 
     !================================================================
 
