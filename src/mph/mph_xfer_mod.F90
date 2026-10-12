@@ -20,7 +20,6 @@ MODULE mph_xfer_mod
     USE ftoc_mod, ONLY: ftoc
     USE field_mod, ONLY: field_t
     USE fields_mod, ONLY: get_field, set_field
-    USE bound_flow_mod, ONLY: bound_flow
     USE bound_mod, ONLY: bound_t
 
     USE mph_utils_mod, ONLY: int2char

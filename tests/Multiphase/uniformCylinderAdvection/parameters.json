@@ -1,8 +1,8 @@
 {
     "time": {
         "dt": 0.01,
-        "mtstep": 30,
-	"itinfo": 10,
+        "mtstep": 0,
+	"itinfo": 1,
 	"read": false
     },
     "io": {
@@ -21,7 +21,7 @@
             "type": "sip",
             "epcorr": 1.0E-12,
             "nouter": 90,
-            "ninner": 50,
+            "ninner": 100,
 	    "loglevel": 2
         },
         "lesmodel": {

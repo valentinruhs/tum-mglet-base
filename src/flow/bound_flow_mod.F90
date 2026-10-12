@@ -411,7 +411,7 @@ CONTAINS
                         - 0.5*(u(k, j3, i) - u(k, j4, i)))*sbu &
                         + (1.0-sbu)*u(k, j2, i)
                     w(k, j2, i) = (wbuf(k, i, 1) &
-                        - 0.5*(w(k, j2, i)-w(k, j4, i)))*sbw &
+                        - 0.5*(w(k, j3, i)-w(k, j4, i)))*sbw &
                         + (1.0-sbw)*w(k, j2, i)
                 END DO
             END DO
@@ -421,9 +421,9 @@ CONTAINS
                     DO k = 2, kk-1
                         ! Second ghost layer on the same line.
                         ! IB not tested vor mph -> commented
-                        u(k, j1, i) = (2.0*ubuf(k, 1, i) - u(k, j2, i))
+                        u(k, j1, i) = (2.0*ubuf(k, i, 1) - u(k, j2, i))
                             ! *sbv + (1.0-sb)*v(k, j, i1)
-                        w(k, j1, i) = (2.0*wbuf(k, 1, i) - w(k, j2, i))
+                        w(k, j1, i) = (2.0*wbuf(k, i, 1) - w(k, j2, i))
                             ! *sbw + (1.0-sbw)*w(k, j, i1)
                     END DO
                 END DO
@@ -681,9 +681,9 @@ CONTAINS
                     DO j = 2, jj-1
                         ! Second ghost layer on the same line.
                         ! IB not tested vor mph -> commented
-                        u(k1, j, i) = (2.0*ubuf(1, j, i) - u(k2, j, i))
+                        u(k1, j, i) = (2.0*ubuf(j, i, 1) - u(k2, j, i))
                             ! *sbv + (1.0-sb)*v(k, j, i1)
-                        v(k1, j, i) = (2.0*vbuf(1, j, i) - v(k2, j, i))
+                        v(k1, j, i) = (2.0*vbuf(j, i, 1) - v(k2, j, i))
                             ! *sbw + (1.0-sbw)*w(k, j, i1)
                     END DO
                 END DO
