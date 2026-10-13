@@ -252,7 +252,7 @@ CONTAINS
         CASE ( tstACylAd )
             CALL set_vel_c(1.0_realk, 1.0_realk, 0.0_realk, h=1)
         CASE ( tstOpCFl )
-            CALL set_vel_cha(120.0_realk, 1.0_realk, 2.0_realk*pi, pi, "NONE")
+            CALL set_vel_cha(180.0_realk, 1.0_realk, 2.0_realk*pi, pi, "TURB")
         CASE DEFAULT
             CALL err_abort(mphInitErr, "no velocity field for this test.", __FILE__, __LINE__)
         END SELECT

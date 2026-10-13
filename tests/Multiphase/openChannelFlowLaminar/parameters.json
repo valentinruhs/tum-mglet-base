@@ -1,0 +1,50 @@
+{
+    "time": {
+        "dt": 0.006,
+        "mtstep": 50000,
+	"itinfo": 500,
+	"read": false
+    },
+    "io": {
+        "grids": "grids.h5",
+        "infile": "fields_in.h5",
+        "outfile": "fields.h5"
+    },
+    "ib": {
+        "type": "noib"
+    },
+    "flow": {
+        "gmol": 0.001,
+        "rho": 1.0,
+        "uinf": [0.0, 0.0, 0.0],
+	"gradp": [-1.0, 0.0, 0.0],
+        "pressuresolver": {
+            "type": "sip",
+            "epcorr": 1.0E-8,
+            "nouter": 90,
+            "ninner": 100,
+	    "loglevel": 2
+        },
+        "lesmodel": {
+            "model": "none"
+        }
+    },
+    
+    "multiphase": {
+	"test": "Open Channel Flow",
+	"skipAdvection": false,
+   	"skipDiffusion": false,
+    	"skipPressure": false,
+    	"skipExternal": false,
+    	"vofTolerance": 1.0E-12,
+    	"volTolerance": 1.0E-8,
+    	"advectionScheme": "QUICK",
+    	"donatingCentered": true,
+    	"finalCheck": true,
+	"rho1" : 1.0,
+	"rho2" : 0.001,
+	"gmol1" : 0.02,
+	"gmol2" : 2.0E-5,
+	"gravity" : [0.0, -1024.0, 0.0]
+    }   
+}
