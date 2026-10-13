@@ -1258,6 +1258,7 @@ CONTAINS
         INTEGER(intk) :: kk, jj, ii
         REAL(realk), POINTER, CONTIGUOUS :: cWySq(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: up(:,:,:), vp(:,:,:), wp(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: vel(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: advr(:,:,:), adve(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: mSq(:,:,:)
@@ -1278,6 +1279,9 @@ CONTAINS
             CALL get_fieldptr(u, "U", igrid)
             CALL get_fieldptr(v, "V", igrid)
             CALL get_fieldptr(w, "W", igrid)
+            CALL get_fieldptr(up, "UP", igrid)
+            CALL get_fieldptr(vp, "VP", igrid)
+            CALL get_fieldptr(wp, "WP", igrid)
             CALL get_fieldptr(advr, "ADVR", igrid)
             CALL get_fieldptr(adve, "ADVE", igrid)
             CALL get_fieldptr(mSq, mFldName, igrid)
@@ -1290,7 +1294,7 @@ CONTAINS
             CALL get_fieldptr(ddy, "DDY", igrid)
             CALL get_fieldptr(ddz, "DDZ", igrid)
 
-            CALL sel_vel(q, u, v, w, vel)
+            CALL sel_vel(q, up, vp, wp, vel)
             CALL get_lp_bnds(igrid, q, ista, iend, jsta, jend, ksta, kend)
             CALL adv_m_grd(kk, jj, ii, q, l, cWySq, vel, &
                 advr, adve, mSq, cFlx1, cFlx2, dx, dy, dz, &
