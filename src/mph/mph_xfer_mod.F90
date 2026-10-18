@@ -24,7 +24,7 @@ MODULE mph_xfer_mod
 
     USE mph_utils_mod, ONLY: int2char
     USE mph_plic_mod, ONLY: comp_hlf_frc
-    USE mph_bound_mod, ONLY: bound_c, bound_stg
+    USE mph_bound_mod, ONLY: bound_c
 
     IMPLICIT NONE(type, external)
     PRIVATE

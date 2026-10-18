@@ -1807,19 +1807,19 @@ CONTAINS
         ! Leonard"s formulation and easier to adjust in the future
         ! (see QUICKEST scheme).
         !------------------------------------------------------------
-        ! PURE REAL(realk) FUNCTION lagrange_interpolation(phiUU, phiU, phiD, dsUU, dsD, dsr) RESULT(r)
-        !     REAL(realk), INTENT(in) :: phiUU, phiU, phiD, dsUU, dsD, dsr
-        !     r = phiUU*(dsr*(dsr-dsD))/(dsUU*(dsUU+dsD)) &
-        !         - phiU*((dsr+dsUU)*(dsr-dsD))/(dsUU*dsD) &
-        !         + phiD*(dsr*(dsr+dsUU))/(dsD*(dsUU+dsD))
+        ! PURE REAL(realk) FUNCTION lagrange_interpolation(phiFU, phiU, phiD, dsFU, dsD, dsr) RESULT(r)
+        !     REAL(realk), INTENT(in) :: phiFU, phiU, phiD, dsFU, dsD, dsr
+        !     r = phiFU*(dsr*(dsr-dsD))/(dsFU*(dsFU+dsD)) &
+        !         - phiU*((dsr+dsFU)*(dsr-dsD))/(dsFU*dsD) &
+        !         + phiD*(dsr*(dsr+dsFU))/(dsD*(dsFU+dsD))
         ! END FUNCTION lagrange_interpolation
 
-        PURE REAL(realk) FUNCTION newton_interpolation(phiUU, phiU, phiD, dsUU, dsD, dsr) RESULT(r)
-            REAL(realk), INTENT(in) :: phiUU, phiU, phiD, dsUU, dsD, dsr
+        PURE REAL(realk) FUNCTION newton_interpolation(phiFU, phiU, phiD, dsFU, dsD, dsr) RESULT(r)
+            REAL(realk), INTENT(in) :: phiFU, phiU, phiD, dsFU, dsD, dsr
             REAL(realk) :: dd1U, dd1D, curv
             dd1D = (phiD - phiU)/dsD
-            dd1U = (phiU - phiUU)/dsUU
-            curv = (dd1D - dd1U)/(dsUU + dsD)
+            dd1U = (phiU - phiFU)/dsFU
+            curv = (dd1D - dd1U)/(dsFU + dsD)
             r = phiU + dsr*dd1D + dsr*(dsr - dsD)*curv
         END FUNCTION newton_interpolation
 

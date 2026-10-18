@@ -367,20 +367,20 @@ CONTAINS
         DO i = istart, istop, 2
             DO j = jstart, jstop, 2
                 DO k = kstart, kstop, 2
-                    sum_pv = hlfFrcPl(k, j, i)*ddz(k)*ddy(j)*ddx(i)/2.0_realk &
+                    sum_pv = hlfFrcPl(k, j, i)*ddz(k)*ddy(j)*ddx(i+1)/2.0_realk &
                         + ff(k, j, i+1)*ddz(k)*ddy(j)*dx(i+1) &
-                        + hlfFrcMi(k, j, i+2)*ddz(k)*ddy(j)*ddx(i+3)/2.0_realk &
-                        + hlfFrcPl(k, j+1, i)*ddz(k)*ddy(j+1)*ddx(i)/2.0_realk &
+                        + hlfFrcMi(k, j, i+2)*ddz(k)*ddy(j)*ddx(i+2)/2.0_realk &
+                        + hlfFrcPl(k, j+1, i)*ddz(k)*ddy(j+1)*ddx(i+1)/2.0_realk &
                         + ff(k, j+1, i+1)*ddz(k)*ddy(j+1)*dx(i+1) &
-                        + hlfFrcMi(k, j+1, i+2)*ddz(k)*ddy(j+1)*ddx(i+3)/2.0_realk &
-                        + hlfFrcPl(k+1, j, i)*ddz(k+1)*ddy(j)*ddx(i)/2.0_realk &
+                        + hlfFrcMi(k, j+1, i+2)*ddz(k)*ddy(j+1)*ddx(i+2)/2.0_realk &
+                        + hlfFrcPl(k+1, j, i)*ddz(k+1)*ddy(j)*ddx(i+1)/2.0_realk &
                         + ff(k+1, j, i+1)*ddz(k+1)*ddy(j)*dx(i+1) &
-                        + hlfFrcMi(k+1, j, i+2)*ddz(k+1)*ddy(j)*ddx(i+3)/2.0_realk &
-                        + hlfFrcPl(k+1, j+1, i)*ddz(k+1)*ddy(j+1)*ddx(i)/2.0_realk &
+                        + hlfFrcMi(k+1, j, i+2)*ddz(k+1)*ddy(j)*ddx(i+2)/2.0_realk &
+                        + hlfFrcPl(k+1, j+1, i)*ddz(k+1)*ddy(j+1)*ddx(i+1)/2.0_realk &
                         + ff(k+1, j+1, i+1)*ddz(k+1)*ddy(j+1)*dx(i+1) &
-                        + hlfFrcMi(k+1, j+1, i+2)*ddz(k+1)*ddy(j+1)*ddx(i+3)/2.0_realk
+                        + hlfFrcMi(k+1, j+1, i+2)*ddz(k+1)*ddy(j+1)*ddx(i+2)/2.0_realk
 
-                    sum_v = (ddx(i)/2.0_realk + dx(i+1) + ddx(i+3)/2.0_realk) &
+                    sum_v = (ddx(i+1)/2.0_realk + dx(i+1) + ddx(i+2)/2.0_realk) &
                         *(ddy(j) + ddy(j+1)) &
                         *(ddz(k) + ddz(k+1))
 
@@ -424,21 +424,21 @@ CONTAINS
         DO i = istart, istop, 2
             DO j = jstart, jstop, 2
                 DO k = kstart, kstop, 2
-                    sum_pv = hlfFrcPl(k, j, i)*ddz(k)*ddy(j)/2.0_realk*ddx(i) &
+                    sum_pv = hlfFrcPl(k, j, i)*ddz(k)*ddy(j+1)/2.0_realk*ddx(i) &
                         + ff(k, j+1, i)*ddz(k)*dy(j+1)*ddx(i) &
-                        + hlfFrcMi(k, j+2, i)*ddz(k)*ddy(j+3)/2.0_realk*ddx(i) &
-                        + hlfFrcPl(k, j, i+1)*ddz(k)*ddy(j)/2.0_realk*ddx(i+1) &
+                        + hlfFrcMi(k, j+2, i)*ddz(k)*ddy(j+2)/2.0_realk*ddx(i) &
+                        + hlfFrcPl(k, j, i+1)*ddz(k)*ddy(j+1)/2.0_realk*ddx(i+1) &
                         + ff(k, j+1, i+1)*ddz(k)*dy(j+1)*ddx(i+1) &
-                        + hlfFrcMi(k, j+2, i+1)*ddz(k)*ddy(j+3)/2.0_realk*ddx(i+1) &
-                        + hlfFrcPl(k+1, j, i)*ddz(k+1)*ddy(j)/2.0_realk*ddx(i) &
+                        + hlfFrcMi(k, j+2, i+1)*ddz(k)*ddy(j+2)/2.0_realk*ddx(i+1) &
+                        + hlfFrcPl(k+1, j, i)*ddz(k+1)*ddy(j+1)/2.0_realk*ddx(i) &
                         + ff(k+1, j+1, i)*ddz(k+1)*dy(j+1)*ddx(i) &
-                        + hlfFrcMi(k+1, j+2, i)*ddz(k+1)*ddy(j+3)/2.0_realk*ddx(i) &
-                        + hlfFrcPl(k+1, j, i+1)*ddz(k+1)*ddy(j)/2.0_realk*ddx(i+1) &
+                        + hlfFrcMi(k+1, j+2, i)*ddz(k+1)*ddy(j+2)/2.0_realk*ddx(i) &
+                        + hlfFrcPl(k+1, j, i+1)*ddz(k+1)*ddy(j+1)/2.0_realk*ddx(i+1) &
                         + ff(k+1, j+1, i+1)*ddz(k+1)*dy(j+1)*ddx(i+1) &
-                        + hlfFrcMi(k+1, j+2, i+1)*ddz(k+1)*ddy(j+3)/2.0_realk*ddx(i+1)
+                        + hlfFrcMi(k+1, j+2, i+1)*ddz(k+1)*ddy(j+2)/2.0_realk*ddx(i+1)
 
                     sum_v = (ddx(i) + ddx(i+1)) &
-                        *(ddy(j)/2.0_realk + dy(j+1) + ddy(j+3)/2.0_realk) &
+                        *(ddy(j+1)/2.0_realk + dy(j+1) + ddy(j+2)/2.0_realk) &
                         *(ddz(k) + ddz(k+1))
 
                     icount = icount + 1
@@ -481,22 +481,22 @@ CONTAINS
         DO i = istart, istop, 2
             DO j = jstart, jstop, 2
                 DO k = kstart, kstop, 2
-                    sum_pv = hlfFrcPl(k, j, i)*ddz(k)/2.0_realk*ddy(j)*ddx(i) &
+                    sum_pv = hlfFrcPl(k, j, i)*ddz(k+1)/2.0_realk*ddy(j)*ddx(i) &
                         + ff(k+1, j, i)*dz(k+1)*ddy(j)*ddx(i) &
-                        + hlfFrcMi(k+2, j, i)*ddz(k+3)/2.0_realk*ddy(j)*ddx(i) &
-                        + hlfFrcPl(k, j, i+1)*ddz(k)/2.0_realk*ddy(j)*ddx(i+1) &
+                        + hlfFrcMi(k+2, j, i)*ddz(k+2)/2.0_realk*ddy(j)*ddx(i) &
+                        + hlfFrcPl(k, j, i+1)*ddz(k+1)/2.0_realk*ddy(j)*ddx(i+1) &
                         + ff(k+1, j, i+1)*dz(k+1)*ddy(j)*ddx(i+1) &
-                        + hlfFrcMi(k+2, j, i+1)*ddz(k+3)/2.0_realk*ddy(j)*ddx(i+1) &
-                        + hlfFrcPl(k, j+1, i)*ddz(k)/2.0_realk*ddy(j+1)*ddx(i) &
+                        + hlfFrcMi(k+2, j, i+1)*ddz(k+2)/2.0_realk*ddy(j)*ddx(i+1) &
+                        + hlfFrcPl(k, j+1, i)*ddz(k+1)/2.0_realk*ddy(j+1)*ddx(i) &
                         + ff(k+1, j+1, i)*dz(k+1)*ddy(j+1)*ddx(i) &
-                        + hlfFrcMi(k+2, j+1, i)*ddz(k+3)/2.0_realk*ddy(j+1)*ddx(i) &
-                        + hlfFrcPl(k, j+1, i+1)*ddz(k)/2.0_realk*ddy(j+1)*ddx(i+1) &
+                        + hlfFrcMi(k+2, j+1, i)*ddz(k+2)/2.0_realk*ddy(j+1)*ddx(i) &
+                        + hlfFrcPl(k, j+1, i+1)*ddz(k+1)/2.0_realk*ddy(j+1)*ddx(i+1) &
                         + ff(k+1, j+1, i+1)*dz(k+1)*ddy(j+1)*ddx(i+1) &
-                        + hlfFrcMi(k+2, j+1, i+1)*ddz(k+3)/2.0_realk*ddy(j+1)*ddx(i+1)
+                        + hlfFrcMi(k+2, j+1, i+1)*ddz(k+2)/2.0_realk*ddy(j+1)*ddx(i+1)
 
                     sum_v = (ddx(i) + ddx(i+1)) &
                         *(ddy(j) + ddy(j+1)) &
-                        *(ddz(k)/2.0_realk + dz(k+1) + ddz(k+3)/2.0_realk)
+                        *(ddz(k+1)/2.0_realk + dz(k+1) + ddz(k+2)/2.0_realk)
 
                     icount = icount + 1
                     sendbuf(icount) = sum_pv/sum_v

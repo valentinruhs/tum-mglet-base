@@ -10,7 +10,7 @@ MODULE mph_bound_mod
     PRIVATE
 
     ! Bound operation on cell-centred VOF scalar
-    ! FIX, NOS, SLI: zero-gradient
+    ! NOS, SLI: zero-gradient
     ! PAR: injection of the coarse value from the parent 
     !      buffer into both ghost layers
     TYPE, EXTENDS(bound_t) :: bound_c_t
@@ -59,7 +59,7 @@ CONTAINS
 
         ! Return early when no action is to be taken
         SELECT CASE (ctyp)
-        CASE ("FIX", "NOS", "SLI", "PAR")
+        CASE ("NOS", "SLI", "PAR")
             CONTINUE
         CASE DEFAULT
             RETURN
@@ -87,7 +87,7 @@ CONTAINS
         END SELECT
 
         SELECT CASE ( ctyp )
-        CASE ("FIX", "NOS", "SLI")
+        CASE ("NOS", "SLI")
             DO j = 1, jj
                 DO k = 1, kk
                     c(k, j, i2) = c(k, j, i3)
@@ -125,7 +125,7 @@ CONTAINS
 
         ! Return early when no action is to be taken
         SELECT CASE (ctyp)
-        CASE ("FIX", "NOS", "SLI", "PAR")
+        CASE ("NOS", "SLI", "PAR")
             CONTINUE
         CASE DEFAULT
             RETURN
@@ -153,7 +153,7 @@ CONTAINS
         END SELECT
 
         SELECT CASE ( ctyp )
-        CASE ("FIX", "NOS", "SLI")
+        CASE ("NOS", "SLI")
             DO i = 1, ii
                 DO k = 1, kk
                     c(k, j2, i) = c(k, j3, i)
@@ -188,7 +188,7 @@ CONTAINS
 
         ! Return early when no action is to be taken
         SELECT CASE (ctyp)
-        CASE ("FIX", "NOS", "SLI", "PAR")
+        CASE ("NOS", "SLI", "PAR")
             CONTINUE
         CASE DEFAULT
             RETURN
@@ -216,7 +216,7 @@ CONTAINS
         END SELECT
 
         SELECT CASE ( ctyp )
-        CASE ("FIX", "NOS", "SLI")
+        CASE ("NOS", "SLI")
             DO i = 1, ii
                 DO j = 1, jj
                     c(k2, j, i) = c(k3, j, i)
