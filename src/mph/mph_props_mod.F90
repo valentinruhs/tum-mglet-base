@@ -14,7 +14,7 @@
 
 MODULE mph_props_mod
 
-    USE mphcore_mod, ONLY: gmol1, gmol2, rho1, rho2, propsErr
+    USE mphcore_mod, ONLY: gmol1, gmol2, rho1, rho2, propsErr, denStg
     USE mph_utils_mod, ONLY: clp, int2char
     USE precision_mod, ONLY: intk, realk
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims
@@ -543,15 +543,14 @@ CONTAINS
             ! This is the "correct" density field
             CALL comp_prop(kk, jj, ii, c, d, rho1, rho2, meanFlag="arit")
 
-            ! Densities at faces depending on cSq
-            ! This is only valid for one time-step. Otherwise, the c-/d-fields
-            ! would diverge.
-            ! dBa = dS1
-            ! dLe = dS2
-            ! dTo = dS3
-
-            CALL comp_prop_face(kk, jj, ii, c, dBa, dLe, dTo, &
-                rho1, rho2, ddx, ddy, ddz, meanFlag="arit")
+            IF ( denStg ) THEN
+                dBa = dS1
+                dLe = dS2
+                dTo = dS3
+            ELSE
+                CALL comp_prop_face(kk, jj, ii, c, dBa, dLe, dTo, &
+                    rho1, rho2, ddx, ddy, ddz, meanFlag="arit")
+            END IF
 
             CALL comp_prop(kk, jj, ii, c, g, gmol1, gmol2, meanFlag="harm")
             CALL comp_prop_face_stg(kk, jj, ii, c, gUv, gUw, gVw, &

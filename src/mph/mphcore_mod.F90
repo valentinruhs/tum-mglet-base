@@ -31,7 +31,7 @@ MODULE mphcore_mod
     LOGICAL, PROTECTED :: skpAdv, skpDif, skpPre, skpExt
     REAL(realk), PROTECTED :: vofTol, volTol
     CHARACTER(len=5), PROTECTED :: advScm
-    LOGICAL, PROTECTED :: donCen
+    LOGICAL, PROTECTED :: donCen, denStg
     INTEGER(intk), PROTECTED :: parIfcBand
     LOGICAL, PROTECTED :: finChk
 
@@ -45,7 +45,7 @@ MODULE mphcore_mod
 
     PUBLIC :: init_mphcore, finish_mphcore, hasMph, &
         mphTst, skpAdv, skpDif, skpPre, skpExt, vofTol, &
-        volTol, advScm, donCen, parIfcBand, finChk, rho1, rho2, &
+        volTol, advScm, donCen, denStg, parIfcBand, finChk, rho1, rho2, &
         gmol1, gmol2, grav, propsErr, vofErr, plicErr, mphInitErr
 
 CONTAINS
@@ -85,6 +85,7 @@ CONTAINS
         CALL mphConf%get_value("/volTolerance", volTol, 1.0E-8_realk)
         CALL mphConf%get_value("/advectionScheme", advScm, "QUICK")
         CALL mphConf%get_value("/donatingCentered", donCen, .FALSE.)
+        CALL mphConf%get_value("/densityFaceStag", denStg, .FALSE.)
         CALL mphConf%get_value("/parentInterfaceBand", parIfcBand, 4)
         CALL mphConf%get_value("/finalCheck", finChk, .FALSE.)
 
