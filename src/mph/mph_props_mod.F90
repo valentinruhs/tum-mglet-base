@@ -546,9 +546,12 @@ CONTAINS
             ! Densities at faces depending on cSq
             ! This is only valid for one time-step. Otherwise, the c-/d-fields
             ! would diverge.
-            dBa = dS1
-            dLe = dS2
-            dTo = dS3
+            ! dBa = dS1
+            ! dLe = dS2
+            ! dTo = dS3
+
+            CALL comp_prop_face(kk, jj, ii, c, dBa, dLe, dTo, &
+                rho1, rho2, ddx, ddy, ddz, meanFlag="arit")
 
             CALL comp_prop(kk, jj, ii, c, g, gmol1, gmol2, meanFlag="harm")
             CALL comp_prop_face_stg(kk, jj, ii, c, gUv, gUw, gVw, &
