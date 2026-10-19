@@ -121,12 +121,12 @@ CONTAINS
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        aw(k,j,i) = bw(k,j,i)/(ddx(i)*dx(i-1))
-                        ae(k,j,i) = be(k,j,i)/(ddx(i)*dx(i))
-                        as(k,j,i) = bs(k,j,i)/(ddy(j)*dy(j-1))
-                        an(k,j,i) = bn(k,j,i)/(ddy(j)*dy(j))
-                        ab(k,j,i) = bb(k,j,i)/(ddz(k)*dz(k-1))
-                        at(k,j,i) = bt(k,j,i)/(ddz(k)*dz(k))
+                        aw(k,j,i) = (2.0_realk*bw(k,j,i))/((dx(i-1)+dx(i))*dx(i-1))
+                        ae(k,j,i) = (2.0_realk*be(k,j,i))/((dx(i-1)+dx(i))*dx(i))
+                        as(k,j,i) = (2.0_realk*bs(k,j,i))/((dy(j-1)+dy(j))*dy(j-1))
+                        an(k,j,i) = (2.0_realk*bn(k,j,i))/((dy(j-1)+dy(j))*dy(j))
+                        ab(k,j,i) = (2.0_realk*bb(k,j,i))/((dz(k-1)+dz(k))*dz(k-1))
+                        at(k,j,i) = (2.0_realk*bt(k,j,i))/((dz(k-1)+dz(k))*dz(k))
                     ENDDO
                 ENDDO
             ENDDO
