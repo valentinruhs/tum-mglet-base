@@ -23,7 +23,7 @@ MODULE mph_vof_mod
 
     USE mphcore_mod, ONLY: rho1, rho2, gmol1, gmol2, grav, &
         skpAdv, skpDif, skpPre, skpExt, vofTol, advScm, donCen, vofErr
-    USE mph_utils_mod, ONLY: sel_ind, sel_ext, sel_vel, clp, int2char, get_lp_mdf, get_lp_bnds
+    USE mph_utils_mod, ONLY: sel_ind, sel_ext, sel_vel, clp_tol, int2char, get_lp_mdf, get_lp_bnds
     USE mph_plic_mod, ONLY: comp_ifc, comp_c_stg, comp_isIfc_stg, comp_c_loc
     USE mph_props_mod, ONLY: comp_d_stg
     USE mph_xfer_mod, ONLY: rstr, rstr_stg, prlg, prlg_stg, cnct
@@ -1189,8 +1189,8 @@ CONTAINS
 
             ! Clip cS and correct mS by clipped amount
             CALL sel_vel(q, u, v, w, vel)
-            mSq = mSq + (rho1 - rho2)*( clp(cSq) - cSq )*vel
-            cSq = clp(cSq)
+            mSq = mSq + (rho1 - rho2)*( clp_tol(cSq) - cSq )*vel
+            cSq = clp_tol(cSq)
         END DO
 
     END SUBROUTINE adv_c_stg
@@ -1236,7 +1236,7 @@ CONTAINS
             END DO
         END DO
 
-        IF ( q == 0 ) c = clp(c)
+        IF ( q == 0 ) c = clp_tol(c)
 
     END SUBROUTINE adv_c_grd
 

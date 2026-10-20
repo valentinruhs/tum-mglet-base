@@ -1,8 +1,8 @@
 {
     "time": {
         "dt": 0.1,
-        "mtstep": 300,
-	"itinfo": 1,
+        "mtstep": 625,
+	"itinfo": 25,
 	"read": false
     },
     "io": {
@@ -48,12 +48,12 @@
 	"gravity" : [0.0, 0.0, 0.0]
     },
     "snapshots": {
-        "itsamp": 600,
+        "itsamp": 6000,
         "tstart": 0.0,
         "fields": ["U", "V", "W", "P", "C", "NORMX", "NORMY", "NORMZ", "ALPHA"]
     },
     "probes": {
-        "itsamp": 10,
+        "itsamp": 10000,
         "tstart": 0.0,
         "arrays": [
             {

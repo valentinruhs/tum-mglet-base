@@ -107,7 +107,7 @@ CONTAINS
 
         CASE ( "Open Channel Flow" )
             tstId = tstOpCFl
-            shape = shape_t(shp=shpPlane, lvl=1.00375_realk)
+            shape = shape_t(shp=shpPlane, lvl=1.0_realk)
             frcVelFld = .FALSE.
             isRevTst = .FALSE.
 
@@ -252,7 +252,7 @@ CONTAINS
         CASE ( tstACylAd )
             CALL set_vel_c(1.0_realk, 1.0_realk, 0.0_realk, h=1)
         CASE ( tstOpCFl )
-            CALL set_vel_cha(150.0_realk, 1.00375_realk, 2.0_realk*pi, pi, "NONE")
+            CALL set_vel_cha(150.0_realk, 1.0_realk, 2.0_realk*pi, pi, "NONE")
         CASE DEFAULT
             CALL err_abort(mphInitErr, "no velocity field for this test.", __FILE__, __LINE__)
         END SELECT
@@ -668,12 +668,12 @@ CONTAINS
         CHARACTER(len=4), INTENT(in) :: flowStateFlag
 
         ! Local parameters
-        REAL(realk), PARAMETER :: duPl = 11.2_realk    ! streak amplitude Delta u+_0
-        REAL(realk), PARAMETER :: epsPl = 0.072_realk  ! spanwise amplitude eps+
-        REAL(realk), PARAMETER :: yMaxPl = 30.0_realk  ! wall distance of streak maximum
-        REAL(realk), PARAMETER :: devAmp = 0.2_realk   ! random modulation amplitude
-        INTEGER(intk), PARAMETER :: nStr = 4           ! streak wavelengths in lz
-        INTEGER(intk), PARAMETER :: nWav = 2           ! w wavelengths in lx
+        REAL(realk), PARAMETER :: duPl = 11.2_realk
+        REAL(realk), PARAMETER :: epsPl = 0.072_realk
+        REAL(realk), PARAMETER :: yMaxPl = 30.0_realk
+        REAL(realk), PARAMETER :: devAmp = 0.2_realk
+        INTEGER(intk), PARAMETER :: nStr = 4
+        INTEGER(intk), PARAMETER :: nWav = 2
 
         ! Local variables
         INTEGER(intk) :: k, j, i
@@ -698,7 +698,7 @@ CONTAINS
                         CALL RANDOM_NUMBER(r)
                         u(k,j,i) = uTau*(reichardt(yPl) &
                             + (1.0_realk + devAmp*(2.0_realk*r - 1.0_realk)) &
-                            * uStreak(yPl, z*uTau/nu))
+                            * uPert(yPl, z*uTau/nu))
                         zMi = zMi + ddz(k)
                     END DO
                     yMi = yMi + ddy(j)
@@ -755,18 +755,26 @@ CONTAINS
             uPl = yPl - 0.5_realk*yPl**2/ReTau
         END FUNCTION parabola
  
-        PURE REAL(realk) FUNCTION uStreak(yPl, zPl) RESULT(uPl)
+        PURE REAL(realk) FUNCTION uPert(yPl, zPl) RESULT(uPl)
         !------------------------------------------------------------
-        !   
+        !   Source: E. de Villiers, „The Potential of Large Eddy 
+        !           Simulation for the Modelling of Wall Bounded 
+        !           Flows“, Degree of Doctor of Philosophy of the 
+        !           University of London and Diploma of Imperial 
+        !           College, Imperial College London, 2006.
         !------------------------------------------------------------
             REAL(realk), INTENT(in) :: yPl, zPl
             uPl = 0.5_realk*duPl*COS(betaPl*zPl)*(yPl/yMaxPl) &
                 * EXP(0.5_realk*(1.0_realk - (yPl/yMaxPl)**2))
-        END FUNCTION uStreak
+        END FUNCTION uPert
  
         PURE REAL(realk) FUNCTION wPert(xPl, yPl) RESULT(wPl)
         !------------------------------------------------------------
-        !   
+        !   Source: E. de Villiers, „The Potential of Large Eddy 
+        !           Simulation for the Modelling of Wall Bounded 
+        !           Flows“, Degree of Doctor of Philosophy of the 
+        !           University of London and Diploma of Imperial 
+        !           College, Imperial College London, 2006.
         !------------------------------------------------------------
             REAL(realk), INTENT(in) :: xPl, yPl
             wPl = epsPl*SIN(alphaPl*xPl)*yPl*EXP(-0.5_realk*(yPl/yMaxPl)**2)

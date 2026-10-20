@@ -15,7 +15,7 @@
 MODULE mph_utils_mod
 
     USE precision_mod, ONLY: intk, realk
-    USE mphcore_mod, ONLY: vofErr
+    USE mphcore_mod, ONLY: vofErr, vofTol
     USE err_mod, ONLY: err_abort
     USE grids_mod, ONLY: get_mgdims, get_mgbasb
 
@@ -23,7 +23,7 @@ MODULE mph_utils_mod
     PRIVATE
 
     PUBLIC :: init_mph_utils, finish_mph_utils, sel_ind, sel_ext, &
-        sel_vel, clp, int2char, get_lp_mdf, get_lp_bnds
+        sel_vel, clp_tol, clp, int2char, get_lp_mdf, get_lp_bnds
 
 CONTAINS
 
@@ -230,6 +230,22 @@ CONTAINS
         END SELECT
 
     END SUBROUTINE get_lp_bnds
+
+    !================================================================
+
+    ELEMENTAL FUNCTION clp_tol(c) RESULT(cc)
+    !----------------------------------------------------------------
+    !   Clips c to [0, 1] and snaps values that comp_isIfc_grd does
+    !   not treat as interface (c <= vofTol, c >= 1-vofTol) to 0 or 1.
+    !----------------------------------------------------------------
+
+        REAL(realk), INTENT(in) :: c
+        REAL(realk) :: cc
+        cc = MAX(MIN(c, 1.0_realk), 0.0_realk)
+        IF ( cc <= vofTol ) cc = 0.0_realk
+        IF ( cc >= 1.0_realk - vofTol ) cc = 1.0_realk
+
+    END FUNCTION clp_tol
 
     !================================================================
 

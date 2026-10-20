@@ -37,12 +37,9 @@ CONTAINS
         ! Local variables
         CHARACTER(len=*), PARAMETER :: descBeta = "face cond. 1/rho"
 
-        CALL set_field("BETAW", description=descBeta)
-        CALL set_field("BETAE", description=descBeta)
-        CALL set_field("BETAS", description=descBeta)
-        CALL set_field("BETAN", description=descBeta)
-        CALL set_field("BETAB", description=descBeta)
-        CALL set_field("BETAT", description=descBeta)
+        CALL set_field("BETABA", description=descBeta)
+        CALL set_field("BETALE", description=descBeta)
+        CALL set_field("BETATO", description=descBeta)
 
     END SUBROUTINE init_mph_pois
 
@@ -84,9 +81,7 @@ CONTAINS
                                             an(:,:,:), as(:,:,:), &
                                             at(:,:,:), ab(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: ap(:,:,:)
-        REAL(realk), POINTER, CONTIGUOUS :: bw(:,:,:), be(:,:,:), &
-                                            bs(:,:,:), bn(:,:,:), &
-                                            bb(:,:,:), bt(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: betaBa(:,:,:), betaLe(:,:,:), betaTo(:,:,:)
         INTEGER(intk) :: nfro, nbac, nrgt, nlft, nbot, ntop
 
         CALL comp_beta()
@@ -111,32 +106,29 @@ CONTAINS
             CALL get_fieldptr(at, "GSAT", igrid)
             CALL get_fieldptr(ap, "GSAP", igrid)
 
-            CALL get_fieldptr(bw, "BETAW", igrid)
-            CALL get_fieldptr(be, "BETAE", igrid)
-            CALL get_fieldptr(bs, "BETAS", igrid)
-            CALL get_fieldptr(bn, "BETAN", igrid)
-            CALL get_fieldptr(bb, "BETAB", igrid)
-            CALL get_fieldptr(bt, "BETAT", igrid)
+            CALL get_fieldptr(betaBa, "BETABA", igrid)
+            CALL get_fieldptr(betaLe, "BETALE", igrid)
+            CALL get_fieldptr(betaTo, "BETATO", igrid)
 
             DO i = 3, ii-2
                 DO j = 3, jj-2
                     DO k = 3, kk-2
-                        aw(k,j,i) = (2.0_realk*bw(k,j,i))/((dx(i-1)+dx(i))*dx(i-1))
-                        ae(k,j,i) = (2.0_realk*be(k,j,i))/((dx(i-1)+dx(i))*dx(i))
-                        as(k,j,i) = (2.0_realk*bs(k,j,i))/((dy(j-1)+dy(j))*dy(j-1))
-                        an(k,j,i) = (2.0_realk*bn(k,j,i))/((dy(j-1)+dy(j))*dy(j))
-                        ab(k,j,i) = (2.0_realk*bb(k,j,i))/((dz(k-1)+dz(k))*dz(k-1))
-                        at(k,j,i) = (2.0_realk*bt(k,j,i))/((dz(k-1)+dz(k))*dz(k))
+                        aw(k,j,i) = (2.0_realk*betaBa(k,j,i-1))/((dx(i-1)+dx(i))*dx(i-1))
+                        ae(k,j,i) = (2.0_realk*betaBa(k,j,i))/((dx(i-1)+dx(i))*dx(i))
+                        as(k,j,i) = (2.0_realk*betaLe(k,j-1,i))/((dy(j-1)+dy(j))*dy(j-1))
+                        an(k,j,i) = (2.0_realk*betaLe(k,j,i))/((dy(j-1)+dy(j))*dy(j))
+                        ab(k,j,i) = (2.0_realk*betaTo(k-1,j,i))/((dz(k-1)+dz(k))*dz(k-1))
+                        at(k,j,i) = (2.0_realk*betaTo(k,j,i))/((dz(k-1)+dz(k))*dz(k))
                     ENDDO
                 ENDDO
             ENDDO
 
             CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
-            IF (ANY(nfro == [2, 5, 6, 19])) aw(:, :, 3)    = 0.0_realk
+            IF (ANY(nfro == [2, 5, 6, 19])) aw(:, :, 3) = 0.0_realk
             IF (ANY(nbac == [2, 5, 6, 19])) ae(:, :, ii-2) = 0.0_realk
-            IF (ANY(nrgt == [2, 5, 6, 19])) as(:, 3, :)    = 0.0_realk
+            IF (ANY(nrgt == [2, 5, 6, 19])) as(:, 3, :) = 0.0_realk
             IF (ANY(nlft == [2, 5, 6, 19])) an(:, jj-2, :) = 0.0_realk
-            IF (ANY(nbot == [2, 5, 6, 19])) ab(3, :, :)    = 0.0_realk
+            IF (ANY(nbot == [2, 5, 6, 19])) ab(3, :, :) = 0.0_realk
             IF (ANY(ntop == [2, 5, 6, 19])) at(kk-2, :, :) = 0.0_realk
 
             DO i = 3, ii-2
@@ -167,47 +159,27 @@ CONTAINS
 
         ! Local variables
         INTEGER(intk) :: n, igrid
-        INTEGER(intk) :: k, j, i, kk, jj, ii
-        REAL(realk), POINTER, CONTIGUOUS :: bw(:,:,:), be(:,:,:), &
-                                            bs(:,:,:), bn(:,:,:), &
-                                            bb(:,:,:), bt(:,:,:)
+        REAL(realk), POINTER, CONTIGUOUS :: betaBa(:,:,:), betaLe(:,:,:), betaTo(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dBa(:,:,:), dLe(:,:,:), dTo(:,:,:)
 
         DO n = 1, nmygrids
             igrid = mygrids(n)
 
-            CALL get_mgdims(kk, jj, ii, igrid)
-
-            CALL get_fieldptr(bw, "BETAW", igrid)
-            CALL get_fieldptr(be, "BETAE", igrid)
-            CALL get_fieldptr(bs, "BETAS", igrid)
-            CALL get_fieldptr(bn, "BETAN", igrid)
-            CALL get_fieldptr(bb, "BETAB", igrid)
-            CALL get_fieldptr(bt, "BETAT", igrid)
+            CALL get_fieldptr(betaBa, "BETABA", igrid)
+            CALL get_fieldptr(betaLe, "BETALE", igrid)
+            CALL get_fieldptr(betaTo, "BETATO", igrid)
             CALL get_fieldptr(dBa, "DBA", igrid)
             CALL get_fieldptr(dLe, "DLE", igrid)
             CALL get_fieldptr(dTo, "DTO", igrid)
 
-            DO i = 3, ii-2
-                DO j = 3, jj-2
-                    DO k = 3, kk-2
-                        bw(k,j,i) = inv(dBa(k,j,i-1))
-                        be(k,j,i) = inv(dBa(k,j,i))
-                        bs(k,j,i) = inv(dLe(k,j-1,i))
-                        bn(k,j,i) = inv(dLe(k,j,i))
-                        bb(k,j,i) = inv(dTo(k-1,j,i))
-                        bt(k,j,i) = inv(dTo(k,j,i))
-                    END DO
-                END DO
-            END DO
+            betaBa = inv(dBa)
+            betaLe = inv(dLe)
+            betaTo = inv(dTo)
         END DO
 
-        CALL rstr("BETAW", "S")
-        CALL rstr("BETAE", "S")
-        CALL rstr("BETAS", "S")
-        CALL rstr("BETAN", "S")
-        CALL rstr("BETAB", "S")
-        CALL rstr("BETAT", "S")
+        CALL rstr("BETABA", "U")
+        CALL rstr("BETALE", "V")
+        CALL rstr("BETATO", "W")
 
     CONTAINS
 

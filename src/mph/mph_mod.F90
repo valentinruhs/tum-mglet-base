@@ -22,14 +22,12 @@ MODULE mph_mod
     USE mph_vof_mod, ONLY: init_mph_vof, finish_mph_vof, cpy_flds, &
         adve_operator, diff_operator, pres_operator, exte_operator
     USE mph_plic_mod, ONLY: init_mph_plic, finish_mph_plic
-    USE mph_props_mod, ONLY: init_mph_props, finish_mph_props, &
-        comp_props
+    USE mph_props_mod, ONLY: init_mph_props, finish_mph_props, comp_props
     USE mph_utils_mod, ONLY: init_mph_utils, finish_mph_utils
     USE mph_test_mod, ONLY: init_mph_test, finish_mph_test, frc_vel_fld, frcVelFld
     USE mph_pois_mod, ONLY: init_mph_pois, finish_mph_pois
     USE mph_chk_mod, ONLY: init_mph_chk, finish_mph_chk, final_chk, chk_ifc_par
     USE mph_xfer_mod, ONLY: init_mph_xfer, finish_mph_xfer
-    USE mph_mbal_mod, ONLY: init_mph_mbal, finish_mph_mbal, mbal_pre, mbal_post
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -57,7 +55,6 @@ CONTAINS
             CALL init_mph_pois()
             CALL init_mph_test()
             CALL init_mph_chk()
-            CALL init_mph_mbal()
         END IF
 
     END SUBROUTINE init_mph
@@ -75,7 +72,6 @@ CONTAINS
         IF ( hasMph ) THEN
             CALL final_chk()
 
-            CALL finish_mph_mbal()
             CALL finish_mph_chk()
             CALL finish_mph_test()
             CALL finish_mph_pois()
@@ -105,13 +101,11 @@ CONTAINS
         REAL(realk), INTENT(in) :: gradp(3)
 
         IF ( irk == 1 ) THEN
-            CALL mbal_pre()
             IF ( frcVelFld ) CALL frc_vel_fld(timeph + 0.5_realk*dt)
             CALL cpy_flds()
             CALL adve_operator(dt, itstep)
             CALL chk_ifc_par()
             CALL comp_props()
-            CALL mbal_post(itstep, dt, gradp)
         END IF
 
         CALL diff_operator(uo_f, vo_f, wo_f)
