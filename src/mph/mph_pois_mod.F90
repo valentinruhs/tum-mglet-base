@@ -2,12 +2,25 @@
 !  Module: mph_pois_mod
 !
 !   Responsibilities:
-!   - 
+!   - Assembles the coefficients of the variable-density pressure
+!     Poisson equation div(1/rho grad(p)) = div(u)/dt on all levels
+!   - Computes the face conductivities 1/rho_face (BETABA, BETALE,
+!     BETATO) from the face densities and restricts them face-wise
+!     (area-weighted) to the coarse levels
+!   - Is called by mgpoisl whenever the material properties have
+!     changed (bldMatCoeff)
 !
 !   Author:      Valentin Ruhs
 !   e-Mail:      valentin.ruhs@gmx.de
 !   Created:     2026-09
-!   Last update: 2026-10
+!
+!   Source:
+!   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
+!   (PARIS),” Computer Physics Communications, vol. 263, p. 107849,
+!   Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
+!   See PARIS (accessed: May 2026) source code subroutine(s):
+!       - get_MGmatrix_coef (MGsolver.f90)
+!       - fill_coefficients (MGsolver.f90)
 !
 !====================================================================
 
@@ -30,6 +43,14 @@ MODULE mph_pois_mod
 CONTAINS
 
     SUBROUTINE init_mph_pois()
+    !----------------------------------------------------------------
+    !   Short: Register face conductivity fields (1/rho) for the
+    !          Poisson coefficients.
+    !
+    !   BETABA, BETALE, BETATO: conductivities 1/rho_face at the
+    !   back, left and top face of each cell, i.e. at the positions
+    !   of u, v and w.
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -46,6 +67,9 @@ CONTAINS
     !================================================================
 
     SUBROUTINE finish_mph_pois()
+    !----------------------------------------------------------------
+    !   Short: Finalize module (no operation).
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -61,11 +85,19 @@ CONTAINS
 
     SUBROUTINE comp_mat_coeff_mph()
     !----------------------------------------------------------------
-    !   What it does:
-    !   Computes the coefficients of the pressure Poisson equation
-    !   from the cell-wise face conductivities (see comp_beta). On the
-    !   finest level they equal 1/rho_face, i.e. the coefficients are
-    !   identical to the former formulation with DBA/DLE/DTO.
+    !   Short: Assemble pressure Poisson coefficients with variable
+    !          face densities.
+    !
+    !   Coefficients of div(1/rho*grad(p)) on all levels from the
+    !   face conductivities (comp_beta). Each cell uses the
+    !   conductivities of its own back, left and top face and those
+    !   of its lower neighbours. On the finest level they equal
+    !   1/rho_face, i.e. the coefficients are identical to the former
+    !   formulation with DBA, DLE, DTO. Coefficients towards boundary
+    !   faces with the codes 2, 5, 6 and 19 are set to zero; ap is
+    !   the negative sum of the neighbour coefficients.
+    !
+    !   Called by mgpoisl if bldMatCoeff is set.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -147,11 +179,24 @@ CONTAINS
 
     SUBROUTINE comp_beta()
     !----------------------------------------------------------------
-    !   What it does:
-    !   see PARIS 
-    !       fill_coefficients
-    !       get_MGmatrix_coef
-    !       NewSolverMG
+    !   Short: Compute face conductivities 1/rho_face and restrict
+    !          them to the coarse levels.
+    !
+    !   BETABA, BETALE, BETATO = 1/DBA, 1/DLE, 1/DTO on every grid; a
+    !   non-positive density (e.g. face values that are not set)
+    !   gives zero conductivity. Where a finer grid exists, the
+    !   coarse values are then replaced by the area-weighted mean of
+    !   the four fine faces that make up the coarse face (rstr, ftoc
+    !   flags "U", "V", "W"), following the coarse-grid coefficients
+    !   of PARIS.
+    !
+    !   Source:
+    !   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
+    !   (PARIS),” Computer Physics Communications, vol. 263,
+    !   p. 107849, Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
+    !   See PARIS (accessed: May 2026) source code subroutine(s):
+    !       - get_MGmatrix_coef (MGsolver.f90)
+    !       - fill_coefficients (MGsolver.f90)
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -184,6 +229,9 @@ CONTAINS
     CONTAINS
 
         PURE ELEMENTAL REAL(realk) FUNCTION inv(d) RESULT(r)
+        !------------------------------------------------------------
+        !   Short: Inverse 1/d, zero for non-positive d.
+        !------------------------------------------------------------
             REAL(realk), INTENT(in) :: d
             IF (d > 0.0_realk) THEN
                 r = 1.0_realk/d

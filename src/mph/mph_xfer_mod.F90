@@ -2,12 +2,19 @@
 !  Module: mph_xfer_mod
 !
 !   Responsibilities:
-!   - 
+!   - Provides the grid transfers of the multi-phase fields between
+!     the levels of the locally refined grid:
+!     - restriction (fine to coarse) of cell-centred, face and
+!       staggered fields, the latter with PLIC half-cell values
+!     - prolongation of cell-centred fields and staggered field
+!       triples to the boundaries of the finer grids (parent,
+!       bound, connect)
+!     - exchange of ghost layers on the same level (connect)
+!   - Registers the half-cell fields HLFFRCMI and HLFFRCPL
 !
 !   Author:      Valentin Ruhs
 !   e-Mail:      valentin.ruhs@gmx.de
 !   Created:     2026-09
-!   Last update: 2026-09
 !
 !====================================================================
 
@@ -35,6 +42,10 @@ MODULE mph_xfer_mod
 CONTAINS
 
     SUBROUTINE init_mph_xfer()
+    !----------------------------------------------------------------
+    !   Short: Register half-cell fields for the
+    !          staggered restriction.
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -50,6 +61,9 @@ CONTAINS
     !================================================================
 
     SUBROUTINE finish_mph_xfer()
+    !----------------------------------------------------------------
+    !   Short: Finalize module (no operation).
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -60,13 +74,19 @@ CONTAINS
         CONTINUE
 
     END SUBROUTINE finish_mph_xfer
-    
+
     !================================================================
 
     SUBROUTINE rstr(fldName, flag)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Restrict a cell-centred or face field from fine to
+    !          coarse levels.
+    !
+    !   ftoc from the finest to the coarsest level with the given
+    !   flag. For the cell flags (D, P) the coarse value is the
+    !   volume-weighted mean of the eight fine cells, for the face
+    !   flags (U, V, W) the area-weighted mean of the four fine faces
+    !   that make up the coarse face (noib_restrict_mod).
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -88,8 +108,14 @@ CONTAINS
 
     SUBROUTINE rstr_stg(q, fldName)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Restrict a field on staggered grid q using PLIC
+    !          half-cell values.
+    !
+    !   The ghost layers are exchanged first (connect), since the
+    !   outermost coarse cells are restricted using CON values from
+    !   the ghost cells. Then the half-cell values are computed
+    !   (comp_hlf_frc) and ftoc is called with flag A, B or C for
+    !   q = 1, 2, 3.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -111,8 +137,8 @@ CONTAINS
         END SELECT
 
         CALL get_field(fld_p, name)
-        ! perform connect first, the far right cells are restricted
-        ! using CON values form ghost cells
+        ! Perform connect first, since the outermost cells are
+        ! restricted using CON values from the ghost cells
         DO ilevel = maxlevel, minlevel, -1
             CALL connect(ilevel, 2, s1=fld_p)
         END DO
@@ -127,8 +153,13 @@ CONTAINS
 
     SUBROUTINE prlg(fldName)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Prolongate a cell-centred field to fine-grid
+    !          boundaries (parent, bound, connect).
+    !
+    !   From the coarsest to the finest level: parent fills the
+    !   boundary buffers of the finer grids, bound_c writes them into
+    !   the ghost layers at PAR faces (zero gradient at NOS/SLI),
+    !   connect fills the CON ghost layers incl. corners.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -152,10 +183,12 @@ CONTAINS
 
     SUBROUTINE prlg_stg(fldName1, fldName2, fldName3, bnd)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Prolongation of a staggered triple to the boundaries of the
-    !   finer grids: parent fills the face buffers, bound_stg writes
-    !   them into PAR faces/ghost layers, connect fills CON layers.
+    !   Short: Prolongate a staggered field triple to
+    !          fine-grid boundaries.
+    !
+    !   parent fills the face buffers, bnd (bound_stg or bound_flow)
+    !   writes them into PAR faces/ghost layers, connect fills the
+    !   CON layers incl. corners.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -182,8 +215,8 @@ CONTAINS
 
     SUBROUTINE cnct(fldName)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Same-level exchange (connect) of one field on all levels.
+    !   Short: Exchange ghost layers of a field on all
+    !          levels (connect).
     !----------------------------------------------------------------
 
         ! Subroutine arguments

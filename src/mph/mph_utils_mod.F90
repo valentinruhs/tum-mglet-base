@@ -1,14 +1,18 @@
-
 !====================================================================
 !  Module: mph_utils_mod
 !
 !   Responsibilities:
-!   - 
+!   - Provides helper routines shared by the multi-phase modules:
+!     - index offsets, cell spacings and velocity components of a
+!       split direction l or a staggered component q
+!     - loop bounds of the unknowns of the main and staggered grids
+!       depending on the boundary types (CON faces)
+!     - clipping of the volume fraction to [0, 1]
+!     - integer to character conversion for field names
 !
 !   Author:      Valentin Ruhs
 !   e-Mail:      valentin.ruhs@gmx.de
 !   Created:     2026-02
-!   Last update: 2026-09
 !
 !====================================================================
 
@@ -28,6 +32,9 @@ MODULE mph_utils_mod
 CONTAINS
 
     SUBROUTINE init_mph_utils()
+    !----------------------------------------------------------------
+    !   Short: Initialize module (no operation).
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -42,6 +49,9 @@ CONTAINS
     !================================================================
 
     SUBROUTINE finish_mph_utils()
+    !----------------------------------------------------------------
+    !   Short: Finalize module (no operation).
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -57,9 +67,10 @@ CONTAINS
 
     SUBROUTINE sel_ind(lOrq, io, jo, ko)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Depending on the direction (l) of component (q) the 
-    !   indices io, jo and ko are set to 0 or 1. 
+    !   Short: Define spatial index offsets for direction l or
+    !          component q.
+    !
+    !   (io, jo, ko) is the unit vector of direction lOrq = 1, 2, 3.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -90,11 +101,13 @@ CONTAINS
 
     SUBROUTINE sel_ext(kk, jj, ii, q, l, dx, dy, dz, ddx, ddy, ddz, dsx, dsy, dsz)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Depending on the direction (l) of component (q) the 
-    !   extents ds(.) are set to d(.) or dd(.). The term ds(.) stands
-    !   for spacing in (.)-direction and is a neutral specification
-    !   for face-to-face or center-to-center distance.
+    !   Short: Select face-to-face or centre-to-centre spacing for q
+    !          and l.
+    !
+    !   ds(.) = dd(.) (face-to-face) in all directions, except for
+    !   direction l if q == l: there, the staggered control volume
+    !   spans from centre to centre (ds(.) = d(.)). q = 0 denotes the
+    !   main grid.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -129,8 +142,7 @@ CONTAINS
 
     SUBROUTINE sel_vel(lOrq, u, v, w, vel)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Select the for lOrq relevant velocity.
+    !   Short: Point to the velocity component of direction l or q.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -160,13 +172,23 @@ CONTAINS
 
     SUBROUTINE get_lp_mdf(igrid, nfro, nbac, nrgt, nlft, nbot, ntop, &
         nfu, nbu, nrv, nlv, nbw, ntw)
+    !----------------------------------------------------------------
+    !   Short: Get boundary codes and loop modifiers at CON faces;
+    !          abort for OP1.
+    !
+    !   nbu, nlv, ntw = 1 at CON faces (code 7) on the back, left and
+    !   top side: there, the velocity at the boundary face is an
+    !   unknown of this grid and included in the loops. nfu, nrv, nbw
+    !   are always 0, since the face at the lower boundary belongs to
+    !   the neighbouring grid.
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: igrid
         INTEGER(intk), INTENT(out) :: nfro, nbac, nrgt, nlft, nbot, ntop
         INTEGER(intk), INTENT(out) :: nfu, nbu, nrv, nlv, nbw, ntw
 
-        ! Local variabels
+        ! Local variables
         ! None
 
         CALL get_mgbasb(nfro, nbac, nrgt, nlft, nbot, ntop, igrid)
@@ -193,10 +215,11 @@ CONTAINS
 
     SUBROUTINE get_lp_bnds(igrid, q, ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Loop bounds of the unknowns of component q (0 = pressure
-    !   cell, 1/2/3 = u/v/w cell). Only the q-direction depends on
-    !   the boundary type (see get_lp_mdf).
+    !   Short: Get loop bounds of the unknowns of component q.
+    !
+    !   q = 0: pressure cell, q = 1, 2, 3: u-, v-, w-cell. Only
+    !   the bounds in q-direction depend on the boundary type
+    !   (see get_lp_mdf).
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -235,8 +258,11 @@ CONTAINS
 
     ELEMENTAL FUNCTION clp_tol(c) RESULT(cc)
     !----------------------------------------------------------------
-    !   Clips c to [0, 1] and snaps values that comp_isIfc_grd does
-    !   not treat as interface (c <= vofTol, c >= 1-vofTol) to 0 or 1.
+    !   Short: Volume fraction clipped to [0, 1] and snapped to 0 or
+    !          1 within vofTol.
+    !
+    !   Values that comp_isIfc_grd does not treat as interface
+    !   (c <= vofTol, c >= 1-vofTol) are set to 0 or 1.
     !----------------------------------------------------------------
 
         REAL(realk), INTENT(in) :: c
@@ -251,14 +277,7 @@ CONTAINS
 
     ELEMENTAL FUNCTION clp(c) RESULT(cc)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Clips c to its boundaries [0, 1].
-    !
-    !   Source:
-    !   T. Arrufat et al., “A mass-momentum consistent, 
-    !   Volume-of-Fluid method for incompressible flow on staggered 
-    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
-    !   doi: 10.1016/j.compfluid.2020.104785.
+    !   Short: Volume fraction clipped to [0, 1].
     !----------------------------------------------------------------
 
         REAL(realk), INTENT(in) :: c
@@ -270,6 +289,11 @@ CONTAINS
     !================================================================
 
     FUNCTION int2char(i) RESULT(c)
+    !----------------------------------------------------------------
+    !   Short: Integer converted to character.
+    !
+    !   Single digit only (len = 1).
+    !----------------------------------------------------------------
         INTEGER(intk), INTENT(in) :: i
         CHARACTER(len=1) :: c
         WRITE(c, '(I0)') i

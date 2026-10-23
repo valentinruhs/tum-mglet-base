@@ -2,12 +2,20 @@
 !  Module: mph_chk_mod
 !
 !   Responsibilities:
-!   - 
+!   - Monitors the multi-phase solution:
+!     - volume and centroid of phase 1 and the volume error
+!       relative to the initial volume (each time step)
+!     - bulk velocity, Re_tau and velocity fluctuations of the open
+!       channel flow (each time step)
+!     - L1 shape error of the reconstructed interface (final
+!       check, optional)
+!   - Masks parent cells covered by finer grids, so that each
+!     location is counted once
+!   - Aborts if an interface comes close to a PAR face
 !
 !   Author:      Valentin Ruhs
 !   e-Mail:      valentin.ruhs@gmx.de
 !   Created:     2026-09
-!   Last update: 2026-09
 !
 !====================================================================
 
@@ -39,6 +47,15 @@ MODULE mph_chk_mod
 CONTAINS
 
     SUBROUTINE init_mph_chk()
+    !----------------------------------------------------------------
+    !   Short: Mask cells covered by finer grids; store initial
+    !          volume and error norms.
+    !
+    !   GRDMASK is 0 in parent cells covered by a finer grid, so that
+    !   every location is counted once in volume and error sums.
+    !   CINIT stores the initial c. Finally, it is checked that no
+    !   interface lies near a PAR face.
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -98,6 +115,9 @@ CONTAINS
     !================================================================
 
     SUBROUTINE finish_mph_chk()
+    !----------------------------------------------------------------
+    !   Short: Finalize module (no operation).
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -113,8 +133,8 @@ CONTAINS
 
     SUBROUTINE itinfo_mph()
     !----------------------------------------------------------------
-    !   What it does:
-    !
+    !   Short: Print volume error, centroid and channel monitors per
+    !          time step.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -149,8 +169,11 @@ CONTAINS
 
     SUBROUTINE final_chk()
     !----------------------------------------------------------------
-    !   What it does:
+    !   Short: Print final volume and shape errors (optional).
     !
+    !   Only if /multiphase/finalCheck is set. The shape error
+    !   E_{l=1,B=1} is printed absolute and normalized with the
+    !   interface length (E_{l=1,B=L}).
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -182,8 +205,7 @@ CONTAINS
 
     SUBROUTINE comp_L_norm_err(L1, L2)
     !----------------------------------------------------------------
-    !   What it does:
-    !
+    !   Short: Compute global L1 and L2 shape error norms.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -238,8 +260,7 @@ CONTAINS
          grdMask, normx, normy, normz, alpha, isIfc, ddx, ddy, ddz, &
          L1, L2)
     !----------------------------------------------------------------
-    !   What it does:
-    !
+    !   Short: Grid kernel of comp_L_norm_err.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -284,8 +305,7 @@ CONTAINS
 
     SUBROUTINE comp_vol(vol)
     !----------------------------------------------------------------
-    !   What it does:
-    !
+    !   Short: Compute global volume of phase 1 on uncovered cells.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -320,8 +340,7 @@ CONTAINS
 
     SUBROUTINE comp_vol_grd(kk, jj, ii, c, grdMask, ddx, ddy, ddz, volFld1)
     !----------------------------------------------------------------
-    !   What it does:
-    !
+    !   Short: Grid kernel of comp_vol.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -350,8 +369,7 @@ CONTAINS
 
     SUBROUTINE comp_ctr(xCtr, yCtr, zCtr)
     !----------------------------------------------------------------
-    !   What it does:
-    !
+    !   Short: Compute global centroid of phase 1.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -405,8 +423,7 @@ CONTAINS
     SUBROUTINE comp_ctr_grd(kk, jj, ii, c, grdMask, ddx, ddy, ddz, &
         minx, miny, minz, vol, volX, volY, volZ)
     !----------------------------------------------------------------
-    !   What it does:
-    !
+    !   Short: Grid kernel of comp_ctr.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -452,12 +469,10 @@ CONTAINS
 
     SUBROUTINE comp_cha_mon(ub, reTauI, vv, ww)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Monitor quantities of the open channel flow (water phase):
-    !   ub     - bulk velocity
-    !   reTauI - instantaneous Re_tau from plane-averaged wall shear
-    !   vv, ww - volume-averaged <v^2>, <w^2> (zero-mean components,
-    !            i.e. directly fluctuation energy)
+    !   Short: Compute channel monitors: bulk velocity, Re_tau,
+    !          <v^2>, <w^2>.
+    !
+    !   Monitor quantities of the open channel flow (water phase).
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -507,9 +522,10 @@ CONTAINS
     SUBROUTINE comp_cha_mon_grd(kk, jj, ii, u, v, w, c, grdMask, &
             ddx, ddy, ddz, atWall, s)
     !----------------------------------------------------------------
-    !   What it does:
+    !   Short: Grid kernel: c-weighted sums and wall shear.
+    !
     !   Grid-local sums for comp_cha_mon. Velocities are interpolated
-    !   to cell centres and weighted with C, so only water counts.
+    !   to cell centres and weighted with c, so only water counts.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -557,11 +573,12 @@ CONTAINS
 
     SUBROUTINE chk_ifc_par()
     !----------------------------------------------------------------
-    !   What it does:
-    !   no interface cell within
-    !   the 2 ghost layers + parIfcBand interior cells of a PAR face.
-    !   PAR ghosts carry the adjacent coarse cell, so the coarse side
-    !   is checked as well.
+    !   Short: Abort if an interface lies near a PAR face.
+    !
+    !   Checks that no interface cell lies within the 2 ghost layers
+    !   plus parIfcBand interior cells of a PAR face
+    !   (boundary code 8). PAR ghosts carry the adjacent coarse cell,
+    !   so the coarse side is checked as well.
     !----------------------------------------------------------------
 
         ! Local variables
@@ -592,6 +609,9 @@ CONTAINS
     CONTAINS
 
         LOGICAL FUNCTION chkIfcBand(cb)
+        !------------------------------------------------------------
+        !   Short: True if the band contains an interface cell.
+        !------------------------------------------------------------
             REAL(realk), INTENT(in) :: cb(:, :, :)
             chkIfcBand = ANY(cb > vofTol .AND. cb < 1.0_realk - vofTol)
         END FUNCTION chkIfcBand

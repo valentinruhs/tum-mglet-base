@@ -2,12 +2,71 @@
 !  Module: mph_vof_mod
 !
 !   Responsibilities:
-!   - 
+!   - Provides the operators of the multi-phase momentum equation
+!     in conservative form on the staggered grid:
+!     - Advection: directionally split geometric VOF/PLIC advection
+!       of c on the main grid and of mass and momentum on the three
+!       staggered grids with the same phase fluxes (mass-momentum
+!       consistent), Weymouth-Yue compression term; performed once
+!       per time step
+!     - Diffusion: full viscous stress tensor with variable
+!       viscosity, correction at no-slip walls
+!     - Pressure: pressure gradient and c-weighted driving pressure
+!       gradient, divided by the face density
+!     - External forces: gravity
+!   - Updates the velocities from the advected staggered momentum
+!     and density
+!   - Stores c and the velocities of the previous time step
 !
 !   Author:      Valentin Ruhs
 !   e-Mail:      valentin.ruhs@gmx.de
 !   Created:     2026-02
-!   Last update: 2026-09
+!
+!   Sources:
+!   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
+!   (PARIS),” Computer Physics Communications, vol. 263, p. 107849,
+!   Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
+!   See PARIS (accessed: May 2026) source code subroutine(s):
+!       - vofsweeps (vofmodules.f90)
+!       - interpole_quad (rudman_modules.f90)
+!       - interpole3 (modules.f90)
+!       - slope_lim (modules.f90)
+!
+!   T. Arrufat et al., “A mass-momentum consistent, Volume-of-Fluid
+!   method for incompressible flow on staggered grids,” Computers &
+!   Fluids, vol. 215, p. 104785, Jan. 2021,
+!   doi: 10.1016/j.compfluid.2020.104785.
+!
+!   D. Herrmann, Numerische Mathematik — 40 BASIC-Programme.
+!   Wiesbaden: Vieweg+Teubner Verlag, 1983.
+!   doi: 10.1007/978-3-322-96321-5.
+!
+!   B. P. Leonard, “A stable and accurate convective modelling
+!   procedure based on quadratic upstream interpolation,” Computer
+!   Methods in Applied Mechanics and Engineering, vol. 19, no. 1,
+!   pp. 59–98, Jun. 1979, doi: 10.1016/0045-7825(79)90034-3.
+!
+!   P. K. Sweby, “High Resolution Schemes Using Flux Limiters for
+!   Hyperbolic Conservation Laws,” SIAM Journal on Numerical
+!   Analysis, vol. 21, no. 5, pp. 995–1011, Oct. 1984,
+!   doi: 10.1137/0721062.
+!
+!   G. Tryggvason, R. Scardovelli, and S. Zaleski, Direct Numerical
+!   Simulations of Gas–Liquid Multiphase Flows, 1st ed. Cambridge
+!   University Press, 2011. doi: 10.1017/CBO9780511975264.
+!
+!   H. Werner and H. Wengle, “Large-eddy simulation of turbulent flow
+!   over and around a cube in a plate channel,” in Turbulent Shear
+!   Flows 8. Berlin, Heidelberg: Springer, 1993, pp. 155–168,
+!   doi: 10.1007/978-3-642-77674-8_12.
+!
+!   G. D. Weymouth and D. K.-P. Yue, “Conservative Volume-of-Fluid
+!   method for free-surface simulations on Cartesian-grids,” Journal
+!   of Computational Physics, vol. 229, no. 8, pp. 2853–2865,
+!   Apr. 2010, doi: 10.1016/j.jcp.2009.12.018.
+!
+!   See MGLET source code subroutine(s):
+!       - swcle3d (tstle4.F90)
 !
 !====================================================================
 
@@ -38,6 +97,16 @@ MODULE mph_vof_mod
 CONTAINS
 
     SUBROUTINE init_mph_vof()
+    !----------------------------------------------------------------
+    !   Short: Register staggered c, rho, rho*u, compression
+    !          coefficient and flux fields.
+    !
+    !   CS1-3, DS1-3, MS1-3: volume fraction, density and momentum of
+    !   the staggered u-, v- and w-cells. CWY, CWYS1-3: Weymouth-Yue
+    !   compression coefficients of the main and staggered grids.
+    !   ADVR, ADVE (advector, advectee) and CFLX1, CFLX2 (phase
+    !   fluxes) are work arrays of the current split.
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -69,7 +138,7 @@ CONTAINS
         CALL set_field("CWYS2", jstag=1, buffers=.TRUE.)
         CALL set_field("CWYS3", kstag=1, buffers=.TRUE.)
 
-        ! Adver/adve and flux fields
+        ! Advector/advectee and flux fields
         CALL set_field("ADVR", buffers=.TRUE.)
         CALL set_field("ADVE", buffers=.TRUE.)
         CALL set_field("CFLX1", buffers=.TRUE.)
@@ -80,6 +149,9 @@ CONTAINS
     !================================================================
 
     SUBROUTINE finish_mph_vof()
+    !----------------------------------------------------------------
+    !   Short: Finalize module (no operation).
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -95,8 +167,11 @@ CONTAINS
 
     SUBROUTINE cpy_flds()
     !----------------------------------------------------------------
-    !   What it does:
-    !   Copy the current fields into the previous fields.
+    !   Short: Store c and velocities of the previous time step.
+    !
+    !   UP, VP and WP are the advecting velocities of all three
+    !   directional splits, since U, V and W are updated after each
+    !   split (upd_vel_stg).
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -134,8 +209,8 @@ CONTAINS
 
     SUBROUTINE comp_flx(l, dt)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Compute VOF fluxes on the main grid in split
+    !          direction l.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -189,11 +264,20 @@ CONTAINS
         ddx, ddy, ddz, normx, normy, normz, alpha, isIfc, dt, &
         ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Computes the volume fraction flxes depending on the current
-    !   split direction. It is distinguished between several cases 
-    !   depending on the velocity direction and volume fraction 
-    !   field.
+    !   Short: Grid kernel: geometric PLIC flux from the upwind cell,
+    !          CFL check.
+    !
+    !   For every face in direction l, the volume of phase 1 crossing
+    !   the face within dt is computed geometrically. The donating
+    !   region is the cuboid of width |u|*dt inside the upwind cell
+    !   adjacent to the face. In interface cells its volume fraction
+    !   follows from the PLIC plane (comp_c_loc); for u > 0 the plane
+    !   constant is shifted to the origin of the cuboid. In all other
+    !   cells the cell value of c is used. The flux is
+    !   cFlx1 = u*c_don, i.e. a volume flux per unit face area.
+    !
+    !   Faces with |u| <= vofTol carry no flux. Aborts if |u|*dt
+    !   exceeds the width of the donor cell (CFL > 1).
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -222,7 +306,7 @@ CONTAINS
                 DO k = ksta-kl, kend
                     IF ( vel(k,j,i) > vofTol ) THEN
 
-                        ! Compute face flx width and characteristic length
+                        ! Compute face flux width and characteristic length
                         flxWidth = abs( vel(k,j,i) )*dt
                         dds = il*ddx(i) + jl*ddy(j) + kl*ddz(k)
                         IF ( flxWidth > (1.0_realk + 1.0E-12_realk)*dds ) THEN
@@ -239,12 +323,12 @@ CONTAINS
                             ! Compute proper alpha
                             flxAlpha = alpha(k,j,i) - norms*( dds - flxWidth )
 
-                            ! Compute dimensions of flxed cuboid
+                            ! Compute dimensions of fluxed cuboid
                             dimx = il*flxWidth + (1-il)*ddx(i)
                             dimy = jl*flxWidth + (1-jl)*ddy(j)
                             dimz = kl*flxWidth + (1-kl)*ddz(k)
 
-                            ! Compute c in flxed cuboid
+                            ! Compute c in fluxed cuboid
                             CALL comp_c_loc(flxedProp, flxAlpha, dimx, dimy, dimz, &
                                 normx(k,j,i), normy(k,j,i), normz(k,j,i))
                         ELSE
@@ -252,7 +336,7 @@ CONTAINS
                         END IF
                     ELSE IF ( vel(k,j,i) < -vofTol ) THEN
 
-                        ! Compute face flx width and characteristic length
+                        ! Compute face flux width and characteristic length
                         flxWidth = abs( vel(k,j,i) )*dt
                         dds = il*ddx(i+il) + jl*ddy(j+jl) + kl*ddz(k+kl)
                         IF ( flxWidth > (1.0_realk + 1.0E-12_realk)*dds ) THEN
@@ -266,12 +350,12 @@ CONTAINS
                             ! Compute proper alpha
                             flxAlpha = alpha(k+kl,j+jl,i+il)
 
-                            ! Compute dimensions of flxed cuboid
+                            ! Compute dimensions of fluxed cuboid
                             dimx = il*flxWidth + (1-il)*ddx(i+il)
                             dimy = jl*flxWidth + (1-jl)*ddy(j+jl)
                             dimz = kl*flxWidth + (1-kl)*ddz(k+kl)
 
-                            ! Compute c in flxed cuboid
+                            ! Compute c in fluxed cuboid
                             CALL comp_c_loc(flxedProp, flxAlpha, dimx, dimy, dimz, &
                                 normx(k+kl,j+jl,i+il), normy(k+kl,j+jl,i+il), normz(k+kl,j+jl,i+il))
                         ELSE
@@ -291,8 +375,8 @@ CONTAINS
 
     SUBROUTINE comp_flx_stg(q, l, dt)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Compute phase fluxes on staggered grid q in split
+    !          direction l.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -340,11 +424,26 @@ CONTAINS
         ddx, ddy, ddz, normx, normy, normz, alpha, isIfc, dt, &
         ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Computes the volume fraction flxes depending on the current
-    !   split direction. It is distinguished between several cases 
-    !   depending on the velocity direction and volume fraction 
-    !   field.
+    !   Short: Grid kernel: PLIC phase fluxes from donor (half)
+    !          cells, CFL check.
+    !
+    !   Phase fluxes cFlx1 (phase 1) and cFlx2 (phase 2) through the
+    !   faces of the staggered q-cells in direction l, based on the
+    !   PLIC interface of the main grid and the advector advr.
+    !
+    !   q == l: the face lies in the centre of the main cell
+    !           (k+kl,j+jl,i+il). The donating region of width
+    !           |advr|*dt lies in the upstream half of this cell,
+    !           adjacent to its centre.
+    !   q /= l: the face coincides with a main grid face in direction
+    !           l, but the staggered cell covers the upper q-half of
+    !           the main cell Mi and the lower q-half of the main
+    !           cell Pl. The donating region is split into these two
+    !           half cells; their volume fractions are weighted with
+    !           the cell widths in q-direction.
+    !
+    !   Faces with |advr| < vofTol carry no flux. Aborts if |advr|*dt
+    !   exceeds half of the donor cell width.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -424,7 +523,7 @@ CONTAINS
                         CYCLE
                     ENDIF
 
-                    ! Indizes of the half-pressure-cells overlapping the velocity-cells
+                    ! Indices of the half pressure cells overlapping the velocity cells
                     IF ( advr(k,j,i) > 0.0_realk ) THEN
                         iDonMi = i ; jDonMi = j ; kDonMi = k ; farEnd = 1.0_realk
                     ELSE
@@ -499,26 +598,28 @@ CONTAINS
 
     PURE SUBROUTINE def_adv_seq(iteration, advSeq)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Defines the sequence, in which the volume fraction c and
-    !   the momentum are advected. 
+    !   Short: Define cyclic permutation of the split
+    !          advection directions.
     !
-    !   The PARIS solver uses a cyclic periodicity of three. Hence,
-    !   the sequence can be
-    !   x -> y -> z,
-    !   y -> z -> x or
-    !   z -> x -> y.
+    !   The sequence in which c and the momentum are advected is
+    !   permuted cyclically with the time step (period of three, as
+    !   in PARIS):
     !
-    !   Source:
-    !   T. Arrufat et al., “A mass-momentum consistent, 
-    !   Volume-of-Fluid method for incompressible flow on staggered 
-    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
-    !   doi: 10.1016/j.compfluid.2020.104785.
+    !   itstep = 1, 4, ...: x -> y -> z
+    !   itstep = 2, 5, ...: z -> x -> y
+    !   itstep = 3, 6, ...: y -> z -> x
     !
+    !   Sources:
     !   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
-    !   (PARIS),” Computer Physics Communications, vol. 263, 
+    !   (PARIS),” Computer Physics Communications, vol. 263,
     !   p. 107849, Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
-    !   PARIS source code (accessed: Mai 2026)
+    !   See PARIS (accessed: May 2026) source code subroutine(s):
+    !       - vofsweeps (vofmodules.f90)
+    !
+    !   T. Arrufat et al., “A mass-momentum consistent,
+    !   Volume-of-Fluid method for incompressible flow on staggered
+    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021,
+    !   doi: 10.1016/j.compfluid.2020.104785.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -544,16 +645,44 @@ CONTAINS
 
     SUBROUTINE adve_operator(dt, itstep)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Performs the spatial and temporal integration of the
-    !   advection operator. The integration is combined, since
-    !   VOF/PLIC is "exact" up to the order of accuracy of the 
-    !   interface reconstruction in PLIC.
-    !   The structure is needed due to the split direction advection.
-    !   Each directional split has to be performed on the hole
-    !   domain (including restriction and prologation) before the
-    !   next directional split can be performed. Otherwise, there are
-    !   errors at the grids boundaries.
+    !   Short: Advect c and the staggered mass and momentum by
+    !          directional splitting, incl. grid transfers.
+    !
+    !   Spatial and temporal integration of the advection terms in
+    !   one step. Geometric VOF/PLIC is "exact" up to the accuracy of
+    !   the interface reconstruction, hence no RK sub-steps are used.
+    !
+    !   1) Compression coefficient of the main grid; staggered c,
+    !      density, momentum and compression coefficients from the
+    !      current PLIC interface.
+    !   2) Restriction and prolongation of the staggered fields and
+    !      of the velocities.
+    !   3) For each split direction l (sequence from def_adv_seq):
+    !      advect momentum, c and density of the three staggered
+    !      grids with the same phase fluxes, then c of the main grid;
+    !      restrict and prolongate c and reconstruct the interface;
+    !      restrict and prolongate the staggered fields and update
+    !      the velocities u_q = (rho*u)_q/rho_q.
+    !
+    !   Each directional split has to be completed on the whole
+    !   domain (including restriction and prolongation) before
+    !   the next split starts. Otherwise, errors occur at the
+    !   grid boundaries.
+    !
+    !   With skpAdv only c of the main grid is advected; momentum and
+    !   staggered fields are not advected (velocity unchanged).
+    !
+    !   Sources:
+    !   T. Arrufat et al., “A mass-momentum consistent,
+    !   Volume-of-Fluid method for incompressible flow on staggered
+    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021,
+    !   doi: 10.1016/j.compfluid.2020.104785.
+    !
+    !   G. D. Weymouth and D. K.-P. Yue, “Conservative
+    !   Volume-of-Fluid method for free-surface simulations on
+    !   Cartesian-grids,” Journal of Computational Physics, vol. 229,
+    !   no. 8, pp. 2853–2865, Apr. 2010,
+    !   doi: 10.1016/j.jcp.2009.12.018.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -563,7 +692,7 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: q, advSeq(3), dirLoop, l
 
-        ! Initialize alpha, norm(.), cWy
+        ! Initialize cWy
         CALL comp_cWy()
 
         ! Initialize stg. grid cS(.), dS(.), mS(.), cWyS(.)
@@ -583,7 +712,7 @@ CONTAINS
             CALL rstr_stg(q=q, fldName="MS")
         END DO
 
-        ! Prologation
+        ! Prolongation
         IF ( .NOT. skpAdv ) THEN
             CALL prlg_stg(fldName1="CS1", fldName2="CS2", fldName3="CS3", bnd=bound_stg)
             CALL prlg_stg(fldName1="DS1", fldName2="DS2", fldName3="DS3", bnd=bound_stg)
@@ -636,8 +765,15 @@ CONTAINS
 
     SUBROUTINE diff_operator(uo_f, vo_f, wo_f)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Add viscous term with variable viscosity to the
+    !          momentum RHS.
+    !
+    !   For each grid, the wall correction at no-slip walls
+    !   (swcle3d_grid) and the divergence of the viscous stress
+    !   tensor (diff_operator_grd) are added to uo, vo, wo. Uses
+    !   the cell viscosity G, the edge viscosities GUV, GUW, GVW
+    !   and the face densities DBA, DLE, DTO from comp_props.
+    !   Skipped if skpDif.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -706,10 +842,24 @@ CONTAINS
         gUv, gUw, gVw, dBa, dLe, dTo, rdx, rdy, rdz, &
         rddx, rddy, rddz, uo, vo, wo, nfu, nbu, nrv, nlv, nbw, ntw)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Grid kernel: divergence of the full viscous
+    !          stress tensor.
+    !
+    !   uo_i += 1/rho_face*d(tau_ij)/dx_j with
+    !   tau_ij = mu*(du_i/dx_j + du_j/dx_i). The full tensor (not the
+    !   Laplacian form) is required for variable viscosity. Normal
+    !   stresses use the cell viscosity g, shear stresses the edge
+    !   viscosities gUv, gUw, gVw. At CON faces the loops in normal
+    !   direction include the boundary face (loop modifiers nfu, ...,
+    !   ntw, see get_lp_mdf).
+    !
+    !   Source:
+    !   G. Tryggvason, R. Scardovelli, and S. Zaleski, Direct
+    !   Numerical Simulations of Gas–Liquid Multiphase Flows, 1st ed.
+    !   Cambridge University Press, 2011.
+    !   doi: 10.1017/CBO9780511975264.
     !----------------------------------------------------------------
-    
+
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: u(kk, jj, ii), v(kk, jj, ii), w(kk, jj, ii)
@@ -789,11 +939,28 @@ CONTAINS
         u, v, w, gUv, gUw, gVw, dBa, dLe, dTo, &
         ddx, ddy, ddz, rdx, rdy, rdz, uo, vo, wo)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Face by face wall correction (boundary code 5 = NOS). The
-    !   wall edge of the viscosity fields and of rd* lies between
+    !   Short: Grid kernel: correct the viscous wall flux at
+    !          no-slip walls.
+    !
+    !   Face by face wall correction of the tangential velocity
+    !   components at no-slip walls (boundary code 5 = NOS). wall_acc
+    !   removes the shear stress computed with the ghost cell value
+    !   in diff_operator_grd and adds the wall shear stress
+    !   2*mu*u/dds with the wall half a cell away (equivalent to the
+    !   Werner-Wengle laminar sublayer case).
+    !
+    !   The wall edge of the viscosity fields and of rd* lies between
     !   ghost and first interior cell: index 2 at the lower faces,
     !   index *-2 at the upper faces.
+    !
+    !   Sources:
+    !   H. Werner and H. Wengle, “Large-eddy simulation of turbulent
+    !   flow over and around a cube in a plate channel,” in Turbulent
+    !   Shear Flows 8. Berlin, Heidelberg: Springer, 1993,
+    !   pp. 155–168, doi: 10.1007/978-3-642-77674-8_12.
+    !
+    !   See MGLET source code subroutine(s):
+    !       - swcle3d (tstle4.F90)
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -891,8 +1058,11 @@ CONTAINS
 
         PURE ELEMENTAL REAL(realk) FUNCTION wall_acc(mu, d, dds, rds, vel, velGhost) RESULT(acc)
         !------------------------------------------------------------
-        ! Equivalent to Werner-Wengle laminar sublayer case, but for
-        ! multi-phase fluid properties.
+        !   Short: Acceleration that replaces the ghost-cell shear
+        !          stress by the wall shear stress.
+        !
+        !   Equivalent to the Werner-Wengle laminar sublayer case,
+        !   but with multi-phase fluid properties.
         !------------------------------------------------------------
             REAL(realk), INTENT(in) :: mu, d, dds, rds, vel, velGhost
             acc = (2.0_realk*mu*vel/dds - mu*(vel - velGhost)*rds)/(d*dds)
@@ -904,8 +1074,13 @@ CONTAINS
 
     SUBROUTINE pres_operator(uo_f, vo_f, wo_f, gradp)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Add pressure gradient and c-weighted driving gradient,
+    !          divided by the face density, to the momentum RHS.
+    !
+    !   uo_q -= (dp/dx_q + cS_q*gradp_q)/rho_face. The prescribed
+    !   driving pressure gradient gradp (e.g. open channel flow) acts
+    !   on phase 1 only, weighted with the staggered volume fraction
+    !   cS_q. Skipped if skpPre.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -957,8 +1132,7 @@ CONTAINS
     SUBROUTINE pres_operator_grd(kk, jj, ii, cS1, cS2, cS3, p, dBa, dLe, dTo, &
         rdx, rdy, rdz, uo, vo, wo, gradp, nfu, nbu, nrv, nlv, nbw, ntw)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Grid kernel of pres_operator.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1008,8 +1182,9 @@ CONTAINS
 
     SUBROUTINE exte_operator(uo_f, vo_f, wo_f)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Add gravitational acceleration to the momentum RHS.
+    !
+    !   Skipped if skpExt.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1046,8 +1221,7 @@ CONTAINS
     SUBROUTINE exte_operator_grd(kk, jj, ii, uo, vo, wo, &
         nfu, nbu, nrv, nlv, nbw, ntw)
     !----------------------------------------------------------------
-    !   What it does:
-    !    
+    !   Short: Grid kernel of exte_operator.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1088,8 +1262,7 @@ CONTAINS
 
     SUBROUTINE adv_c(l, dt)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Advect c on the main grid in split direction l.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1138,8 +1311,14 @@ CONTAINS
 
     SUBROUTINE adv_c_stg(q, l, dt)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Advect c on staggered grid q in split direction l;
+    !          clip it and correct the momentum by the clipped mass.
+    !
+    !   After the flux divergence (adv_c_grd), cS_q is clipped
+    !   with clp_tol. The mass added or removed by the clipping,
+    !   (rho1 - rho2)*dc, is added to the staggered momentum
+    !   with the current velocity u_q, so that mass and momentum
+    !   stay consistent.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1200,8 +1379,23 @@ CONTAINS
     SUBROUTINE adv_c_grd(kk, jj, ii, q, l, c, cWy, vel, cFlx1, &
         dx, dy, dz, ddx, ddy, ddz, dt, ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
-    !   What it does:
-    !    
+    !   Short: Grid kernel: flux divergence plus Weymouth-Yue
+    !          compression term.
+    !
+    !   c = c - dt/ds*(F(+) - F(-)) + dt*cWy*du_l/dx_l with the
+    !   extent ds of the control volume in direction l (sel_ext) and
+    !   the velocity vel at its faces. The compression term with the
+    !   coefficient cWy, fixed at the beginning of the time step,
+    !   makes the directionally split scheme conservative (see
+    !   comp_cWy_grd). The main grid (q = 0) is clipped with clp_tol
+    !   here, the staggered grids in adv_c_stg.
+    !
+    !   Source:
+    !   G. D. Weymouth and D. K.-P. Yue, “Conservative
+    !   Volume-of-Fluid method for free-surface simulations on
+    !   Cartesian-grids,” Journal of Computational Physics, vol. 229,
+    !   no. 8, pp. 2853–2865, Apr. 2010,
+    !   doi: 10.1016/j.jcp.2009.12.018.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1244,8 +1438,8 @@ CONTAINS
 
     SUBROUTINE adv_m_stg(q, l, dt)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Advect momentum on staggered grid q in split
+    !          direction l.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1309,8 +1503,22 @@ CONTAINS
         advr, adve, mom, cFlx1, cFlx2, dx, dy, dz, &
         ddx, ddy, ddz, dt, ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
-    !   What it does:
-    !    
+    !   Short: Grid kernel: mass-consistent momentum flux divergence
+    !          plus compression term.
+    !
+    !   The momentum flux is adve*(rho1*cFlx1 + rho2*cFlx2), i.e.
+    !   it uses the same phase fluxes as the advection of cS_q,
+    !   which makes mass and momentum transport consistent (Arrufat
+    !   et al.). The compression term is the density of the
+    !   compression coefficient, rho1*cWy + rho2*(1 - cWy), times
+    !   the velocity at the beginning of the time step and the
+    !   divergence of the advector.
+    !
+    !   Source:
+    !   T. Arrufat et al., “A mass-momentum consistent,
+    !   Volume-of-Fluid method for incompressible flow on staggered
+    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021,
+    !   doi: 10.1016/j.compfluid.2020.104785.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1340,7 +1548,7 @@ CONTAINS
                 DO k = ksta-kl, kend
                     momFlx(k,j,i) = adve(k,j,i)*( rho1*cFlx1(k,j,i) + rho2*cFlx2(k,j,i) )
                 END DO
-            END DO 
+            END DO
         END DO
 
         DO i = ista, iend
@@ -1363,10 +1571,8 @@ CONTAINS
 
     SUBROUTINE comp_m_stg(q)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute the volume fraction field for the staggered cells
-    !   depending on q. The staggered cells are either moved by
-    !   1/2 ddx, 1/2 ddy or 1/2 ddz.
+    !   Short: Compute momentum rho*u on staggered grid q from
+    !          density and velocity.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1404,8 +1610,7 @@ CONTAINS
 
     SUBROUTINE comp_m_stg_grd(kk, jj, ii, q, dSq, vel, mSq)
     !----------------------------------------------------------------
-    !   What it does:
-    !    
+    !   Short: Grid kernel of comp_m_stg.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1425,19 +1630,20 @@ CONTAINS
 
     SUBROUTINE upd_vel_stg(q)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Updates velocity component q from the advected staggered
-    !   momentum and density, vel = mS(q)/dS(q). Only the unknowns
-    !   owned by the grid are updated, i.e. the same loop bounds as
-    !   in adv_m_stg (see get_lp_bnds). Faces on walls and refinement
-    !   boundaries as well as ghost layers are not touched here; the
-    !   refinement boundaries and ghost layers are filled afterwards
-    !   by prlg_stg("U", "V", "W") in adve_operator.
+    !   Short: Update velocity component q from advected momentum
+    !          and density.
+    !
+    !   u_q = mS_q/dS_q. Only the unknowns owned by the grid are
+    !   updated, i.e. with the same loop bounds as in adv_m_stg (see
+    !   get_lp_bnds). Faces on walls and refinement boundaries as
+    !   well as ghost layers are not touched here; the refinement
+    !   boundaries and ghost layers are filled afterwards by
+    !   prlg_stg("U", "V", "W") in adve_operator.
     !----------------------------------------------------------------
- 
+
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: q
- 
+
         ! Local variables
         CHARACTER(len=3) :: dFldName, mFldName
         INTEGER(intk) :: n, igrid
@@ -1446,47 +1652,46 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: u(:,:,:), v(:,:,:), w(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: vel(:,:,:)
         REAL(realk), POINTER, CONTIGUOUS :: dSq(:,:,:), mSq(:,:,:)
- 
+
         dFldName = "DS"//int2char(q)
         mFldName = "MS"//int2char(q)
- 
+
         DO n = 1, nmygrids
             igrid = mygrids(n)
- 
+
             CALL get_mgdims(kk, jj, ii, igrid)
- 
+
             CALL get_fieldptr(dSq, dFldName, igrid)
             CALL get_fieldptr(mSq, mFldName, igrid)
             CALL get_fieldptr(u, "U", igrid)
             CALL get_fieldptr(v, "V", igrid)
             CALL get_fieldptr(w, "W", igrid)
- 
+
             CALL sel_vel(q, u, v, w, vel)
             CALL get_lp_bnds(igrid, q, ista, iend, jsta, jend, ksta, kend)
             CALL upd_vel_stg_grd(kk, jj, ii, dSq, mSq, vel, &
                 ista, iend, jsta, jend, ksta, kend)
         END DO
- 
+
     END SUBROUTINE upd_vel_stg
- 
+
     !================================================================
- 
+
     SUBROUTINE upd_vel_stg_grd(kk, jj, ii, dSq, mSq, vel, &
         ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
-    !   What it does:
-    !   vel = mS/dS on the unknowns owned by the grid.
+    !   Short: Grid kernel: u_q = (rho*u)_q/rho_q on owned unknowns.
     !----------------------------------------------------------------
- 
+
         ! Subroutine arguments
         INTEGER(intk), INTENT(in) :: kk, jj, ii
         REAL(realk), INTENT(in) :: dSq(kk, jj, ii), mSq(kk, jj, ii)
         REAL(realk), INTENT(inout) :: vel(kk, jj, ii)
         INTEGER(intk), INTENT(in) :: ista, iend, jsta, jend, ksta, kend
- 
+
         ! Local variables
         INTEGER(intk) :: i, j, k
- 
+
         DO i = ista, iend
             DO j = jsta, jend
                 DO k = ksta, kend
@@ -1494,16 +1699,15 @@ CONTAINS
                 END DO
             END DO
         END DO
- 
+
     END SUBROUTINE upd_vel_stg_grd
 
     !================================================================
 
     SUBROUTINE comp_cWy()
     !----------------------------------------------------------------
-    !   What it does:
-    !   Comput nondirectional compression coefficient cWy on 
-    !   multi-grid level.
+    !   Short: Compute Weymouth-Yue compression coefficient on the
+    !          main grid.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1531,9 +1735,8 @@ CONTAINS
 
     SUBROUTINE comp_cWy_stg(q)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Comput nondirectional compression coefficient cWy on 
-    !   multi-grid level.
+    !   Short: Compute Weymouth-Yue compression coefficient on
+    !          staggered grid q.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1565,20 +1768,23 @@ CONTAINS
 
     SUBROUTINE comp_cWy_grd(kk, jj, ii, c, cWy)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Computes the nondirectional compression coefficient c for 
-    !   Weymouth and Yue"s advection scheme.
+    !   Short: Grid kernel: coefficient is 1 for c > 0.5, else 0.
     !
-    !   Source:
-    !   T. Arrufat et al., “A mass-momentum consistent, 
-    !   Volume-of-Fluid method for incompressible flow on staggered 
-    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
+    !   The coefficient is non-directional. It is evaluated once per
+    !   time step before the first split and kept constant for all
+    !   splits, which makes the directionally split advection
+    !   exactly conservative.
+    !
+    !   Sources:
+    !   T. Arrufat et al., “A mass-momentum consistent,
+    !   Volume-of-Fluid method for incompressible flow on staggered
+    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021,
     !   doi: 10.1016/j.compfluid.2020.104785.
     !
-    !   G. D. Weymouth and D. K.-P. Yue, “Conservative 
-    !   Volume-of-Fluid method for free-surface simulations on 
+    !   G. D. Weymouth and D. K.-P. Yue, “Conservative
+    !   Volume-of-Fluid method for free-surface simulations on
     !   Cartesian-grids,” Journal of Computational Physics, vol. 229,
-    !   no. 8, pp. 2853–2865, Apr. 2010, 
+    !   no. 8, pp. 2853–2865, Apr. 2010,
     !   doi: 10.1016/j.jcp.2009.12.018.
     !----------------------------------------------------------------
 
@@ -1608,8 +1814,8 @@ CONTAINS
 
     SUBROUTINE comp_adve_stg(q, l, dt)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Compute advected velocity (advectee) on staggered
+    !          grid q.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1663,8 +1869,8 @@ CONTAINS
         isIfcVic, dx, dy, dz, ddx, ddy, ddz, dt, &
         ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Selects interpolation scheme.
+    !   Short: Grid kernel: select interpolation scheme (QUICK or
+    !          ENO) for the advectee.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1701,34 +1907,43 @@ CONTAINS
         advr, adve, isIfcVic, dx, dy, dz, ddx, ddy, ddz, dt, &
         ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
-    !   What it does:
-    !   QUICK interpolation to compute the advected veloctiy
-    !   (advectee) on staggered grid cells.
-    !   adve = advected q (advectee)
-    !   advr = advecting q (advector)
-    !   An indicator function is used to avoid if-statements within
-    !   loops.
+    !   Short: Interpolate the advectee with QUICK; upwind value near
+    !          the interface.
     !
-    !   Sources: 
-    !   T. Arrufat et al., “A mass-momentum consistent, 
-    !   Volume-of-Fluid method for incompressible flow on staggered 
-    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
+    !   Interpolates the advected velocity component q (advectee,
+    !   adve) to the faces of the staggered q-cells in direction l;
+    !   the upwind side follows from the advecting velocity
+    !   (advector, advr). The quadratic upstream interpolation is
+    !   evaluated in Newton form on non-uniform grids. In the
+    !   vicinity of the interface (isIfcVic > 0) the first-order
+    !   upwind value is used.
+    !
+    !   With donCen, the interpolation point is moved by |advr|*dt/2
+    !   upstream, i.e. to the centre of the donating region.
+    !   Indicator functions are used to avoid if-statements within
+    !   the loops.
+    !
+    !   Sources:
+    !   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
+    !   (PARIS),” Computer Physics Communications, vol. 263,
+    !   p. 107849, Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
+    !   See PARIS (accessed: May 2026) source code subroutine(s):
+    !       - interpole_quad (rudman_modules.f90)
+    !
+    !   T. Arrufat et al., “A mass-momentum consistent,
+    !   Volume-of-Fluid method for incompressible flow on staggered
+    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021,
     !   doi: 10.1016/j.compfluid.2020.104785.
     !
-    !   B. P. Leonard, “A stable and accurate convective modelling 
+    !   D. Herrmann, Numerische Mathematik — 40 BASIC-Programme.
+    !   Wiesbaden: Vieweg+Teubner Verlag, 1983.
+    !   doi: 10.1007/978-3-322-96321-5.
+    !
+    !   B. P. Leonard, “A stable and accurate convective modelling
     !   procedure based on quadratic upstream interpolation,”
     !   Computer Methods in Applied Mechanics and Engineering,
     !   vol. 19, no. 1, pp. 59–98, Jun. 1979,
     !   doi: 10.1016/0045-7825(79)90034-3.
-    !
-    !   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
-    !   (PARIS),” Computer Physics Communications, vol. 263,
-    !   p. 107849, Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
-    !   PARIS source code, grep "interpole_quad" (accessed: Mai 2026)
-    !
-    !   D. Herrmann, Numerische Mathematik — 40 BASIC-Programme. 
-    !   Wiesbaden: Vieweg+Teubner Verlag, 1983. 
-    !   doi: 10.1007/978-3-322-96321-5.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1801,10 +2016,10 @@ CONTAINS
     CONTAINS
 
         !------------------------------------------------------------
-        ! Both, Lagrange and Newton form yield the same results.
-        ! The Lagrange form was more familiar for me. Hence, I 
-        ! implemented it first. The Newton form is closer to 
-        ! Leonard"s formulation and easier to adjust in the future
+        ! Both the Lagrange and the Newton form yield the same
+        ! results. The Lagrange form was more familiar to me, hence
+        ! I implemented it first. The Newton form is closer to the
+        ! formulation of Leonard and easier to adjust in the future
         ! (see QUICKEST scheme).
         !------------------------------------------------------------
         ! PURE REAL(realk) FUNCTION lagrange_interpolation(phiFU, phiU, phiD, dsFU, dsD, dsr) RESULT(r)
@@ -1815,6 +2030,10 @@ CONTAINS
         ! END FUNCTION lagrange_interpolation
 
         PURE REAL(realk) FUNCTION newton_interpolation(phiFU, phiU, phiD, dsFU, dsD, dsr) RESULT(r)
+        !------------------------------------------------------------
+        !   Short: Quadratic upstream interpolation (Newton form) at
+        !          distance dsr from the upwind node.
+        !------------------------------------------------------------
             REAL(realk), INTENT(in) :: phiFU, phiU, phiD, dsFU, dsD, dsr
             REAL(realk) :: dd1U, dd1D, curv
             dd1D = (phiD - phiU)/dsD
@@ -1831,29 +2050,31 @@ CONTAINS
         advr, adve, dx, dy, dz, ddx, ddy, ddz, dt, &
         ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
-    !   What it does:
-    !   ENO interpolation to compute the advected veloctiy
-    !   (advectee) on staggered grid cells.
-    !   adve = advected q (advectee)
-    !   advr = advecting q (advector)
-    !   An indicator function is used to avoid if-statements within
-    !   loops.
-    !   
-    !   Sources: 
-    !   G. Tryggvason, R. Scardovelli, and S. Zaleski, Direct
-    !   Numerical Simulations of Gas–Liquid mph Flows,
-    !   1st ed. Cambridge University Press, 2011.
-    !   doi: 10.1017/CBO9780511975264.
+    !   Short: Interpolate the advectee with ENO
+    !          (minmod-limited slope).
     !
-    !   P. K. Sweby, “High Resolution Schemes Using Flx Limiters
-    !   for Hyperbolic Conservation Laws,” SIAM J. Numer. Anal.,
-    !   vol. 21, no. 5, pp. 995–1011, Oct. 1984,
-    !   doi: 10.1137/0721062.
+    !   Second-order upwind extrapolation of the advectee from the
+    !   upwind node with the minmod-limited slope at this node.
+    !   donCen as in comp_adve_stg_quick. Indicator functions are
+    !   used to avoid if-statements within the loops.
     !
+    !   Sources:
     !   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
     !   (PARIS),” Computer Physics Communications, vol. 263,
     !   p. 107849, Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
-    !   PARIS source code, grep "interpole3" (accessed: Mai 2026)
+    !   See PARIS (accessed: May 2026) source code subroutine(s):
+    !       - interpole3 (modules.f90)
+    !       - slope_lim (modules.f90)
+    !
+    !   P. K. Sweby, “High Resolution Schemes Using Flux Limiters for
+    !   Hyperbolic Conservation Laws,” SIAM Journal on Numerical
+    !   Analysis, vol. 21, no. 5, pp. 995–1011, Oct. 1984,
+    !   doi: 10.1137/0721062.
+    !
+    !   G. Tryggvason, R. Scardovelli, and S. Zaleski, Direct
+    !   Numerical Simulations of Gas–Liquid Multiphase Flows, 1st ed.
+    !   Cambridge University Press, 2011.
+    !   doi: 10.1017/CBO9780511975264.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1866,7 +2087,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: dt
         INTEGER(intk), INTENT(in) :: ista, iend, jsta, jend, ksta, kend
 
-        ! Loval variables
+        ! Local variables
         INTEGER(intk) :: k, j, i, kl, jl, il
         REAL(realk) :: dnx(ii), dny(jj), dnz(kk)
         REAL(realk) :: dcx(ii), dcy(jj), dcz(kk)
@@ -1920,6 +2141,9 @@ CONTAINS
     CONTAINS
 
         PURE REAL(realk) FUNCTION minmod(a, b) RESULT(res)
+        !------------------------------------------------------------
+        !   Short: Minmod limiter.
+        !------------------------------------------------------------
             REAL(realk), INTENT(in) :: a, b
             res = 0.5_realk*( SIGN(1.0_realk, a) + SIGN(1.0_realk, b) )*MIN(ABS(a), ABS(b))
         END FUNCTION minmod
@@ -1930,8 +2154,8 @@ CONTAINS
 
     SUBROUTINE comp_advr_stg(q, l)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Compute advecting velocity (advector) on staggered
+    !          grid q.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -1972,15 +2196,23 @@ CONTAINS
     SUBROUTINE comp_advr_stg_grd(kk, jj, ii, q, l, vel, advr, ddx, ddy, ddz, &
         ista, iend, jsta, jend, ksta, kend)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Linear interpolation to compute the advecting velocity
-    !   (advector) on staggered grid cells.
-    !   advr = advecting q (advector)
-    !   
-    !   Source: 
-    !   T. Arrufat et al., “A mass-momentum consistent, 
-    !   Volume-of-Fluid method for incompressible flow on staggered 
-    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021, 
+    !   Short: Grid kernel: advector as (area-weighted) mean of the
+    !          main-grid face velocities.
+    !
+    !   The advector is based on the velocity at the beginning of the
+    !   time step (UP, VP, WP).
+    !
+    !   q == l: the staggered face lies at the centre of a main cell;
+    !           advr is the mean of the velocities at its two faces.
+    !   q /= l: the staggered face covers one half of two adjacent
+    !           main faces; advr is the mean of their velocities
+    !           weighted with the face areas, consistent with the
+    !           half-cell fluxes in comp_flx_stg_grd.
+    !
+    !   Source:
+    !   T. Arrufat et al., “A mass-momentum consistent,
+    !   Volume-of-Fluid method for incompressible flow on staggered
+    !   grids,” Computers & Fluids, vol. 215, p. 104785, Jan. 2021,
     !   doi: 10.1016/j.compfluid.2020.104785.
     !----------------------------------------------------------------
 
@@ -1991,7 +2223,7 @@ CONTAINS
         REAL(realk), INTENT(in) :: ddx(ii), ddy(jj), ddz(kk)
         INTEGER(intk), INTENT(in) :: ista, iend, jsta, jend, ksta, kend
 
-        ! Loval variables
+        ! Local variables
         INTEGER(intk) :: k, j, i
         INTEGER(intk) :: kl, jl, il, kq, jq, iq
         REAL(realk) :: ddnqMi, ddnqPl

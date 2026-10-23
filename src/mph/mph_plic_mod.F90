@@ -2,20 +2,32 @@
 !  Module: mph_plic_mod
 !
 !   Responsibilities:
-!   - Provides routines related to piecewise linear interface 
-!     calculation
+!   - Reconstructs the piecewise linear interface (PLIC) on all
+!     grids: interface flags, unit normals from the weighted
+!     gradient of c and plane constants alpha
+!   - Provides the analytical relations between plane constant and
+!     volume fraction in rectangular cells (both directions)
+!   - Computes the volume fractions of the staggered cells and of
+!     their half cells from the PLIC interface
+!   - Flags interface cells and their vicinity on the staggered
+!     grids
 !
 !   Author:      Valentin Ruhs
 !   e-Mail:      valentin.ruhs@gmx.de
 !   Created:     2026-02
-!   Last update: 2026-09
 !
-!   Source:
-!   R. Scardovelli und S. Zaleski, „Analytical Relations 
-!   Connecting Linear Interfaces and Volume Fractions in 
-!   Rectangular Grids“, Journal of Computational Physics, 
-!   Bd. 164, Nr. 1, S. 228–237, Okt. 2000, 
-!   doi: 10.1006/jcph.2000.6567.
+!   Sources:
+!   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
+!   (PARIS),” Computer Physics Communications, vol. 263, p. 107849,
+!   Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
+!   See PARIS (accessed: May 2026) source code subroutine(s):
+!       - get_MGmatrix_coef (MGsolver.f90)
+!       - fill_coefficients (MGsolver.f90)
+!
+!   R. Scardovelli and S. Zaleski, “Analytical Relations Connecting
+!   Linear Interfaces and Volume Fractions in Rectangular Grids,”
+!   Journal of Computational Physics, vol. 164, no. 1, pp. 228–237,
+!   Oct. 2000, doi: 10.1006/jcph.2000.6567.
 !
 !====================================================================
 
@@ -29,7 +41,7 @@ MODULE mph_plic_mod
     USE mphcore_mod, ONLY: vofTol, rho1, rho2
 
     IMPLICIT NONE(type, external)
-    PRIVATE 
+    PRIVATE
 
     PUBLIC :: init_mph_plic, finish_mph_plic, comp_ifc, comp_c_stg, &
         comp_isIfc_stg, comp_c_loc, comp_hlf_frc
@@ -37,13 +49,20 @@ MODULE mph_plic_mod
 CONTAINS
 
     SUBROUTINE init_mph_plic()
+    !----------------------------------------------------------------
+    !   Short: Register interface fields (normal, plane constant,
+    !          interface flags).
+    !
+    !   NORMX/Y/Z and ALPHA are written to the output. ISIFC flags
+    !   the interface cells of the main grid, ISIFCS1-3 and
+    !   ISIFCVICS1-3 the interface cells and their vicinity on the
+    !   staggered grids.
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
 
         ! Local variables
-        ! None
-
         CHARACTER(len=*), PARAMETER :: descNorm = "ifc. norm. vec."
         CHARACTER(len=*), PARAMETER :: descAlpha = "ifc. plane const."
         CHARACTER(len=*), PARAMETER :: descIsIfc = "cell with ifc."
@@ -70,6 +89,9 @@ CONTAINS
     !================================================================
 
     SUBROUTINE finish_mph_plic()
+    !----------------------------------------------------------------
+    !   Short: Finalize module (no operation).
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -85,8 +107,8 @@ CONTAINS
 
     SUBROUTINE comp_isIfc_stg(q)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Flag interface cells and their vicinity on staggered
+    !          grid q.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -122,9 +144,13 @@ CONTAINS
 
     SUBROUTINE comp_isIfc_grd(kk, jj, ii, c, isIfc, isIfcVic)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Track cells containing an interface or in vicinity of an
-    !   interface.
+    !   Short: Grid kernel: flag interface cells and, optionally,
+    !          their vicinity.
+    !
+    !   isIfc = 1 for vofTol < c < 1 - vofTol, else -1. If
+    !   isIfcVic is present, all cells within two cells (incl.
+    !   diagonals) of an interface cell are flagged as well
+    !   (isIfcVic = 1, else -1).
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -169,16 +195,20 @@ CONTAINS
 
     SUBROUTINE comp_norm_vec(normx, normy, normz, kk, jj, ii, c, isIfc, dx, dy, dz)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Computes the normal vector components normx, normy and normz
-    !   of the gradient of the volume fraction function c. The 
-    !   components are normalized by the length to get the unit
-    !   normal components. The gradient in each cell is calculated
-    !   by taking into account its eight surrounding cells weighted
-    !   with the three-dimensional stcl operator:
+    !   Short: Compute unit interface normal from the weighted
+    !          gradient of c.
+    !
+    !   The gradient of c is computed from central differences over
+    !   the 3x3 neighbouring rows, weighted with the stencil stcl:
+    !
     !            / 1  2  1 \
     !   stcl =   | 2  4  2 |
     !            \ 1  2  1 /
+    !
+    !   The normal is normalized to unit length and points from high
+    !   to low c, i.e. out of phase 1. Only interface cells are
+    !   evaluated; for a vanishing gradient (length <= vofTol) the
+    !   normal is zero.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -248,8 +278,7 @@ CONTAINS
 
     SUBROUTINE comp_ifc()
     !----------------------------------------------------------------
-    !   What it does:
-    !   Reconstruct interface on multi-grid level.
+    !   Short: Reconstruct the PLIC interface on all grids.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -293,8 +322,11 @@ CONTAINS
 
     SUBROUTINE comp_ifc_grd(kk, jj, ii, c, dx, dy, dz, ddx, ddy, ddz, normx, normy, normz, alpha, isIfc)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Reconstruct interface on grid level.
+    !   Short: Grid kernel: interface flags, normals and plane
+    !          constants alpha.
+    !
+    !   Cells without a valid normal (e.g. flotsam) are not treated
+    !   as interface cells.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -311,7 +343,7 @@ CONTAINS
 
         CALL comp_isIfc_grd(kk, jj, ii, c, isIfc)
         CALL comp_norm_vec(normx, normy, normz, kk, jj, ii, c, isIfc, dx, dy, dz)
-        ! Fix for cells with no normal vector e.g. flotsam
+        ! Fix for cells without normal vector, e.g. flotsam
         WHERE ( normx**2 + normy**2 + normz**2 < 0.5_realk ) isIfc = -1.0_realk
         CALL comp_alpha(alpha, kk, jj, ii, c, isIfc, ddx, ddy, ddz, normx, normy, normz)
 
@@ -321,9 +353,14 @@ CONTAINS
 
     SUBROUTINE comp_c_loc(cLoc, alpha, ddx, ddy, ddz, normx, normy, normz)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute volume fraction given the interface parameters of a
-    !   cell.
+    !   Short: Compute volume fraction of a cuboid cut by a
+    !          given plane.
+    !
+    !   The plane is n*x = alpha in local coordinates with the origin
+    !   at the lower corner of the cuboid ddx*ddy*ddz; phase 1 lies
+    !   on the side n*x < alpha. The problem is mapped onto the
+    !   standard case (get_order, mirror_shift) and solved
+    !   analytically (comp_c_std).
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -346,10 +383,8 @@ CONTAINS
 
     SUBROUTINE comp_c_stg(q)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute the volume fraction field for the staggered cells
-    !   depending on q. The staggered cells are either moved by
-    !   1/2 ddx, 1/2 ddy or 1/2 ddz.
+    !   Short: Compute c on staggered grid q from PLIC
+    !          half-cell fractions.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -394,10 +429,13 @@ CONTAINS
     SUBROUTINE comp_c_stg_grd(kk, jj, ii, q, c, cSq, &
         ddx, ddy, ddz, normx, normy, normz, alpha, isIfc)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute the volume fraction field for the staggered cells
-    !   depending on q. The staggered cells are either moved by
-    !   1/2ddx, 1/2ddy or 1/2ddz.
+    !   Short: Grid kernel of comp_c_stg.
+    !
+    !   The staggered q-cell consists of the upper q-half of the main
+    !   cell (k,j,i) and the lower q-half of the main cell
+    !   (k+kq,j+jq,i+iq). In interface cells the volume fraction of
+    !   the half cell follows from the PLIC plane, otherwise from c;
+    !   cS_q is the width-weighted mean of both halves.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -466,8 +504,24 @@ CONTAINS
 
     SUBROUTINE comp_hlf_frc(q, name)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Compute half-cell values of c, rho or rho*u for the
+    !          staggered restriction.
+    !
+    !   Fills HLFFRCMI/HLFFRCPL with the volume fractions of the two
+    !   half cells of the staggered q-cells (comp_hlf_frc_grd). For
+    !   name = DSq they are converted into densities, for MSq into
+    !   momenta rho_half*mS_q/dS_q (i.e. with the staggered
+    !   velocity); for CSq they are kept. Used by the staggered
+    !   restriction (ftoc flags A, B, C), where the coarse staggered
+    !   cell overlaps fine half cells.
+    !
+    !   Source:
+    !   W. Aniszewski et al., “PArallel, Robust, Interface Simulator
+    !   (PARIS),” Computer Physics Communications, vol. 263,
+    !   p. 107849, Jun. 2021, doi: 10.1016/j.cpc.2021.107849.
+    !   See PARIS (accessed: May 2026) source code subroutine(s):
+    !       - get_MGmatrix_coef (MGsolver.f90)
+    !       - fill_coefficients (MGsolver.f90)
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -527,8 +581,11 @@ CONTAINS
     SUBROUTINE comp_hlf_frc_grd(kk, jj, ii, q, c, hlfFrcMi, hlfFrcPl, &
         ddx, ddy, ddz, normx, normy, normz, alpha, isIfc)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Grid kernel: PLIC volume fractions of both half cells.
+    !
+    !   As comp_c_stg_grd, but both half-cell fractions are stored
+    !   separately: hlfFrcMi is the upper q-half of cell (k,j,i),
+    !   hlfFrcPl the lower q-half of cell (k+kq,j+jq,i+iq).
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -599,9 +656,17 @@ CONTAINS
 
     PURE SUBROUTINE get_order(m1, m2, m3, c1, c2, c3, normx, normy, normz, ddx, ddy, ddz)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Determines the order of the scaled normal values
-    !   and writes it to m1-m3 and c1-c3.
+    !   Short: Sort scaled normal components in ascending order.
+    !
+    !   Returns m1-m3 = |n| and c1-c3 = cell widths, sorted such
+    !   that m1*c1 <= m2*c2 <= m3*c3.
+    !
+    !   Source:
+    !   R. Scardovelli and S. Zaleski, “Analytical Relations
+    !   Connecting Linear Interfaces and Volume Fractions in
+    !   Rectangular Grids,” Journal of Computational Physics,
+    !   vol. 164, no. 1, pp. 228–237, Oct. 2000,
+    !   doi: 10.1006/jcph.2000.6567.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -643,7 +708,7 @@ CONTAINS
         ! normy*ddy >= normz*ddz => normy is m2 and normz is m1
         ! normy*ddy <  normz*ddz => normz is m2 and normy is m1
         ! --OR--
-        ! normy*ddy >= normx*ddx => normy is m2 and normz is m1
+        ! normy*ddy >= normx*ddx => normy is m2 and normx is m1
         ! normy*ddy <  normx*ddx => normx is m2 and normy is m1
         IF (scaledNorm1 >= scaledNorm2) THEN
             tmp = scaledNorm1; scaledNorm1 = scaledNorm2; scaledNorm2 = tmp
@@ -675,9 +740,10 @@ CONTAINS
 
     SUBROUTINE comp_alpha(alpha, kk, jj, ii, c, isIfc, ddx, ddy, ddz, normx, normy, normz)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute alpha given the normal vector and volume fraction of
-    !   a cell.
+    !   Short: Compute plane constant alpha from normal and
+    !          volume fraction.
+    !
+    !   Only interface cells are evaluated; alpha = 0 elsewhere.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -712,9 +778,24 @@ CONTAINS
     PURE SUBROUTINE comp_alpha_std(m1, m2, m3, c1, c2, c3, &
         alphaStd, cLoc)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Solves the standart case for the plane constant alpha.
-    !   Mirrors comp_c_std.
+    !   Short: Solve the standard case for alpha (inverse
+    !          of comp_c_std).
+    !
+    !   Analytical inversion of the relation between volume and
+    !   plane constant in a cuboid c1*c2*c3 with positive, sorted
+    !   scaled normal components m1*c1 <= m2*c2 <= m3*c3. The
+    !   symmetry V(alpha) + V(alphaMax - alpha) = V_cell is used to
+    !   fold inputs c > 0.5 onto the lower half. The degenerate 1D
+    !   and 2D cases (m*c < vofTol) are treated separately; in 3D
+    !   the cubic equations are solved with the trigonometric
+    !   formula. Mirrors comp_c_std.
+    !
+    !   Source:
+    !   R. Scardovelli and S. Zaleski, “Analytical Relations
+    !   Connecting Linear Interfaces and Volume Fractions in
+    !   Rectangular Grids,” Journal of Computational Physics,
+    !   vol. 164, no. 1, pp. 228–237, Oct. 2000,
+    !   doi: 10.1006/jcph.2000.6567.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -811,9 +892,18 @@ CONTAINS
     PURE SUBROUTINE comp_c_std(m1, m2, m3, c1, c2, c3, &
         alphaStd, cLoc)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Solves the standart case for the volume fraction.
+    !   Short: Solve the standard case for the volume fraction.
+    !
+    !   Volume below the plane for the standard case with the
+    !   same case distinction and folding as comp_alpha_std.
     !   Mirrors comp_alpha_std.
+    !
+    !   Source:
+    !   R. Scardovelli and S. Zaleski, “Analytical Relations
+    !   Connecting Linear Interfaces and Volume Fractions in
+    !   Rectangular Grids,” Journal of Computational Physics,
+    !   vol. 164, no. 1, pp. 228–237, Oct. 2000,
+    !   doi: 10.1006/jcph.2000.6567.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -892,10 +982,11 @@ CONTAINS
 
     PURE FUNCTION mirror_shift(normx, normy, normz, ddx, ddy, ddz) RESULT(shift)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Each direction with a negative normal component
-    !   mirrors the cell and shifts the plane constant by 
-    !   norm(.)*dd(.).
+    !   Short: Shift of alpha due to mirroring for negative
+    !          normal components.
+    !
+    !   Each direction with a negative normal component mirrors the
+    !   cell and shifts the plane constant by norm(.)*dd(.).
     !----------------------------------------------------------------
 
         REAL(realk), INTENT(in) :: normx, normy, normz
@@ -912,8 +1003,10 @@ CONTAINS
 
     PURE FUNCTION comp_alpha_max(mc1, mc2, mc3) RESULT(alphaMax)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute theoretical maximum alpha value.
+    !   Short: Maximum plane constant of a cell.
+    !
+    !   alphaMax = m1*c1 + m2*c2 + m3*c3; components below vofTol
+    !   are ignored.
     !----------------------------------------------------------------
 
         REAL(realk), INTENT(in) :: mc1, mc2, mc3

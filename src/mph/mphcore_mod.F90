@@ -1,14 +1,20 @@
 !====================================================================
-!   Module: mphcore_mod
+!  Module: mphcore_mod
 !
 !   Responsibilities:
-!   - reads and provides control and physical parameters
-!   - initializes multi-phase fields
+!   - Reads the /multiphase section of the parameter file and sets
+!     hasMph
+!   - Provides the control parameters (test case, skip switches,
+!     tolerances, advection scheme, ...) and the physical parameters
+!     (densities, viscosities, gravity)
+!   - Defines the phase convention: index 1 refers to the phase with
+!     c = 1, index 2 to the phase with c = 0
+!   - Provides the error codes of the multi-phase modules
+!   - Registers the basic multi-phase fields: C, CP, D, UP, VP, WP
 !
 !   Author:      Valentin Ruhs
 !   e-Mail:      valentin.ruhs@gmx.de
 !   Created:     2026-02
-!   Last update: 2026-09
 !
 !====================================================================
 
@@ -51,6 +57,22 @@ MODULE mphcore_mod
 CONTAINS
 
     SUBROUTINE init_mphcore()
+    !----------------------------------------------------------------
+    !   Short: Read control and physical parameters; register c,
+    !          density and previous-step fields.
+    !
+    !   If the parameter file has no /multiphase section, hasMph is
+    !   set to .FALSE. and the routine returns. Otherwise, the
+    !   control parameters (test case, skip switches, tolerances,
+    !   advection scheme, ...) and the physical parameters are read:
+    !   densities rho1/rho2, dynamic viscosities gmol1/gmol2 and
+    !   gravity. Index 1 refers to the phase with c = 1.
+    !
+    !   Registered fields: UP, VP, WP (velocities of the previous
+    !   time step), C (volume fraction, read on restart and written
+    !   to the output), CP (volume fraction of the previous time
+    !   step) and D (cell density).
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -108,7 +130,7 @@ CONTAINS
         ! Read gravity
         CALL mphConf%get_array("/gravity", grav)
 
-        ! Initialize mph-flds
+        ! Initialize multi-phase fields
         CALL set_field("UP", description=descVel, istag=1, &
             dread=.FALSE., required=.TRUE., dwrite=.FALSE., buffers=.TRUE.)
         CALL set_field("VP", description=descVel, jstag=1, &
@@ -128,6 +150,9 @@ CONTAINS
     !================================================================
 
     SUBROUTINE finish_mphcore()
+    !----------------------------------------------------------------
+    !   Short: Finalize module (no operation).
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None

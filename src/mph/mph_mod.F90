@@ -2,14 +2,16 @@
 !  Module: mph_mod
 !
 !   Responsibilities:
-!   - Initializes all multi-phase modules
-!   - Finishes all multi-phase modules
-!   - Serves as public multi-phase gateway
+!   - Serves as public gateway of the multi-phase solver
+!   - Initializes and finishes all multi-phase modules
+!   - Advances one RK stage of the multi-phase momentum equation
+!     (mph_step): geometric VOF advection and property update in
+!     the first stage, viscous, pressure and gravity terms in every
+!     stage
 !
 !   Author:      Valentin Ruhs
 !   e-Mail:      valentin.ruhs@gmx.de
 !   Created:     2026-02
-!   Last update: 2026-09
 !
 !====================================================================
 
@@ -37,6 +39,15 @@ MODULE mph_mod
 CONTAINS
 
     SUBROUTINE init_mph()
+    !----------------------------------------------------------------
+    !   Short: Initialize all multi-phase modules.
+    !
+    !   init_mphcore is always called and sets hasMph. The other
+    !   modules are only initialized if the parameter file contains a
+    !   /multiphase section. The order matters: init_mph_test fills c
+    !   and reconstructs the interface, init_mph_chk afterwards
+    !   stores the initial volume and error norms.
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -62,6 +73,9 @@ CONTAINS
     !================================================================
 
     SUBROUTINE finish_mph()
+    !----------------------------------------------------------------
+    !   Short: Run final check and finalize all multi-phase modules.
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -90,8 +104,23 @@ CONTAINS
 
     SUBROUTINE mph_step(uo_f, vo_f, wo_f, dt, irk, itstep, timeph, gradp)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Advance one RK stage: advection and properties (first
+    !          stage only), viscous, pressure and gravity terms.
+    !
+    !   Called by timeintegrate_flow instead of the single-phase
+    !   right-hand side (tstle4).
+    !
+    !   The geometric VOF advection is a one-step method. Hence, it
+    !   is performed only in the first RK stage over the full time
+    !   step dt with the velocities at the beginning of the step (UP,
+    !   VP, WP). If frcVelFld is set, the prescribed velocity field
+    !   of the test case is imposed at t + dt/2 beforehand.
+    !   Afterwards, the PAR face check (chk_ifc_par) is done and the
+    !   material properties are updated (comp_props).
+    !
+    !   The viscous, pressure and gravity terms are added to the
+    !   right-hand side uo, vo, wo in every RK stage. gradp is the
+    !   prescribed driving pressure gradient.
     !----------------------------------------------------------------
 
         ! Subroutine arguments

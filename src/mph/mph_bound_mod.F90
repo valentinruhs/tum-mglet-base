@@ -1,3 +1,24 @@
+!====================================================================
+!  Module: mph_bound_mod
+!
+!   Responsibilities:
+!   - Provides the boundary operations of the multi-phase fields as
+!     extensions of bound_t:
+!     - bound_c: cell-centred c; zero gradient at NOS and SLI,
+!       injection of the coarse value at PAR
+!     - bound_stg: staggered field triples (CS, DS) at PAR; coarse
+!       face value for the normal component, injection of the
+!       coarse value for the tangential components
+!   - Assumes that no interface lies close to a PAR face (checked
+!     by chk_ifc_par in mph_chk_mod)
+!
+!   Author:      Valentin Ruhs
+!   e-Mail:      valentin.ruhs@gmx.de
+!   Created:     2026-09
+!   Last update: 2026-09
+!
+!====================================================================
+
 MODULE mph_bound_mod
 
     USE precision_mod, ONLY: realk, intk

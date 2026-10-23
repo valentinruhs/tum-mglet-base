@@ -1,13 +1,13 @@
 {
     "time": {
         "dt": 0.001,
-        "mtstep": 6280,
-	"itinfo": 100,
+        "mtstep": 0,
+        "itinfo": 100,
         "tstat": 10.0,
-	"read": false
+        "read": false
     },
     "io": {
-        "grids": "grids512.h5",
+        "grids": "grids64.h5",
         "infile": "fields_in.h5",
         "outfile": "fields.h5"
     },
@@ -23,7 +23,7 @@
             "epcorr": 1.0E-12,
             "nouter": 90,
             "ninner": 50,
-	    "loglevel": 2
+        "loglevel": 2
         },
         "lesmodel": {
             "model": "none"
@@ -31,24 +31,26 @@
     },
     
     "multiphase": {
-	"test": "Zalesak Disk",
-	"skipAdvection": false,
-   	"skipDiffusion": true,
-    	"skipPressure": true,
-    	"skipExternal": true,
-    	"splitPermutation": 3,
-    	"vofTolerance": 1.0E-12,
-    	"divTolerance": 1.0E-8,
-    	"volTolerance": 1.0E-8,
-    	"advectionScheme": "QUICK",
-    	"donatingCentered": false,
-    	"vofCheck": false,
-    	"divCheck": false,
-    	"volCheck": false,
-	"rho1" : 1.0,
-	"rho2" : 1.0,
-	"gmol1" : 0.001,
-	"gmol2" : 0.001,
-	"gravity" : [0.0, 0.0, 0.0]
-    }   
+        "test": "Zalesak Disk",
+        "skipAdvection": false,
+        "skipDiffusion": true,
+        "skipPressure": true,
+        "skipExternal": true,
+        "vofTolerance": 1.0E-12,
+        "volTolerance": 1.0E-8,
+        "advectionScheme": "QUICK",
+        "donatingCentered": false,
+        "finalCheck": true,
+        "rho1" : 1.0,
+        "rho2" : 1.0,
+        "gmol1" : 0.001,
+        "gmol2" : 0.001,
+        "gravity" : [0.0, 0.0, 0.0]
+    },
+
+    "snapshots": {
+        "itsamp": 30,
+        "tstart": 0.0,
+        "fields": ["U", "V", "W", "P", "C", "NORMX", "NORMY", "NORMZ", "ALPHA"]
+    }
 }

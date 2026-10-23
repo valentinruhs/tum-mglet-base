@@ -2,12 +2,39 @@
 !  Module: mph_test_mod
 !
 !   Responsibilities:
-!   - 
+!   - Defines the test cases of the multi-phase solver, selected by
+!     /multiphase/test:
+!     - Cylinder Translation, Zalesak Disk, Rider-Kothe Vortex
+!       (prescribed velocity field)
+!     - Uniform and Abrupt Cylinder Advection (initial velocity
+!       field)
+!     - Open Channel Flow (initial velocity field and hydrostatic
+!       pressure)
+!   - Initializes c from the signed distance function of the test
+!     shape as well as velocity and pressure (not on restart)
+!   - Re-imposes prescribed velocity fields during the simulation
+!     (frcVelFld)
+!   - Provides the exact shape (distance function, interface
+!     length, area) for the error norms in mph_chk_mod
 !
 !   Author:      Valentin Ruhs
 !   e-Mail:      valentin.ruhs@gmx.de
 !   Created:     2026-09
-!   Last update: 2026-09
+!
+!   Sources:
+!   H. Reichardt, “Vollständige Darstellung der turbulenten
+!   Geschwindigkeitsverteilung in glatten Leitungen,” Zeitschrift für
+!   Angewandte Mathematik und Mechanik, vol. 31, no. 7, pp. 208–219,
+!   Jan. 1951, doi: 10.1002/zamm.19510310704.
+!
+!   W. Schoppa and F. Hussain, “Coherent structure dynamics in
+!   near-wall turbulence,” Fluid Dynamics Research, vol. 26, no. 2,
+!   pp. 119–139, Feb. 2000, doi: 10.1016/S0169-5983(99)00018-0.
+!
+!   E. de Villiers, “The Potential of Large Eddy Simulation for the
+!   Modelling of Wall Bounded Flows,” Degree of Doctor of Philosophy
+!   of the University of London and Diploma of Imperial College,
+!   Imperial College London, 2006.
 !
 !====================================================================
 
@@ -61,6 +88,17 @@ MODULE mph_test_mod
 CONTAINS
 
     SUBROUTINE init_mph_test()
+    !----------------------------------------------------------------
+    !   Short: Select test case; initialize c, interface, velocity
+    !          and pressure.
+    !
+    !   The test case is selected by /multiphase/test: Cylinder
+    !   Translation, Zalesak Disk, Rider-Kothe Vortex, Uniform
+    !   Cylinder Advection, Abrupt Cylinder Advection or Open Channel
+    !   Flow. On a restart (dcont), c, velocity and pressure are
+    !   taken from the restart file; only restriction, prolongation
+    !   and interface reconstruction are performed.
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -72,7 +110,7 @@ CONTAINS
         CASE ( "Cylinder Translation" )
             tstId = tstCylTra
             shape = shape_t(shp=shpCircle, &
-                xc=0.5_realk, yc=0.5_realk, ra=4.0_realk/80.0_realk)
+                xc=0.5_realk, yc=0.5_realk, ra=5.5_realk/80.0_realk)
             frcVelFld = .TRUE.
             isRevTst = .TRUE.
 
@@ -131,6 +169,9 @@ CONTAINS
     !================================================================
 
     SUBROUTINE finish_mph_test()
+    !----------------------------------------------------------------
+    !   Short: Finalize module (no operation).
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -146,9 +187,13 @@ CONTAINS
 
     SUBROUTINE fill_c_dom(dist_func, s)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Fill the volume fraction field c depending on the selected
-    !   distance function. Only the inside of the domain is filled.
+    !   Short: Initialize c from a signed distance function
+    !          by sub-sampling.
+    !
+    !   Only the interior cells are filled. Cells further than half a
+    !   cell diagonal from the interface are set to 0 or 1; cells cut
+    !   by the interface are sub-sampled with nSub x nSub points in
+    !   the x-y plane (2D shapes).
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -194,7 +239,7 @@ CONTAINS
                             c(k,j,i) = 1.0_realk
                         ELSE IF ( dist >= halfDiag ) THEN
                             c(k,j,i) = 0.0_realk
-                        ELSE 
+                        ELSE
                             ins = 0
                             DO is = 1, nSub
                                 xs = xMi + (REAL(is, realk) - 0.5_realk)*ddx(i)/REAL(nSub, realk)
@@ -222,10 +267,11 @@ CONTAINS
 
     SUBROUTINE init_vel(time)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Imposes the prescribed velocity field of the selected test
-    !   case. Does nothing for tests whose velocity field is produced
-    !   by the flow solver.
+    !   Short: Impose the prescribed velocity field of the selected
+    !          test case.
+    !
+    !   time: evaluation time of time-dependent fields (default 0).
+    !   For the open channel flow only the initial field is set.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -263,8 +309,8 @@ CONTAINS
 
     SUBROUTINE set_vel_tra(mag, t)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Set piecewise constant translation velocity
+    !          (cylinder translation).
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -290,8 +336,12 @@ CONTAINS
 
     SUBROUTINE set_vel_tra_grid(kk, jj, ii, u, v, mag, t)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Grid kernel of set_vel_tra.
+    !
+    !   Seven phases of duration tPha: six with magnitude mag and
+    !   fixed directions, the seventh with the negative sum of the
+    !   first six, so that the cylinder returns to its initial
+    !   position. Zero velocity afterwards.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -327,10 +377,10 @@ CONTAINS
 
     SUBROUTINE set_vel_uni(uc, vc, wc)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Sets u, v and w to a uniform value on every grid. The whole
-    !   array is written, ghost layers included, hence no connect or
-    !   parent is needed afterwards.
+    !   Short: Set uniform velocity on all grids incl. ghost layers.
+    !
+    !   The whole array is written, ghost layers included, hence no
+    !   connect or parent is needed afterwards.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -358,8 +408,12 @@ CONTAINS
 
     SUBROUTINE set_vel_c(uc, vc, wc, h)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Set velocity only in and around cells containing
+    !          phase 1.
+    !
+    !   The velocity (uc, vc, wc) is set in a cube of half width h
+    !   around every staggered cell with cS > vofTol; elsewhere the
+    !   velocity is unchanged.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -394,8 +448,7 @@ CONTAINS
 
     SUBROUTINE set_vel_c_grd(kk, jj, ii, cS1, cS2, cS3, u, v, w, uc, vc, wc, h)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Grid kernel of set_vel_c.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -444,8 +497,7 @@ CONTAINS
 
     SUBROUTINE set_vel_vtx(t)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Set time-dependent Rider-Kothe vortex velocity.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -476,8 +528,12 @@ CONTAINS
 
     SUBROUTINE set_vel_vtx_grid(kk, jj, ii, u, v, ddx, ddy, minx, miny, t)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Grid kernel: velocities from the stream function.
+    !
+    !   psi = 1/pi*cos(pi*t/8)*sin(pi*x)^2*sin(pi*y)^2 is evaluated
+    !   at the cell corners of the x-y plane (exact positions on
+    !   equidistant grids). u and v follow from differences of psi
+    !   and are therefore discretely divergence-free.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -528,8 +584,7 @@ CONTAINS
 
     SUBROUTINE set_vel_cav()
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Set solid body rotation velocity (Zalesak disk).
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -560,8 +615,10 @@ CONTAINS
 
     SUBROUTINE set_vel_cav_grid(kk, jj, ii, u, v, ddx, ddy, minx, miny)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Grid kernel of set_vel_cav.
+    !
+    !   Rotation about (0.5, 0.5) with omega = 2*pi/6.28, i.e. one
+    !   revolution in t = 6.28.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -605,9 +662,13 @@ CONTAINS
 
     SUBROUTINE set_vel_cha(ReTau, h, lx, lz, flowStateFlag)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Sets the initial velocity field of the open channel flow on
-    !   all grids. lx, lz are the (periodic) domain lengths in x and z.
+    !   Short: Set initial open channel velocity on all grids with
+    !          grid-wise random seed.
+    !
+    !   lx, lz are the (periodic) domain lengths in x and z. The seed
+    !   depends on the grid number, so that the perturbations are
+    !   reproducible and independent of the distribution of the grids
+    !   on the processes.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -638,7 +699,7 @@ CONTAINS
 
             seed = [(123457 + 7919*INT(igrid) + 104729*s, s = 1, nSeed)]
             CALL RANDOM_SEED(put=seed)
- 
+
             CALL set_vel_cha_grid(kk, jj, ii, u, w, ddx, ddy, ddz, &
                 minx, miny, minz, ReTau, h, lx, lz, flowStateFlag)
         END DO
@@ -650,13 +711,28 @@ CONTAINS
     SUBROUTINE set_vel_cha_grid(kk, jj, ii, u, w, ddx, ddy, ddz, &
             minx, miny, minz, ReTau, h, lx, lz, flowStateFlag)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Grid kernel: turbulent (Reichardt profile and
+    !          streaks), laminar or zero velocity.
     !
-    !   Sources: W. Schoppa, F. Hussain, "Coherent structure generation
-    !            in near-wall turbulence", J. Fluid Mech. 453 (2002);
-    !            E. de Villiers, PhD thesis, Imperial College (2006),
-    !            utility perturbU.
+    !   "TURB": Reichardt mean profile plus near-wall streaks (u) and
+    !           spanwise perturbations (w), both with a random
+    !           amplitude variation of +-devAmp.
+    !   "LAMI": laminar profile u+ = y+ - y+^2/(2*Re_tau).
+    !   "NONE": u = 0.
+    !
+    !   y is limited to the interface height h, i.e. the gas phase
+    !   gets the velocity at the surface.
+    !
+    !   Sources:
+    !   W. Schoppa and F. Hussain, “Coherent structure dynamics in
+    !   near-wall turbulence,” Fluid Dynamics Research, vol. 26,
+    !   no. 2, pp. 119–139, Feb. 2000,
+    !   doi: 10.1016/S0169-5983(99)00018-0.
+    !
+    !   E. de Villiers, “The Potential of Large Eddy Simulation for
+    !   the Modelling of Wall Bounded Flows,” Degree of Doctor of
+    !   Philosophy of the University of London and Diploma of
+    !   Imperial College, Imperial College London, 2006.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -738,43 +814,55 @@ CONTAINS
 
         PURE REAL(realk) FUNCTION reichardt(yPl) RESULT(uPl)
         !------------------------------------------------------------
-        !   Source: H. Reichardt, „Vollständige Darstellung der
-        !           turbulenten Geschwindigkeitsverteilung in glatten
-        !           Leitungen“, Z Angew Math Mech, Bd. 31, Nr. 7,
-        !           S. 208–219, Jan. 1951,
-        !           doi: 10.1002/zamm.19510310704.
+        !   Short: Mean velocity profile u+(y+) after Reichardt.
+        !
+        !   Source:
+        !   H. Reichardt, “Vollständige Darstellung der turbulenten
+        !   Geschwindigkeitsverteilung in glatten Leitungen,”
+        !   Zeitschrift für Angewandte Mathematik und Mechanik,
+        !   vol. 31, no. 7, pp. 208–219, Jan. 1951,
+        !   doi: 10.1002/zamm.19510310704.
         !------------------------------------------------------------
             REAL(realk), INTENT(in) :: yPl
             REAL(realk), PARAMETER :: kappa = 0.41_realk, C = 7.8_realk
             uPl = LOG(1.0_realk + kappa*yPl)/kappa + &
                 C*(1.0_realk - EXP(-yPl/11.0_realk) - yPl/11.0_realk*EXP(-yPl/3.0_realk))
         END FUNCTION reichardt
- 
+
         PURE REAL(realk) FUNCTION parabola(yPl, ReTau) RESULT(uPl)
+        !------------------------------------------------------------
+        !   Short: Laminar open channel profile u+(y+).
+        !------------------------------------------------------------
             REAL(realk), INTENT(in) :: yPl, ReTau
             uPl = yPl - 0.5_realk*yPl**2/ReTau
         END FUNCTION parabola
- 
+
         PURE REAL(realk) FUNCTION uPert(yPl, zPl) RESULT(uPl)
         !------------------------------------------------------------
-        !   Source: E. de Villiers, „The Potential of Large Eddy 
-        !           Simulation for the Modelling of Wall Bounded 
-        !           Flows“, Degree of Doctor of Philosophy of the 
-        !           University of London and Diploma of Imperial 
-        !           College, Imperial College London, 2006.
+        !   Short: Near-wall streak perturbation u+(y+, z+).
+        !
+        !   Source:
+        !   E. de Villiers, “The Potential of Large Eddy Simulation
+        !   for the Modelling of Wall Bounded Flows,” Degree of
+        !   Doctor of Philosophy of the University of London and
+        !   Diploma of Imperial College, Imperial College London,
+        !   2006.
         !------------------------------------------------------------
             REAL(realk), INTENT(in) :: yPl, zPl
             uPl = 0.5_realk*duPl*COS(betaPl*zPl)*(yPl/yMaxPl) &
                 * EXP(0.5_realk*(1.0_realk - (yPl/yMaxPl)**2))
         END FUNCTION uPert
- 
+
         PURE REAL(realk) FUNCTION wPert(xPl, yPl) RESULT(wPl)
         !------------------------------------------------------------
-        !   Source: E. de Villiers, „The Potential of Large Eddy 
-        !           Simulation for the Modelling of Wall Bounded 
-        !           Flows“, Degree of Doctor of Philosophy of the 
-        !           University of London and Diploma of Imperial 
-        !           College, Imperial College London, 2006.
+        !   Short: Spanwise perturbation w+(x+, y+).
+        !
+        !   Source:
+        !   E. de Villiers, “The Potential of Large Eddy Simulation
+        !   for the Modelling of Wall Bounded Flows,” Degree of
+        !   Doctor of Philosophy of the University of London and
+        !   Diploma of Imperial College, Imperial College London,
+        !   2006.
         !------------------------------------------------------------
             REAL(realk), INTENT(in) :: xPl, yPl
             wPl = epsPl*SIN(alphaPl*xPl)*yPl*EXP(-0.5_realk*(yPl/yMaxPl)**2)
@@ -786,8 +874,7 @@ CONTAINS
 
     SUBROUTINE frc_vel_fld(time)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Re-impose the prescribed velocity at a given time.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -804,8 +891,11 @@ CONTAINS
 
     SUBROUTINE init_pre()
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Initialize the pressure field of the selected
+    !          test case.
+    !
+    !   Only the open channel flow has an initial (hydrostatic)
+    !   pressure; otherwise the pressure is unchanged.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -827,8 +917,7 @@ CONTAINS
 
     SUBROUTINE set_pre_cha(s)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Set hydrostatic pressure for the open channel flow.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -858,8 +947,10 @@ CONTAINS
 
     SUBROUTINE set_pre_cha_grid(kk, jj, ii, p, c, ddy, miny, s)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Grid kernel of set_pre_cha.
+    !
+    !   p = rho(c)*g_y*(y - lvl) with the local mixture density, i.e.
+    !   p = 0 at the interface and linear in both phases.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -887,6 +978,11 @@ CONTAINS
     !================================================================
 
     PURE FUNCTION dist_func(x, y, z, s) RESULT(phi)
+    !----------------------------------------------------------------
+    !   Short: Signed distance to the selected shape.
+    !
+    !   Negative inside phase 1.
+    !----------------------------------------------------------------
         REAL(realk), INTENT(in) :: x, y, z
         TYPE(shape_t), INTENT(in) :: s
         REAL(realk) :: phi
@@ -908,6 +1004,9 @@ CONTAINS
     !================================================================
 
     PURE FUNCTION circf_func(s) RESULT(phi)
+    !----------------------------------------------------------------
+    !   Short: Exact interface length of the selected shape.
+    !----------------------------------------------------------------
         TYPE(shape_t), INTENT(in) :: s
         REAL(realk) :: phi
 
@@ -925,6 +1024,9 @@ CONTAINS
     !================================================================
 
     PURE FUNCTION area_func(s) RESULT(phi)
+    !----------------------------------------------------------------
+    !   Short: Exact area of the selected shape.
+    !----------------------------------------------------------------
         TYPE(shape_t), INTENT(in) :: s
         REAL(realk) :: phi
 
@@ -943,6 +1045,9 @@ CONTAINS
     !================================================================
 
     PURE FUNCTION dist_func_circle(x, y, xc, yc, r) RESULT(phi)
+    !----------------------------------------------------------------
+    !   Short: Signed distance to a circle.
+    !----------------------------------------------------------------
         REAL(realk), INTENT(in) :: x, y, xc, yc, r
         REAL(realk) :: phi
         phi = SQRT((x - xc)**2 + (y - yc)**2) - r
@@ -951,6 +1056,9 @@ CONTAINS
     !================================================================
 
     PURE FUNCTION dist_func_box(x, y, xc, yc, hx, hy) RESULT(phi)
+    !----------------------------------------------------------------
+    !   Short: Signed distance to a rectangle (maximum norm).
+    !----------------------------------------------------------------
         REAL(realk), INTENT(in) :: x, y, xc, yc, hx, hy
         REAL(realk) :: phi
         phi = MAX(ABS(x - xc) - hx, ABS(y - yc) - hy)
@@ -959,6 +1067,9 @@ CONTAINS
     !================================================================
 
     PURE FUNCTION circf_func_circle(ra) RESULT(phi)
+    !----------------------------------------------------------------
+    !   Short: Circumference of a circle.
+    !----------------------------------------------------------------
         REAL(realk), INTENT(in) :: ra
         REAL(realk) :: phi
         phi = 2.0_realk*pi*ra
@@ -967,6 +1078,9 @@ CONTAINS
     !================================================================
 
     PURE FUNCTION area_func_circle(ra) RESULT(phi)
+    !----------------------------------------------------------------
+    !   Short: Area of a circle.
+    !----------------------------------------------------------------
         REAL(realk), INTENT(in) :: ra
         REAL(realk) :: phi
         phi = pi*ra**2
@@ -976,6 +1090,16 @@ CONTAINS
 
     FUNCTION comp_abs_res(xMi, yMi, zMi, ddx, ddy, ddz, &
         normx, normy, normz, alpha, c, isIfc, s) RESULT(L1)
+    !----------------------------------------------------------------
+    !   Short: Cell-wise volume between exact and
+    !          reconstructed interface.
+    !
+    !   Cells further than half a cell diagonal from the exact
+    !   interface give (1 - c) or c times the cell volume. All other
+    !   cells are sub-sampled (nSub x nSub points, 2D); the
+    !   approximate phase follows from the PLIC plane in interface
+    !   cells and from c > 0.5 otherwise.
+    !----------------------------------------------------------------
         REAL(realk), INTENT(in) :: xMi, yMi, zMi, ddx, ddy, ddz
         REAL(realk), INTENT(in) :: normx, normy, normz, alpha, c
         REAL(realk), INTENT(in) :: isIfc

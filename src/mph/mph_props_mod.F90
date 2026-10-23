@@ -2,13 +2,25 @@
 !  Module: mph_props_mod
 !
 !   Responsibilities:
-!   - Fill property fields initially
-!   - Provide routines related to material properties
+!   - Registers the face density and edge viscosity fields
+!   - Computes the material properties from the volume fraction:
+!     - cell density D and staggered densities DS1-3 (arithmetic
+!       mean)
+!     - face densities DBA, DLE, DTO (staggered densities DS1-3 or
+!       arithmetic mean of c at the faces, see denStg)
+!     - cell viscosity G and edge viscosities GUV, GUW, GVW
+!       (harmonic mean)
+!   - Triggers the rebuild of the pressure Poisson coefficients
+!     after each property update (bldMatCoeff)
 !
 !   Author:      Valentin Ruhs
 !   e-Mail:      valentin.ruhs@gmx.de
 !   Created:     2026-02
-!   Last update: 2026-09
+!
+!   Source:
+!   G. Tryggvason, R. Scardovelli, and S. Zaleski, Direct Numerical
+!   Simulations of Gas–Liquid Multiphase Flows, 1st ed. Cambridge
+!   University Press, 2011. doi: 10.1017/CBO9780511975264.
 !
 !====================================================================
 
@@ -33,6 +45,15 @@ MODULE mph_props_mod
 CONTAINS
 
     SUBROUTINE init_mph_props()
+    !----------------------------------------------------------------
+    !   Short: Register face property fields; compute initial density
+    !          and viscosity.
+    !
+    !   DBA, DLE, DTO: densities at the u-, v- and w-faces (back,
+    !   left, top). GUV, GUW, GVW: viscosities at the cell edges (xy,
+    !   xz, yz). D (arithmetic mean) and G (harmonic mean) are
+    !   computed from the current c.
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -76,6 +97,9 @@ CONTAINS
     !================================================================
 
     SUBROUTINE finish_mph_props()
+    !----------------------------------------------------------------
+    !   Short: Finalize module (no operation).
+    !----------------------------------------------------------------
 
         ! Subroutine arguments
         ! None
@@ -91,9 +115,10 @@ CONTAINS
 
     SUBROUTINE comp_prop(kk, jj, ii, c, propFld, prop1, prop2, meanFlag)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute property field values depending on c using one of two
-    !   means.
+    !   Short: Compute cell property from c using arithmetic or
+    !          harmonic mean.
+    !
+    !   meanFlag = "arit" (default) or "harm".
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -125,9 +150,7 @@ CONTAINS
 
     SUBROUTINE comp_prop_arit(kk, jj, ii, c, propFld, prop1, prop2)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute property field values depending on c using the 
-    !   arithmetic mean.
+    !   Short: Compute cell property from c using arithmetic mean.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -147,9 +170,7 @@ CONTAINS
 
     SUBROUTINE comp_prop_harm(kk, jj, ii, c, propFld, prop1, prop2)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute property field values depending on c using the 
-    !   harmonic mean.
+    !   Short: Compute cell property from c using harmonic mean.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -172,9 +193,8 @@ CONTAINS
 
     SUBROUTINE comp_prop_face(kk, jj, ii, c, pBa, pLe, pTo, prop1, prop2, ddx, ddy, ddz, meanFlag)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute property face values depending on c using one of two 
-    !   means.
+    !   Short: Compute face property from c using arithmetic or
+    !          harmonic mean.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -207,14 +227,16 @@ CONTAINS
 
     SUBROUTINE comp_prop_arit_face(kk, jj, ii, c, pBa, pLe, pTo, prop1, prop2, ddx, ddy, ddz)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute property face values depending on c using the 
-    !   arithmetic mean.
+    !   Short: Compute face property from the face value of c using
+    !          arithmetic mean.
+    !
+    !   c at the face is the width-weighted mean of the two adjacent
+    !   cells, clipped to [0, 1].
     !
     !   Source:
-    !   G. Tryggvason, R. Scardovelli, und S. Zaleski, &
-    !   Direct Numerical Simulations of Gas–Liquid Multiphase &
-    !   Flows, 1. Aufl. Cambridge University Press, 2011. &
+    !   G. Tryggvason, R. Scardovelli, and S. Zaleski, Direct
+    !   Numerical Simulations of Gas–Liquid Multiphase Flows, 1st ed.
+    !   Cambridge University Press, 2011.
     !   doi: 10.1017/CBO9780511975264.
     !----------------------------------------------------------------
 
@@ -256,15 +278,17 @@ CONTAINS
 
     SUBROUTINE comp_prop_harm_face(kk, jj, ii, c, pBa, pLe, pTo, prop1, prop2, ddx, ddy, ddz)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute property face values depending on c using the 
-    !   harmonic mean. Care, only valid for 
-    !   equidistant grids.
+    !   Short: Compute face property from the face value of c using
+    !          harmonic mean (equidistant grids).
+    !
+    !   The face value of c is mapped to phi = 2*c_face - 0.5
+    !   (clipped to [0, 1]) before the harmonic mean is applied.
+    !   Care, only valid for equidistant grids.
     !
     !   Source:
-    !   G. Tryggvason, R. Scardovelli, und S. Zaleski, &
-    !   Direct Numerical Simulations of Gas–Liquid Multiphase &
-    !   Flows, 1. Aufl. Cambridge University Press, 2011. &
+    !   G. Tryggvason, R. Scardovelli, and S. Zaleski, Direct
+    !   Numerical Simulations of Gas–Liquid Multiphase Flows, 1st ed.
+    !   Cambridge University Press, 2011.
     !   doi: 10.1017/CBO9780511975264.
     !----------------------------------------------------------------
 
@@ -313,9 +337,8 @@ CONTAINS
 
     SUBROUTINE comp_prop_face_stg(kk, jj, ii, c, pXy, pXz, pYz, prop1, prop2, ddx, ddy, ddz, meanFlag)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute property face values on the staggered grid depending 
-    !   on c using one of two means.
+    !   Short: Compute edge property (staggered faces) from c using
+    !          arithmetic or harmonic mean.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -348,14 +371,17 @@ CONTAINS
 
     SUBROUTINE comp_prop_arit_face_stg(kk, jj, ii, c, pXy, pXz, pYz, prop1, prop2, ddx, ddy, ddz)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute property face values on the staggered grid depending 
-    !   on c using the arithmetic mean.
+    !   Short: Compute edge property from the four-cell average of c
+    !          using arithmetic mean.
+    !
+    !   c at the cell edge (location of the shear stresses) is the
+    !   area-weighted mean of the four adjacent cells, clipped to
+    !   [0, 1].
     !
     !   Source:
-    !   G. Tryggvason, R. Scardovelli, und S. Zaleski, &
-    !   Direct Numerical Simulations of Gas–Liquid Multiphase &
-    !   Flows, 1. Aufl. Cambridge University Press, 2011. &
+    !   G. Tryggvason, R. Scardovelli, and S. Zaleski, Direct
+    !   Numerical Simulations of Gas–Liquid Multiphase Flows, 1st ed.
+    !   Cambridge University Press, 2011.
     !   doi: 10.1017/CBO9780511975264.
     !----------------------------------------------------------------
 
@@ -406,15 +432,16 @@ CONTAINS
 
     SUBROUTINE comp_prop_harm_face_stg(kk, jj, ii, c, pXy, pXz, pYz, prop1, prop2, ddx, ddy, ddz)
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute property face values on the staggered grid depending 
-    !   on c using the harmonic mean. Care, only valid for 
-    !   equidistant grids.
+    !   Short: Compute edge property from the four-cell average of c
+    !          using harmonic mean (equidistant grids).
+    !
+    !   As comp_prop_harm_face, with the four-cell average of c at
+    !   the cell edge. Care, only valid for equidistant grids.
     !
     !   Source:
-    !   G. Tryggvason, R. Scardovelli, und S. Zaleski, &
-    !   Direct Numerical Simulations of Gas–Liquid Multiphase &
-    !   Flows, 1. Aufl. Cambridge University Press, 2011. &
+    !   G. Tryggvason, R. Scardovelli, and S. Zaleski, Direct
+    !   Numerical Simulations of Gas–Liquid Multiphase Flows, 1st ed.
+    !   Cambridge University Press, 2011.
     !   doi: 10.1017/CBO9780511975264.
     !----------------------------------------------------------------
 
@@ -472,8 +499,8 @@ CONTAINS
 
     SUBROUTINE comp_d_stg(q)
     !----------------------------------------------------------------
-    !   What it does:
-    !   
+    !   Short: Compute density on staggered grid q from its
+    !          volume fraction.
     !----------------------------------------------------------------
 
         ! Subroutine arguments
@@ -503,8 +530,15 @@ CONTAINS
 
     SUBROUTINE comp_props()
     !----------------------------------------------------------------
-    !   What it does:
-    !   Compute all nescessary properies 
+    !   Short: Update density, viscosity, face densities and edge
+    !          viscosities; flag matrix rebuild.
+    !
+    !   D: arithmetic mean of c. Face densities DBA, DLE, DTO:
+    !   with denStg the staggered densities DS1-3 (consistent with
+    !   the advected mass), otherwise arithmetic mean of the face
+    !   value of c. G, GUV, GUW, GVW: harmonic mean. bldMatCoeff
+    !   triggers the reassembly of the pressure Poisson
+    !   coefficients in mgpoisl.
     !----------------------------------------------------------------
 
         ! Subroutine arguments

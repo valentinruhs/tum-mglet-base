@@ -1,10 +1,10 @@
 {
     "time": {
         "dt": 0.0025,
-        "mtstep": 1600,
-	"itinfo": 200,
+        "mtstep": 0,
+        "itinfo": 200,
         "tstat": 10.0,
-	"read": false
+        "read": false
     },
     "io": {
         "grids": "grids128.h5",
@@ -31,22 +31,26 @@
     },
     
     "multiphase": {
-	"test": "Rider-Kothe Vortex",
-	"skipAdvection": false,
-   	"skipDiffusion": true,
-    	"skipPressure": true,
-    	"skipExternal": true,
-    	"vofTolerance": 1.0E-12,
-    	"volTolerance": 1.0E-8,
-    	"advectionScheme": "QUICK",
-    	"donatingCentered": false,
-    	"vofCheck": false,
-    	"volCheck": false,
-	"finalCheck": true,
-	"rho1" : 1.0,
-	"rho2" : 1.0,
-	"gmol1" : 0.001,
-	"gmol2" : 0.001,
-	"gravity" : [0.0, 0.0, 0.0]
-    }   
+        "test": "Rider-Kothe Vortex",
+        "skipAdvection": false,
+        "skipDiffusion": true,
+        "skipPressure": true,
+        "skipExternal": true,
+        "vofTolerance": 1.0E-12,
+        "volTolerance": 1.0E-8,
+        "advectionScheme": "QUICK",
+        "donatingCentered": false,
+        "finalCheck": true,
+        "rho1" : 1.0,
+        "rho2" : 1.0,
+        "gmol1" : 0.001,
+        "gmol2" : 0.001,
+        "gravity" : [0.0, 0.0, 0.0]
+    },
+
+    "snapshots": {
+        "itsamp": 12,
+        "tstart": 0.0,
+        "fields": ["U", "V", "W", "P", "C", "NORMX", "NORMY", "NORMZ", "ALPHA"]
+    }
 }
