@@ -32,7 +32,7 @@ MODULE mphcore_mod
     PRIVATE
 
     ! Control parameters
-    LOGICAL, PROTECTED :: hasMph
+    LOGICAL, PROTECTED :: hasMph, ySplitFirst
     CHARACTER(len=30), PROTECTED :: mphTst
     LOGICAL, PROTECTED :: skpAdv, skpDif, skpPre, skpExt
     REAL(realk), PROTECTED :: vofTol, volTol
@@ -52,7 +52,7 @@ MODULE mphcore_mod
     PUBLIC :: init_mphcore, finish_mphcore, hasMph, &
         mphTst, skpAdv, skpDif, skpPre, skpExt, vofTol, &
         volTol, advScm, donCen, denStg, parIfcBand, finChk, rho1, rho2, &
-        gmol1, gmol2, grav, propsErr, vofErr, plicErr, mphInitErr
+        gmol1, gmol2, grav, propsErr, vofErr, plicErr, mphInitErr, ySplitFirst
 
 CONTAINS
 
@@ -103,6 +103,7 @@ CONTAINS
         CALL mphConf%get_value("/skipDiffusion", skpDif, .FALSE.)
         CALL mphConf%get_value("/skipPressure", skpPre, .FALSE.)
         CALL mphConf%get_value("/skipExternal", skpExt, .FALSE.)
+        CALL mphConf%get_value("/ySplitFirst", ySplitFirst, .FALSE.)
         CALL mphConf%get_value("/vofTolerance", vofTol, 1.0E-12_realk)
         CALL mphConf%get_value("/volTolerance", volTol, 1.0E-8_realk)
         CALL mphConf%get_value("/advectionScheme", advScm, "QUICK")

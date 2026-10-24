@@ -81,7 +81,8 @@ MODULE mph_vof_mod
     USE bound_flow_mod, ONLY: bound_flow
 
     USE mphcore_mod, ONLY: rho1, rho2, gmol1, gmol2, grav, &
-        skpAdv, skpDif, skpPre, skpExt, vofTol, advScm, donCen, vofErr
+        skpAdv, skpDif, skpPre, skpExt, vofTol, advScm, donCen, &
+        vofErr, ySplitFirst
     USE mph_utils_mod, ONLY: sel_ind, sel_ext, sel_vel, clp_tol, int2char, get_lp_mdf, get_lp_bnds
     USE mph_plic_mod, ONLY: comp_ifc, comp_c_stg, comp_isIfc_stg, comp_c_loc
     USE mph_props_mod, ONLY: comp_d_stg
@@ -629,15 +630,20 @@ CONTAINS
         ! Local variables
         INTEGER(intk) :: perInd
 
-        ! perInd only changes in a new time-step
-        perInd = mod(iteration-1, 3)
-
-        ! Select permutation of split advection
-        SELECT CASE ( perInd )
-            CASE (0); advSeq = [1, 2, 3]
-            CASE (1); advSeq = [3, 1, 2]
-            CASE (2); advSeq = [2, 3, 1]
-        END SELECT
+        IF ( ySplitFirst ) THEN
+            perInd = mod(iteration-1, 2)
+            SELECT CASE ( perInd )
+                CASE (0); advSeq = [2, 1, 3]
+                CASE (1); advSeq = [2, 3, 1]
+            END SELECT
+        ELSE
+            perInd = mod(iteration-1, 3)
+            SELECT CASE ( perInd )
+                CASE (0); advSeq = [1, 2, 3]
+                CASE (1); advSeq = [3, 1, 2]
+                CASE (2); advSeq = [2, 3, 1]
+            END SELECT
+        END IF
 
     END SUBROUTINE def_adv_seq
 
