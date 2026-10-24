@@ -148,9 +148,6 @@ CONTAINS
             shape = shape_t(shp=shpPlane, lvl=1.0_realk)
             frcVelFld = .FALSE.
             isRevTst = .FALSE.
-            CALL set_field("USLICE", istag=1, ndim=2, buffers=.TRUE., normal_direction=2)
-            CALL set_field("VSLICE", jstag=1, ndim=2, buffers=.TRUE., normal_direction=2)
-            CALL set_field("WSLICE", kstag=1, ndim=2, buffers=.TRUE., normal_direction=2)
 
         CASE DEFAULT
             CALL err_abort(mphInitErr, "unknown test case.", __FILE__, __LINE__)

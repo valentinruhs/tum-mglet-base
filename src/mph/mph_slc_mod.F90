@@ -42,15 +42,15 @@ CONTAINS
 
         fin = [(l == maxlevel, l = minlevel, maxlevel)]
 
-        CALL set_field("UXZWAL", ndim=2, normal_direction=2, active_level=fin)
-        CALL set_field("VXZSUR", ndim=2, normal_direction=2, active_level=fin)
-        CALL set_field("ETAXZ", ndim=2, normal_direction=2, active_level=fin)
-        CALL set_field("UXYMID", ndim=2, normal_direction=3, active_level=fin)
-        CALL set_field("CXYMID", ndim=2, normal_direction=3, active_level=fin)
-        CALL set_field("UYZMID", ndim=2, normal_direction=1, active_level=fin)
-        CALL set_field("VYZMID", ndim=2, normal_direction=1, active_level=fin)
-        CALL set_field("WYZMID", ndim=2, normal_direction=1, active_level=fin)
-        CALL set_field("CYZMID", ndim=2, normal_direction=1, active_level=fin)
+        CALL set_field("UXZWAL", ndim=2, normal_direction=2, get_len=len_xz, active_level=fin)
+        CALL set_field("VXZSUR", ndim=2, normal_direction=2, get_len=len_xz, active_level=fin)
+        CALL set_field("ETAXZ", ndim=2, normal_direction=2, get_len=len_xz, active_level=fin)
+        CALL set_field("UXYMID", ndim=2, normal_direction=3, get_len=len_xy, active_level=fin)
+        CALL set_field("CXYMID", ndim=2, normal_direction=3, get_len=len_xy, active_level=fin)
+        CALL set_field("UYZMID", ndim=2, normal_direction=1, get_len=len_yz, active_level=fin)
+        CALL set_field("VYZMID", ndim=2, normal_direction=1, get_len=len_yz, active_level=fin)
+        CALL set_field("WYZMID", ndim=2, normal_direction=1, get_len=len_yz, active_level=fin)
+        CALL set_field("CYZMID", ndim=2, normal_direction=1, get_len=len_yz, active_level=fin)
         CALL set_field("UPROF", ndim=1, get_len=get_jj, active_level=fin)
 
     END SUBROUTINE init_mph_slc
@@ -71,6 +71,63 @@ CONTAINS
         CONTINUE
 
     END SUBROUTINE finish_mph_slc
+
+    !================================================================
+ 
+    SUBROUTINE len_yz(n, igrid)
+    !----------------------------------------------------------------
+    !   Short: Length of a y-z slice (normal x): kk*jj.
+    !----------------------------------------------------------------
+ 
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(out) :: n
+        INTEGER(intk), INTENT(in) :: igrid
+ 
+        ! Local variables
+        INTEGER(intk) :: kk, jj, ii
+ 
+        CALL get_mgdims(kk, jj, ii, igrid)
+        n = kk*jj
+ 
+    END SUBROUTINE len_yz
+ 
+    !================================================================
+ 
+    SUBROUTINE len_xz(n, igrid)
+    !----------------------------------------------------------------
+    !   Short: Length of an x-z slice (normal y): kk*ii.
+    !----------------------------------------------------------------
+ 
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(out) :: n
+        INTEGER(intk), INTENT(in) :: igrid
+ 
+        ! Local variables
+        INTEGER(intk) :: kk, jj, ii
+ 
+        CALL get_mgdims(kk, jj, ii, igrid)
+        n = kk*ii
+ 
+    END SUBROUTINE len_xz
+ 
+    !================================================================
+ 
+    SUBROUTINE len_xy(n, igrid)
+    !----------------------------------------------------------------
+    !   Short: Length of an x-y slice (normal z): jj*ii.
+    !----------------------------------------------------------------
+ 
+        ! Subroutine arguments
+        INTEGER(intk), INTENT(out) :: n
+        INTEGER(intk), INTENT(in) :: igrid
+ 
+        ! Local variables
+        INTEGER(intk) :: kk, jj, ii
+ 
+        CALL get_mgdims(kk, jj, ii, igrid)
+        n = jj*ii
+ 
+    END SUBROUTINE len_xy
 
     !================================================================
 

@@ -6,7 +6,7 @@ MODULE timeloop_mod
     USE runinfo_mod
     USE mph_chk_mod, ONLY: itinfo_mph
     USE mph_slc_mod, ONLY: mph_fields_to_write
-    USE mphcore_mod, ONLY: hasMph
+    USE mphcore_mod, ONLY: hasMph, mphTst
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -239,7 +239,7 @@ CONTAINS
                     rkscheme)
             END DO rkloop
 
-            IF ( hasMph ) THEN
+            IF ( hasMph .AND. mphTst == "Open Channel Flow" ) THEN
                 CALL mph_fields_to_write()
             END IF
 
