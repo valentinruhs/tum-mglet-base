@@ -5,6 +5,8 @@ MODULE timeloop_mod
     USE scalar_mod, ONLY: timeintegrate_scalar, itinfo_scalar
     USE runinfo_mod
     USE mph_chk_mod, ONLY: itinfo_mph
+    USE mph_slc_mod, ONLY: mph_fields_to_write
+    USE mphcore_mod, ONLY: hasMph
 
     IMPLICIT NONE(type, external)
     PRIVATE
@@ -236,6 +238,10 @@ CONTAINS
                 CALL timeintegrate_flow(itstep, ittot, timeph, dt, irk, &
                     rkscheme)
             END DO rkloop
+
+            IF ( hasMph ) THEN
+                CALL mph_fields_to_write()
+            END IF
 
             ! Timeintegrate, _before_ time is globally incremented
             CALL timeintegrate_plugins(itstep, ittot, timeph, dt)

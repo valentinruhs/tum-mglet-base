@@ -34,10 +34,11 @@ MODULE realfield_mod
     CONTAINS
         PROCEDURE :: init
 
-        GENERIC, PUBLIC :: get_ptr => get_grid1, get_grid3
+        GENERIC, PUBLIC :: get_ptr => get_grid1, get_grid2, get_grid3
+        PROCEDURE :: get_dims2
         GENERIC, PUBLIC :: multiply => multiply2, multiply3
 
-        PROCEDURE, PRIVATE, NON_OVERRIDABLE :: get_grid1, get_grid3
+        PROCEDURE, PRIVATE, NON_OVERRIDABLE :: get_grid1, get_grid2, get_grid3
         PROCEDURE, PRIVATE, NON_OVERRIDABLE :: multiply2, multiply3
 
         PROCEDURE, NON_OVERRIDABLE :: get_value
@@ -56,7 +57,7 @@ MODULE realfield_mod
 
 CONTAINS
     SUBROUTINE init(this, name, description, ndim, istag, jstag, kstag, &
-            units, dread, required, dwrite, active_level, get_len)
+            units, dread, required, dwrite, active_level, get_len, normal_direction)
         ! Subroutine arguments
         CLASS(field_t), INTENT(out) :: this
         CHARACTER(len=*), INTENT(in) :: name
@@ -71,12 +72,13 @@ CONTAINS
         LOGICAL, INTENT(in), OPTIONAL :: dwrite
         LOGICAL, INTENT(in), OPTIONAL :: active_level(:)
         PROCEDURE(get_len_i), OPTIONAL :: get_len
+        INTEGER(intk), INTENT(in), OPTIONAL :: normal_direction
 
         ! Local variables
         ! none...
 
         CALL this%init_corefield(name, description, ndim, istag, jstag, kstag, &
-            units, dread, required, dwrite, active_level, get_len)
+            units, dread, required, dwrite, active_level, get_len, normal_direction)
 
         this%hdf5_dtype = mglet_hdf5_real
         this%mpi_dtype = mglet_mpi_real
@@ -119,6 +121,31 @@ CONTAINS
 
         ptr(1:len) => this%arr(ip:ip+len-1)
     END SUBROUTINE get_grid1
+
+
+    SUBROUTINE get_grid2(this, ptr, igrid)
+        ! Subroutine arguments
+        CLASS(field_t), INTENT(in), TARGET :: this
+        REAL(realk), POINTER, CONTIGUOUS, INTENT(out) :: ptr(:, :)
+        INTEGER(intk), INTENT(in) :: igrid
+
+        ! Local variables
+        INTEGER(intk) :: n1, n2, ip, len
+
+        IF (.NOT. this%ndim == 2) THEN
+            WRITE(*, '("Field ", A, " is not 2D!")') TRIM(this%name)
+            CALL errr(__FILE__, __LINE__)
+        END IF
+
+        CALL this%get_ip(ip, igrid)
+        CALL this%get_len(len, igrid)
+        IF (len <= 0) CALL errr(__FILE__, __LINE__)
+
+        CALL this%get_dims2(n1, n2, igrid)
+        IF (len /= n1*n2) CALL errr(__FILE__, __LINE__)
+
+        ptr(1:n1, 1:n2) => this%arr(ip:ip+n1*n2-1)
+    END SUBROUTINE get_grid2
 
 
     SUBROUTINE get_grid3(this, ptr, igrid)
@@ -572,5 +599,36 @@ CONTAINS
         this%bo(:) = that%bo(:)
         this%to(:) = that%to(:)
     END SUBROUTINE copy_buffer
+
+
+    SUBROUTINE get_dims2(this, n1, n2, igrid)
+        ! Subroutine arguments
+        CLASS(field_t), INTENT(in) :: this
+        INTEGER(intk), INTENT(out) :: n1, n2
+        INTEGER(intk), INTENT(in) :: igrid
+
+        ! Local variables
+        INTEGER(intk) :: kk, jj, ii
+
+        CALL get_mgdims(kk, jj, ii, igrid)
+
+        n1 = 0
+        n2 = 0
+        SELECT CASE (this%normal_direction)
+        CASE (1)
+            n1 = kk
+            n2 = jj
+        CASE (2)
+            n1 = kk
+            n2 = ii
+        CASE (3)
+            n1 = jj
+            n2 = ii
+        CASE DEFAULT
+            WRITE(*, '("Field ", A, ": invalid normal_direction ", I0)') &
+                TRIM(this%name), this%normal_direction
+            CALL errr(__FILE__, __LINE__)
+        END SELECT
+    END SUBROUTINE get_dims2
 
 END MODULE realfield_mod

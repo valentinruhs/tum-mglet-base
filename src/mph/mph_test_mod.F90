@@ -43,7 +43,7 @@ MODULE mph_test_mod
     USE err_mod, ONLY: err_abort
     USE precision_mod, ONLY: realk, intk, pi
     USE grids_mod, ONLY: nmygrids, mygrids, get_mgdims, get_bbox
-    USE fields_mod, ONLY: get_fieldptr
+    USE fields_mod, ONLY: get_fieldptr, set_field
     USE fort7_mod, ONLY: dcont
 
     USE mphcore_mod, ONLY: mphTst, mphInitErr, vofTol
@@ -148,6 +148,9 @@ CONTAINS
             shape = shape_t(shp=shpPlane, lvl=1.0_realk)
             frcVelFld = .FALSE.
             isRevTst = .FALSE.
+            CALL set_field("USLICE", istag=1, ndim=2, buffers=.TRUE., normal_direction=2)
+            CALL set_field("VSLICE", jstag=1, ndim=2, buffers=.TRUE., normal_direction=2)
+            CALL set_field("WSLICE", kstag=1, ndim=2, buffers=.TRUE., normal_direction=2)
 
         CASE DEFAULT
             CALL err_abort(mphInitErr, "unknown test case.", __FILE__, __LINE__)

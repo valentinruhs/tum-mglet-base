@@ -82,7 +82,7 @@ MODULE mph_vof_mod
 
     USE mphcore_mod, ONLY: rho1, rho2, gmol1, gmol2, grav, &
         skpAdv, skpDif, skpPre, skpExt, vofTol, advScm, donCen, &
-        vofErr, ySplitFirst
+         vofErr, ySplitFirst
     USE mph_utils_mod, ONLY: sel_ind, sel_ext, sel_vel, clp_tol, int2char, get_lp_mdf, get_lp_bnds
     USE mph_plic_mod, ONLY: comp_ifc, comp_c_stg, comp_isIfc_stg, comp_c_loc
     USE mph_props_mod, ONLY: comp_d_stg

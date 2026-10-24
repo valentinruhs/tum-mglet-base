@@ -33,6 +33,7 @@ MODULE fields_mod
 
     INTERFACE get_fieldptr
         MODULE PROCEDURE :: get_fieldptr_grid1
+        MODULE PROCEDURE :: get_fieldptr_grid2
         MODULE PROCEDURE :: get_fieldptr_grid3
         MODULE PROCEDURE :: get_fieldptr
     END INTERFACE get_fieldptr
@@ -151,7 +152,7 @@ CONTAINS
 
     SUBROUTINE set_field(name, description, ndim, istag, jstag, kstag, &
             units, dread, required, dwrite, buffers, active_level, get_len, &
-            found)
+            found, normal_direction)
 
         ! Subroutine arguments
         CHARACTER(len=*), INTENT(in) :: name
@@ -168,6 +169,7 @@ CONTAINS
         LOGICAL, INTENT(in), OPTIONAL :: active_level(:)
         PROCEDURE(get_len_i), OPTIONAL :: get_len
         LOGICAL, INTENT(out), OPTIONAL :: found
+        INTEGER(intk), INTENT(in), OPTIONAL :: normal_direction
 
         ! Local variables
         TYPE(field_t), POINTER :: dummy
@@ -186,7 +188,7 @@ CONTAINS
         ! Initialize fields
         CALL fields(nfields)%init(name, description, ndim, istag, &
             jstag, kstag, units, dread, required, dwrite, &
-            active_level, get_len)
+            active_level, get_len, normal_direction)
 
         ! Allocate buffers
         IF (PRESENT(buffers)) THEN
@@ -300,6 +302,27 @@ CONTAINS
 
         CALL field%get_ptr(ptr, igrid)
     END SUBROUTINE get_fieldptr_grid1
+
+
+    SUBROUTINE get_fieldptr_grid2(ptr, name, igrid)
+        ! Subroutine arguments
+        REAL(realk), INTENT(out), POINTER, CONTIGUOUS :: ptr(:, :)
+        CHARACTER(len=*), INTENT(in) :: name
+        INTEGER(intk), INTENT(in) :: igrid
+
+        ! Local variables
+        TYPE(field_t), POINTER :: field
+        LOGICAL :: found
+
+        CALL get_field(field, name, found)
+
+        IF (.NOT. found) THEN
+            WRITE(*, '("Field ", A, " does not exist!")') name
+            CALL errr(__FILE__, __LINE__)
+        END IF
+
+        CALL field%get_ptr(ptr, igrid)
+    END SUBROUTINE get_fieldptr_grid2
 
 
     SUBROUTINE get_fieldptr_grid3(ptr, name, igrid)

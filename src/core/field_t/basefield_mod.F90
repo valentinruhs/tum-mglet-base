@@ -36,6 +36,9 @@ MODULE basefield_mod
         ! Write field
         LOGICAL :: dwrite = .FALSE.
 
+        ! 2D slice (1=x, 2=y, 3=z)
+        INTEGER(intk) :: normal_direction
+
         ! Allocated to minlevel:maxlevel and indicate which levels the field
         ! is active on
         LOGICAL, ALLOCATABLE :: active_level(:)
@@ -89,7 +92,7 @@ MODULE basefield_mod
 
 CONTAINS
     SUBROUTINE init_corefield(this, name, description, ndim, istag, &
-            jstag, kstag, units, dread, required, dwrite, active_level, get_len)
+            jstag, kstag, units, dread, required, dwrite, active_level, get_len, normal_direction)
         ! Subroutine arguments
         CLASS(basefield_t), INTENT(out) :: this
         CHARACTER(len=*), INTENT(in) :: name
@@ -104,6 +107,7 @@ CONTAINS
         LOGICAL, INTENT(in), OPTIONAL :: dwrite
         LOGICAL, INTENT(in), OPTIONAL :: active_level(:)
         PROCEDURE(get_len_i), OPTIONAL :: get_len
+        INTEGER(intk), INTENT(in), OPTIONAL :: normal_direction
 
         ! Local variables
         INTEGER(intk) :: i, igrid, length
@@ -151,6 +155,10 @@ CONTAINS
 
         IF (PRESENT(dwrite)) THEN
             this%dwrite = dwrite
+        END IF
+
+        IF (PRESENT(normal_direction)) THEN
+            this%normal_direction = normal_direction
         END IF
 
         ALLOCATE(this%active_level(minlevel:maxlevel))
