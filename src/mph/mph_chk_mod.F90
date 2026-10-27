@@ -196,6 +196,7 @@ CONTAINS
             WRITE(*,'(A,E11.5)') "E_{l=1,B=L} initial: ", L1Init/circumf
             WRITE(*,'(A,E11.5)') "E_{l=1,B=1}: ", L1
             WRITE(*,'(A,E11.5)') "E_{l=1,B=L}: ", L1/circumf
+            WRITE(*,'(A,E11.5)') "E_{l=1,B=A}: ", L1/area
             WRITE(*, '()')
         END IF
 

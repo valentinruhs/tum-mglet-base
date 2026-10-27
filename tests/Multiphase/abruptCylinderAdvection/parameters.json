@@ -1,13 +1,13 @@
 {
     "time": {
-        "dt": 0.0005,
-        "mtstep": 0,
-	"itinfo": 20,
+        "dt": 0.001,
+        "mtstep": 100,
+	"itinfo": 1,
 	"itcheck": 100,
 	"read": false
     },
     "io": {
-        "grids": "grids.h5",
+        "grids": "grids16.h5",
         "infile": "fields_in.h5",
         "outfile": "fields.h5"
     },
@@ -37,7 +37,6 @@
     	"skipPressure": false,
     	"skipExternal": true,
     	"vofTolerance": 1.0E-12,
-    	"volTolerance": 1.0E-8,
     	"advectionScheme": "QUICK",
     	"donatingCentered": true,
     	"finalCheck": true,
@@ -47,7 +46,7 @@
 	"gmol2" : 0.002,
 	"gravity" : [0.0, 0.0, 0.0]
     },
-    "snapshots": {
+    "sna": {
         "itsamp": 60,
         "tstart": 0.0,
         "fields": ["U", "V", "W", "P", "C", "NORMX", "NORMY", "NORMZ", "ALPHA"]

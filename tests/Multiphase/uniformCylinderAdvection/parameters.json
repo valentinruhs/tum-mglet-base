@@ -51,19 +51,5 @@
         "itsamp": 6000,
         "tstart": 0.0,
         "fields": ["U", "V", "W", "P", "C", "NORMX", "NORMY", "NORMZ", "ALPHA"]
-    },
-    "probes": {
-        "itsamp": 10000,
-        "tstart": 0.0,
-        "arrays": [
-            {
-                "name": "centerprobe",
-                "variables": ["U", "V", "W", "P", "C"],
-                "positions": [
-                    [ 0.5, 0.5, 0.5 ],
-                    [ 0.25, 0.25, 0.5 ]
-                ]
-            }
-        ]
     }
 }

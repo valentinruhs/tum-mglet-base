@@ -57,7 +57,7 @@ MODULE mph_test_mod
     PRIVATE
 
     INTEGER(intk), PARAMETER :: tstCylTra=1, tstZalDis=2, tstRKoVor=3, tstUCylAd=4, tstACylAd=5, tstOpCFl=6
-    INTEGER(intk), PARAMETER :: shpCircle=1, shpZalesak=2, shpPlane=3
+    INTEGER(intk), PARAMETER :: shpCircle=1, shpZalesak=2, shpPlane=3, shpSphere=4
     INTEGER, PARAMETER :: nSub = 64
     LOGICAL, PROTECTED :: frcVelFld, isRevTst
     INTEGER(intk), PROTECTED :: tstId
@@ -138,8 +138,8 @@ CONTAINS
 
         CASE ( "Abrupt Cylinder Advection" )
             tstId = tstACylAd
-            shape = shape_t(shp=shpCircle, &
-                xc=0.5_realk, yc=0.5_realk, ra=0.2_realk)
+            shape = shape_t(shp=shpSphere, &
+                xc=0.2_realk, yc=0.2_realk, zc=0.5_realk, ra=0.15_realk)
             frcVelFld = .FALSE.
             isRevTst = .FALSE.
 
@@ -207,7 +207,7 @@ CONTAINS
         REAL(realk), POINTER, CONTIGUOUS :: ddx(:), ddy(:), ddz(:)
         INTEGER(intk) :: i, j, k
         REAL(realk) :: xMi, x, yMi, y, zMi, z, halfDiag, dist
-        INTEGER(intk) :: ins, is, js
+        INTEGER(intk) :: ins, is, js, ks
         REAL(realk) :: xs, ys, zs
 
         DO n = 1, nmygrids
@@ -245,13 +245,15 @@ CONTAINS
                                 xs = xMi + (REAL(is, realk) - 0.5_realk)*ddx(i)/REAL(nSub, realk)
                                 DO js = 1, nSub
                                     ys = yMi + (REAL(js, realk) - 0.5_realk)*ddy(j)/REAL(nSub, realk)
-                                    zs = zMi + 0.5_realk*ddz(k)
-                                    IF ( dist_func(xs, ys, zs, s) < 0.0_realk ) THEN
-                                        ins = ins + 1
-                                    END IF
+                                    DO ks = 1, nSub
+                                        zs = zMi + (REAL(ks, realk) - 0.5_realk)*ddz(k)/REAL(nSub, realk)
+                                        IF ( dist_func(xs, ys, zs, s) < 0.0_realk ) THEN
+                                            ins = ins + 1
+                                        END IF
+                                    END DO
                                 END DO
                             END DO
-                            c(k,j,i) = REAL(ins, realk)/REAL(nSub, realk)**2
+                            c(k,j,i) = REAL(ins, realk)/REAL(nSub, realk)**3
                         END IF
                         zMi = zMi + ddz(k)
                     END DO
@@ -296,7 +298,7 @@ CONTAINS
         CASE ( tstUCylAd )
             CALL set_vel_uni(0.016_realk, 0.016_realk, 0.0_realk)
         CASE ( tstACylAd )
-            CALL set_vel_c(1.0_realk, 1.0_realk, 0.0_realk, h=1)
+            CALL set_vel_c(10.0_realk, 10.0_realk, 0.0_realk, h=1)
         CASE ( tstOpCFl )
             CALL set_vel_cha(150.0_realk, 1.0_realk, 2.0_realk*pi, pi, "TURB")
         CASE DEFAULT
@@ -996,6 +998,8 @@ CONTAINS
                                     0.5_realk*s%slotW, 0.5_realk*s%slotH))
         CASE ( shpPlane )
             phi = y - s%lvl
+        CASE ( shpSphere )
+            phi = dist_func_sphere(x, y, z, s%xc, s%yc, s%zc, s%ra)
         CASE DEFAULT
             phi = 1.0_realk
         END SELECT
@@ -1031,12 +1035,8 @@ CONTAINS
         REAL(realk) :: phi
 
         SELECT CASE ( s%shp )
-        CASE ( shpCircle )
-            phi = area_func_circle(s%ra)
-        CASE ( shpZalesak )
-            phi = area_func_circle(s%ra) - s%slotW*(s%slotH - s%ra) - &
-                0.5_realk*s%slotW*SQRT(s%ra**2 - 0.25_realk*s%slotW**2) - &
-                s%ra**2*ASIN(0.5_realk*s%slotW/s%ra)
+        CASE ( shpSphere )
+            phi = area_func_sphere(s%ra)
         CASE DEFAULT
             phi = 1.0_realk
         END SELECT
@@ -1066,6 +1066,17 @@ CONTAINS
 
     !================================================================
 
+    PURE FUNCTION dist_func_sphere(x, y, z, xc, yc, zc, r) RESULT(phi)
+    !----------------------------------------------------------------
+    !   Short: Signed distance to a circle.
+    !----------------------------------------------------------------
+        REAL(realk), INTENT(in) :: x, y, z, xc, yc, zc, r
+        REAL(realk) :: phi
+        phi = SQRT((x - xc)**2 + (y - yc)**2 + (z - zc)**2) - r
+    END FUNCTION dist_func_sphere
+
+    !================================================================
+
     PURE FUNCTION circf_func_circle(ra) RESULT(phi)
     !----------------------------------------------------------------
     !   Short: Circumference of a circle.
@@ -1077,14 +1088,14 @@ CONTAINS
 
     !================================================================
 
-    PURE FUNCTION area_func_circle(ra) RESULT(phi)
+    PURE FUNCTION area_func_sphere(ra) RESULT(phi)
     !----------------------------------------------------------------
     !   Short: Area of a circle.
     !----------------------------------------------------------------
         REAL(realk), INTENT(in) :: ra
         REAL(realk) :: phi
-        phi = pi*ra**2
-    END FUNCTION area_func_circle
+        phi = 4.0_realk*pi*ra**2
+    END FUNCTION area_func_sphere
 
     !================================================================
 
