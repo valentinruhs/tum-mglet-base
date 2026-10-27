@@ -1118,7 +1118,7 @@ CONTAINS
         REAL(realk) :: L1
 
         REAL(realk) :: vol, cAppr, dist, halfDiag, xs, ys, zs
-        INTEGER(intk) :: is, js, inRibbon
+        INTEGER(intk) :: is, js, ks, inRibbon
         LOGICAL :: inExac, inAppr
 
         vol = ddx*ddy*ddz
@@ -1137,17 +1137,19 @@ CONTAINS
                 xs = (REAL(is, realk) - 0.5_realk)*ddx/REAL(nSub, realk)
                 DO js = 1, nSub
                     ys = (REAL(js, realk) - 0.5_realk)*ddy/REAL(nSub, realk)
-                    zs = 0.5_realk*ddz
-                    inExac = dist_func(xMi+xs, yMi+ys, zMi+zs, s) < 0.0_realk
-                    IF ( isIfc > 0.0_realk ) THEN
-                        inAppr = normx*xs + normy*ys + normz*zs < alpha
-                    ELSE
-                        inAppr = c > 0.5_realk
-                    END IF
-                    IF (inExac .NEQV. inAppr) inRibbon = inRibbon + 1
+                    DO ks = 1, nSub
+                        zs = (REAL(ks, realk) - 0.5_realk)*ddz/REAL(nSub, realk)
+                        inExac = dist_func(xMi+xs, yMi+ys, zMi+zs, s) < 0.0_realk
+                        IF ( isIfc > 0.0_realk ) THEN
+                            inAppr = normx*xs + normy*ys + normz*zs < alpha
+                        ELSE
+                            inAppr = c > 0.5_realk
+                        END IF
+                        IF (inExac .NEQV. inAppr) inRibbon = inRibbon + 1
+                    END DO
                 END DO
             END DO
-            L1 = vol*REAL(inRibbon,realk)/REAL(nSub,realk)**2
+            L1 = vol*REAL(inRibbon,realk)/REAL(nSub,realk)**3
         END IF
 
     END FUNCTION comp_abs_res
