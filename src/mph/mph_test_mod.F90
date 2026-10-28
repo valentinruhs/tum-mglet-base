@@ -15,7 +15,7 @@
 !   - Re-imposes prescribed velocity fields during the simulation
 !     (frcVelFld)
 !   - Provides the exact shape (distance function, interface
-!     length, area) for the error norms in mph_chk_mod
+!     length) for the error norms in mph_chk_mod
 !
 !   Author:      Valentin Ruhs
 !   e-Mail:      valentin.ruhs@gmx.de
@@ -57,14 +57,14 @@ MODULE mph_test_mod
     PRIVATE
 
     INTEGER(intk), PARAMETER :: tstCylTra=1, tstZalDis=2, tstRKoVor=3, tstUCylAd=4, tstACylAd=5, tstOpCFl=6
-    INTEGER(intk), PARAMETER :: shpCircle=1, shpZalesak=2, shpPlane=3, shpSphere=4
+    INTEGER(intk), PARAMETER :: shpCircle=1, shpZalesak=2, shpPlane=3
     INTEGER, PARAMETER :: nSub = 64
     LOGICAL, PROTECTED :: frcVelFld, isRevTst
     INTEGER(intk), PROTECTED :: tstId
-    REAL(realk), PROTECTED :: circumf, area
+    REAL(realk), PROTECTED :: circumf
 
     PUBLIC :: init_mph_test, finish_mph_test, frc_vel_fld, isRevTst, comp_abs_res, circumf, &
-        area, shape, frcVelFld
+        shape, frcVelFld
 
     TYPE :: shape_t
         INTEGER(intk) :: shp = shpCircle
@@ -138,8 +138,8 @@ CONTAINS
 
         CASE ( "Abrupt Cylinder Advection" )
             tstId = tstACylAd
-            shape = shape_t(shp=shpSphere, &
-                xc=0.2_realk, yc=0.2_realk, zc=0.5_realk, ra=0.15_realk)
+            shape = shape_t(shp=shpCircle, &
+                xc=0.2_realk, yc=0.2_realk, ra=0.15626_realk)
             frcVelFld = .FALSE.
             isRevTst = .FALSE.
 
@@ -154,7 +154,6 @@ CONTAINS
         END SELECT
 
         circumf = circf_func(shape)
-        area = area_func(shape)
         IF ( .NOT. dcont ) CALL fill_c_dom(dist_func, shape)
         CALL rstr(fldName="C", flag="D")
         CALL prlg(fldName="C")
@@ -298,7 +297,7 @@ CONTAINS
         CASE ( tstUCylAd )
             CALL set_vel_uni(0.016_realk, 0.016_realk, 0.0_realk)
         CASE ( tstACylAd )
-            CALL set_vel_c(10.0_realk, 10.0_realk, 0.0_realk, h=1)
+            CALL set_vel_c(1.0_realk, 1.0_realk, 0.0_realk, h=1)
         CASE ( tstOpCFl )
             CALL set_vel_cha(150.0_realk, 1.0_realk, 2.0_realk*pi, pi, "TURB")
         CASE DEFAULT
@@ -998,8 +997,6 @@ CONTAINS
                                     0.5_realk*s%slotW, 0.5_realk*s%slotH))
         CASE ( shpPlane )
             phi = y - s%lvl
-        CASE ( shpSphere )
-            phi = dist_func_sphere(x, y, z, s%xc, s%yc, s%zc, s%ra)
         CASE DEFAULT
             phi = 1.0_realk
         END SELECT
@@ -1027,23 +1024,6 @@ CONTAINS
 
     !================================================================
 
-    PURE FUNCTION area_func(s) RESULT(phi)
-    !----------------------------------------------------------------
-    !   Short: Exact area of the selected shape.
-    !----------------------------------------------------------------
-        TYPE(shape_t), INTENT(in) :: s
-        REAL(realk) :: phi
-
-        SELECT CASE ( s%shp )
-        CASE ( shpSphere )
-            phi = area_func_sphere(s%ra)
-        CASE DEFAULT
-            phi = 1.0_realk
-        END SELECT
-    END FUNCTION area_func
-
-    !================================================================
-
     PURE FUNCTION dist_func_circle(x, y, xc, yc, r) RESULT(phi)
     !----------------------------------------------------------------
     !   Short: Signed distance to a circle.
@@ -1066,17 +1046,6 @@ CONTAINS
 
     !================================================================
 
-    PURE FUNCTION dist_func_sphere(x, y, z, xc, yc, zc, r) RESULT(phi)
-    !----------------------------------------------------------------
-    !   Short: Signed distance to a circle.
-    !----------------------------------------------------------------
-        REAL(realk), INTENT(in) :: x, y, z, xc, yc, zc, r
-        REAL(realk) :: phi
-        phi = SQRT((x - xc)**2 + (y - yc)**2 + (z - zc)**2) - r
-    END FUNCTION dist_func_sphere
-
-    !================================================================
-
     PURE FUNCTION circf_func_circle(ra) RESULT(phi)
     !----------------------------------------------------------------
     !   Short: Circumference of a circle.
@@ -1085,17 +1054,6 @@ CONTAINS
         REAL(realk) :: phi
         phi = 2.0_realk*pi*ra
     END FUNCTION circf_func_circle
-
-    !================================================================
-
-    PURE FUNCTION area_func_sphere(ra) RESULT(phi)
-    !----------------------------------------------------------------
-    !   Short: Area of a circle.
-    !----------------------------------------------------------------
-        REAL(realk), INTENT(in) :: ra
-        REAL(realk) :: phi
-        phi = 4.0_realk*pi*ra**2
-    END FUNCTION area_func_sphere
 
     !================================================================
 

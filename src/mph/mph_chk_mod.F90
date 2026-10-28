@@ -33,7 +33,7 @@ MODULE mph_chk_mod
     USE grids_mod, ONLY: minlevel, maxlevel
 
     USE mphcore_mod, ONLY: finChk, volTol, vofTol, hasMph
-    USE mph_test_mod, ONLY: comp_abs_res, circumf, area, shape
+    USE mph_test_mod, ONLY: comp_abs_res, circumf, shape
     USE mphcore_mod, ONLY: gmol1, rho1, mphTst, vofErr, parIfcBand
 
     IMPLICIT NONE(type, external)
@@ -196,7 +196,6 @@ CONTAINS
             WRITE(*,'(A,E11.5)') "E_{l=1,B=L} initial: ", L1Init/circumf
             WRITE(*,'(A,E11.5)') "E_{l=1,B=1}: ", L1
             WRITE(*,'(A,E11.5)') "E_{l=1,B=L}: ", L1/circumf
-            WRITE(*,'(A,E11.5)') "E_{l=1,B=A}: ", L1/area
             WRITE(*, '()')
         END IF
 

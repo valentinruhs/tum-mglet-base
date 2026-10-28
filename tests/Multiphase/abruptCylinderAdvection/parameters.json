@@ -1,13 +1,12 @@
 {
     "time": {
         "dt": 0.001,
-        "mtstep": 100,
+        "mtstep": 200,
 	"itinfo": 1,
-	"itcheck": 100,
 	"read": false
     },
     "io": {
-        "grids": "grids16.h5",
+        "grids": "grids128.h5",
         "infile": "fields_in.h5",
         "outfile": "fields.h5"
     },
@@ -20,9 +19,9 @@
         "uinf": [0.0, 0.0, 0.0],
         "pressuresolver": {
             "type": "sip",
-            "epcorr": 1.0E-12,
-            "nouter": 90,
-            "ninner": 50,
+            "epcorr": 1.0E-8,
+            "nouter": 500,
+            "ninner": 30,
 	    "loglevel": 2
         },
         "lesmodel": {
@@ -40,14 +39,14 @@
     	"advectionScheme": "QUICK",
     	"donatingCentered": true,
     	"finalCheck": true,
-	"rho1" : 1000.0,
+	"rho1" : 1000000000.0,
 	"rho2" : 1.0,
 	"gmol1" : 0.1,
 	"gmol2" : 0.002,
 	"gravity" : [0.0, 0.0, 0.0]
     },
-    "sna": {
-        "itsamp": 60,
+    "snapsho": {
+        "itsamp": 80,
         "tstart": 0.0,
         "fields": ["U", "V", "W", "P", "C", "NORMX", "NORMY", "NORMZ", "ALPHA"]
         }
